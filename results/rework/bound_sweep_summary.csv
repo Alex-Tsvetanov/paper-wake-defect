@@ -1,0 +1,7 @@
+design,backend,variant,bounds_us,min_median_us,max_median_us,h2_ratio,h2_pass,kruskal_p
+bound-sweep,epoll,slack=1ns,0 1000 10000 100000,6.763,36.228,5.3568,False,
+bound-sweep,io_uring,slack=1ns,0 1000 10000 100000,4.999,47.038,9.4095,False,
+bound-sweep,iocp,timer=1ms,0 1000 10000 100000,7.100,8.100,1.1408,True,
+bound-sweep,iocp,timer=default,0 1000 10000 100000,6.900,8.500,1.2319,True,
+bound-sweep-qos,epoll,"slack=1ns,qos=0us",0 1000 10000 100000,2.775,5.340,1.9243,False,
+bound-sweep-qos,io_uring,"slack=1ns,qos=0us",0 1000 10000 100000,2.885,5.180,1.7955,False,

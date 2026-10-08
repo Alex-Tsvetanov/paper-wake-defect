@@ -1,0 +1,9 @@
+backend,variant,wait_us,steps,bimodal_steps,bimodal,posts,b_eff_median_us,b_eff_min_us,b_eff_max_us,median_abs_residual_over_beff,p90_abs_residual_over_beff,jump_fraction,h1_pass,h3_missed_steps,h3_missed_late_steps,h3_missed_steps_b,h3_min_step_median_us,h3_min_step_gap_us,h3_min_step_phase_frac,resample_miss_rate,resample_miss_rate_b,phase_grid_posts,delay_band_posts
+epoll,slack=1ns,1000,30,0,False,630,1007.836,1007.646,1008.326,0.0016,0.0035,0.0032,True,6,5,5,74.540,2900,,0.001,0.000,158,83
+epoll,slack=1ns,10000,30,0,False,630,10332.212,10324.419,10336.921,0.0053,0.0296,0.0159,True,6,6,6,39.945,20000,,0.001,0.001,35,84
+io_uring,slack=1ns,1000,30,0,False,630,1006.934,1006.754,1007.375,0.0019,0.0038,0.0032,True,6,6,6,71.384,2900,,0.001,0.001,157,67
+io_uring,slack=1ns,10000,30,0,False,630,10323.248,10287.579,10328.878,0.0050,0.0291,0.0175,True,6,6,6,40.666,20000,,0.001,0.001,40,85
+iocp,timer=1ms,1000,30,0,False,630,1519.700,1515.500,1555.800,0.3290,0.7262,0.3397,False,0,0,0,994.600,,1.350,0.000,0.000,502,405
+iocp,timer=1ms,10000,30,0,False,630,10093.200,10005.700,10531.900,0.0454,0.1762,0.0635,True,6,4,6,1082.700,,1.950,0.000,0.000,224,100
+iocp,timer=default,1000,30,0,False,630,15653.400,15450.800,15947.900,0.0253,0.0743,0.0429,True,6,5,0,1186.800,,1.950,0.000,0.000,162,13
+iocp,timer=default,10000,30,0,False,630,15681.600,15433.400,15899.900,0.0248,0.0645,0.0444,True,5,5,2,1179.300,,0.950,0.000,0.000,150,74

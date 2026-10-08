@@ -1,0 +1,399 @@
+\input{preamble}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\pgfplotsset{compat=1.18}
+% Every number in the text comes from the generated macros of the runs on the paper's loop.
+\input{../results/rework/macros}
+\newcommand{\Beff}{B_{\mathrm{eff}}}
+% Code availability. The repository is published, so the phrase is "is available".
+% build_docx.py reads the same macro, so the PDF and the Word copy always agree.
+\newcommand{\PaperRepoAvailability}{is available}
+\newcommand{\PaperRepo}{\url{https://github.com/Alex-Tsvetanov/paper-wake-defect}}
+% Page ranges in refs.bib: BibTeX dashifies the argument, which is dropped; one hyphen prints.
+\newcommand{\BibHyphen}[1]{-}
+% A line break in the Word title only (the template's larger title font wraps one word onto
+% the second line); nothing in LaTeX. build_docx.py turns it into a break.
+\newcommand{\WordTitleBreak}{}
+
+\begin{document}
+\bstctlcite{IEEEexample:BSTcontrol}
+
+\title{{\fontsize{21}{14.4}\selectfont
+Bounded-Wait Wake Defects \WordTitleBreak in Portable Event Loops}%
+\thanks{\textsuperscript{1}Alex I. Tsvetanov is with the Faculty of Computer Systems and Technologies, Technical University of Sofia, Sofia, Bulgaria (e-mail: \href{mailto:atsvetanov@tu-sofia.bg}{atsvetanov@tu-sofia.bg}).}%
+}
+
+\author{
+\IEEEauthorblockN{{\fontsize{14}{14.4}\selectfont
+Alex I. Tsvetanov\textsuperscript{1}}}
+}
+
+\maketitle
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\thispagestyle{fancy}
+% The running header, as in template.docx (straight quotes under T1).
+	\chead{{\fontsize{10}{13.0}\selectfont
+34th National Conference with International Participation "Telecom 2026", November 26 - 28, 2026, Sofia, Bulgaria}  }
+    \fancyfoot[C]{\thepage}
+
+\begin{abstract}
+An idle event-loop worker parks in a wait with a timeout. When another thread posts a task,
+the worker must be woken. If the wake is missing, or signals an object the wait does not
+watch, the task still runs, but only when the timeout expires, so tests of eventual delivery
+pass. Such missed wakes have been reported in widely used event loops and runtimes. We describe
+the defect for epoll, io\_uring and I/O completion ports, model the delay it causes, and
+propose a portable test that detects it from latency alone. We measure both on a minimal event
+loop written for this study, whose correct and defective builds differ in one compile-time
+switch that guards one site per backend. On Linux the median absolute error of the model is at
+most \WakeHOneLinuxMaxPct\,\% of the wait period. On Windows the model holds with the default
+timer and fails for a \WakeBSmallMs~ms bound under a \WakeTimerRequestedMs~ms timer. At a fixed
+gap the test flagged \WakeDetectDefectFlagged\ of \WakeDetectDefectConfigs\ defective and
+\WakeDetectFixedFlagged\ of \WakeDetectFixedConfigs\ correct configurations, but a gap just
+below a multiple of the wait period hides the defect. With random gaps, in an exploratory run,
+it missed \WakeRandomDefectMissed\ of \WakeRandomDefectTrials\ defective trials and flagged
+\WakeRandomFixedFlagged\ of \WakeRandomFixedTrials\ correct ones. With a correct wake, the
+delay on an idle Linux core still depends on the wait bound, also under a \WakeQosUs~$\mu$s CPU
+latency request.
+\end{abstract}
+
+\begin{IEEEkeywords}
+event loop, lost wake-up, epoll, io\_uring, I/O completion ports, timer resolution, processor
+idle states, performance testing
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Servers that multiplex many connections over a few threads run an event loop on each worker
+thread. A worker waits for I/O events and, when nothing arrives, sleeps in the kernel. Work
+also comes from other threads: a timer fires, another worker hands over a task, or the
+application posts a callback. The posting thread must then interrupt the wait.
+
+Many loops bound the wait with a timeout, to check a stop flag or to service timers. The bound
+turns a missing wake-up into a delay instead of a hang: the task runs when the wait returns on
+its own. A functional test that checks that a posted task eventually runs therefore passes. The
+defect shows as latency, and mainly on an idle worker, because a busy one leaves its wait for
+other reasons and picks the task up on the way.
+
+Studies of real bugs suggest why such defects occur and go unnoticed. In a study of concurrency
+bugs, atomicity and order violations make up almost all non-deadlock bugs, and one example has
+the shape of a lost wake-up: a completion callback clears a pending flag before the waiter sets
+it, and the waiter hangs~\cite{lu2008learning}. In a study of timeout bugs in cloud server
+systems, most produced no error message, and some degraded performance, for example through
+idle time behind a timeout that was too long~\cite{dai2018understanding}. Missed wake-ups of
+event loops occur in widely used software. In Netty, a task submitted from another thread
+could skip the selector wake-up and wait until the select timeout
+expired~\cite{lee2016nettywakeup}. A race between \texttt{epoll\_wait} and \texttt{epoll\_ctl}
+in Linux lost the \texttt{eventfd} event with which Boost.Asio wakes its loop for a handler
+posted from another thread; in the reporter's test program, \texttt{epoll\_wait} returned only
+at its timeout~\cite{neunhoffer2019epollbug,neunhoffer2020asio,penyaev2020epollfix}. Related
+defects caused hangs. In libevent, the loop was not woken when another thread deleted its last
+pending event~\cite{khuzhin2018libevent}. A lost wake-up in the Tokio scheduler let a worker
+park while a spawned task was queued~\cite{lerche2019tokio}, and the .NET thread pool could
+leave a queued work item unprocessed unless more work was queued~\cite{sadov2025threadpool}.
+Conversely, Asio, when built for and running on Windows versions before Vista, bounds each wait
+for completions, because the call can appear stuck while completions are
+queued~\cite{kohlhoff2026asioiocp}: a bounded wait as a safety net.
+
+We call this a \emph{bounded-wait wake defect}. We describe how it arises with the kernel
+interfaces used by portable C++ servers (Section~\ref{sec:background}), model its delay
+(Section~\ref{sec:model}), and propose a portable test that needs no access to the internals
+of the loop (Section~\ref{sec:test}). We measure both on a minimal event loop written for this
+study, with epoll, io\_uring and IOCP backends and a compile-time switch that seeds the defect
+in each (Sections~\ref{sec:method} and~\ref{sec:results}). Everything needed to repeat the
+study (the loop, its tests, the probe, the run scripts, the generated tables and the hypotheses
+with their revision log) \PaperRepoAvailability\ at \PaperRepo.
+
+\section{Background}\label{sec:background}
+
+\emph{epoll.} The worker waits on a set of file descriptors in \texttt{epoll\_wait}. The usual
+cross-thread wake is an \texttt{eventfd}~\cite{manpages2026eventfd} in the same set: the poster
+writes to it and the wait returns.
+
+\emph{io\_uring.} The worker waits for completions in
+\texttt{io\_\allowbreak{}uring\_\allowbreak{}enter}~\cite{liburing2026iouringenter}.
+A write to an \texttt{eventfd} ends the wait only if the ring watches that descriptor, for
+example with a pending
+\texttt{IORING\_\allowbreak{}OP\_\allowbreak{}POLL\_\allowbreak{}ADD}.
+
+\emph{I/O completion ports.} On Windows the worker waits in
+\texttt{GetQueued\allowbreak{}Completion\allowbreak{}Status}, and another thread wakes it by
+queueing a packet with
+\texttt{PostQueued\allowbreak{}Completion\allowbreak{}Status}~\cite{microsoft2026iocp}.
+
+A portable loop wraps these behind one post operation. It must ensure that the wait observes
+every posted task, even when several posts share one signal. The defect class is a failure of
+that guarantee.
+
+\section{Delay model}\label{sec:model}
+
+Consider one worker that alternates between a wait bounded by $B$ and running the tasks it
+finds. While idle, it returns from the wait with a period $\Beff \ge B$. On Linux, $\Beff$
+exceeds $B$ by a small measured amount, and the timer slack of the thread can add to
+it~\cite{manpages2026timerslack}. On Windows, the wait ends on a tick of the timer resolution in
+effect for the process~\cite{microsoft2026timebeginperiod}, so $\Beff$ can be much larger than
+$B$. Let the phase $\phi$ of a post be the time since the worker last parked. If the post does
+not end the wait, the task runs at the next timed return, after
+\begin{equation}
+  d(\phi) = \Beff - (\phi \bmod \Beff).
+  \label{eq:model}
+\end{equation}
+With a working wake, the delay is the cost of waking a parked thread and does not follow
+(\ref{eq:model}). At uniformly random phase, the defect adds half a period on average to the
+latency of a task posted to an idle worker. Where timers are routed through the post path,
+every timer is delayed the same way.
+
+\section{Detection test}\label{sec:test}
+
+The test needs only the public post operation, a clock and the configured bound. It lets a
+one-worker loop go idle, then posts $N = \WakeTestPosts$ tasks, each after the previous one has
+run and a gap has passed. It fails when the median delay exceeds $\Beff/\WakeTestDivisor$.
+Waiting for each task keeps the worker idle, so that no other event wakes it and hides the
+defect. The median ignores occasional slow posts, such as one that wakes a core from a deeper
+idle state~\cite{schone2015wakeup}, and scheduler noise.
+
+The gap sets the phase. With a fixed gap all posts share one phase, and a gap that ends in the
+last $\Beff/\WakeTestDivisor$ of a period lets a defective loop answer within
+$\Beff/\WakeTestDivisor$: the test misses. With a random gap the phase is close to uniform, and
+a defective loop is missed only if more than half of the posts land in that part of the period,
+which for $N = \WakeTestPosts$ has probability \WakeBinomialMissPct\,\%. $\Beff$ is known only
+from a defective build; a test of an unknown build can use $B/\WakeTestDivisor$, which is no
+larger.
+
+The test is a latency oracle. For an omitted or misdirected wake, as in our seeded builds, race
+detectors have nothing to find: no access is racy, and
+ThreadSanitizer~\cite{serebryany2009threadsanitizer} reports nothing on our defective builds.
+Schedule exploration in the style of CHESS~\cite{musuvathi2008finding} would not report it
+either, since every schedule eventually delivers the task. To measure the power of the test we
+seed the defect with one compile-time switch that guards one site per backend, where it removes
+or misdirects the wake. This is fault seeding, as in mutation testing~\cite{jia2011analysis},
+with hand-written faults. Related work on wake-up cost in Linux event
+notification~\cite{nolte2023hawen}, on the exit latency of idle states~\cite{schone2015wakeup}
+and on tail latency from power saving~\cite{li2014tales} measures the cost of a wake that
+happens; our test detects one that does not.
+
+\section{Method}\label{sec:method}
+
+\emph{Loop and arms.} The loop has one worker thread and no I/O, timers or second worker. A
+post pushes its task onto a lock-free stack with a compare-and-swap and wakes the worker only if
+the stack was empty. After every return from its wait, the worker takes the whole stack with
+one exchange and runs the tasks in post order. The epoll backend writes an \texttt{eventfd}
+registered edge-triggered and waits in \texttt{epoll\_\allowbreak{}pwait2} with the bound $B$.
+The io\_uring backend writes an \texttt{eventfd} that a multishot poll in the worker's ring
+watches, and waits in \texttt{io\_\allowbreak{}uring\_\allowbreak{}enter} with a timeout
+argument. The IOCP backend posts a completion packet and waits in
+\texttt{GetQueued\allowbreak{}Completion\allowbreak{}Status} with $B$ rounded up to whole
+milliseconds. $B$ is a run-time parameter, and the wait can also block. Stop has its own path
+in every backend. The defect switch guards one site per backend, and a test checks that there
+is no other: epoll and IOCP omit the wake, and io\_uring writes its \texttt{eventfd} but never
+arms the poll that watches it.
+
+\emph{Probe.} A standalone program starts the loop, measures $\Beff$ in the defective build
+from \WakeCalibPosts\ calibration posts, and after a few warm-up posts records the phase, delay
+and prediction of each post. Each post's residual is taken against the $\Beff$ of its own run.
+The gap sweep runs the defective build at $B = \WakeBSmallMs$ and \WakeBMidMs~ms, with
+\WakeSweepSteps\ runs of \WakeSweepStepPosts\ posts per configuration, at gaps of
+$\WakeSweepGapLoFrac\,B$ to $\WakeSweepGapHiFrac\,B$ on Linux and target phases of
+$\WakeSweepPhaseLoFrac\,\Beff$ to $\WakeSweepPhaseHiFrac\,\Beff$ on Windows. The bound sweep
+runs the correct build with \WakeBoundPosts\ posts at a \WakeBoundGapMs~ms gap, for
+$B \in \{\WakeBSmallMs, \WakeBMidMs, \WakeBLargeMs\}$~ms and a blocking wait; on Linux it is
+repeated under a CPU latency request of \WakeQosUs~$\mu$s on
+\texttt{/dev/cpu\_dma\_latency}~\cite{kernel2026cpuidle}. The detection matrix runs both builds
+at $B = \WakeBSmallMs$ and \WakeBLargeMs~ms, with \WakeMatrixPosts\ posts at a gap of
+$\WakeMatrixGapFrac\,B$, whose first \WakeTestPosts\ form the test. An exploratory random-gap
+design on Linux runs both builds of epoll and io\_uring at $B = \WakeBSmallMs$ and
+\WakeBMidMs~ms, \WakeRandomTrials\ trials of \WakeTestPosts\ posts per cell, with gaps uniform
+in $[\WakeRandomGapLo\,B, \WakeRandomGapHi\,B]$ and a recorded seed. Windows has no such run;
+for both systems we instead resample the gap sweep, \WakeResampleTrials\ draws of
+\WakeTestPosts\ posts without replacement per configuration, with a recorded seed.
+
+\emph{Hypotheses.} The hypotheses and their acceptance criteria were fixed before any
+publication run (Table~\ref{tab:hyp}) and are kept in the repository with a dated revision log.
+Revisions after smoke runs, before any publication run, renumbered and reworded them as H1 to
+H4 (a prediction from the measured phase and $\Beff$, a fixed-gap test of independence from
+$B$, a threshold of $\Beff/\WakeTestDivisor$ instead of $B/\WakeTestDivisor$, an explicit
+throughput criterion). They also added the exploratory H5 after the smoke data contradicted H2,
+which was kept as written. The first version's bound of \WakeHDroppedBoundUs~$\mu$s on the
+correct loop's median and its threshold $B/\WakeTestDivisor$ would change no verdict (largest
+correct median \WakeFixedMedianMaxUs~$\mu$s; the same H3 verdicts). H4 was then deferred and not
+run for this paper, and we make no claim about it. The hypotheses were first measured on an
+earlier implementation, which we withdrew; none of its data is used. After those runs and a
+review, the random-gap design and the resampling of the gap sweep were added as exploratory.
+Before any sanitizer record or run on the present loop, a last revision made the present loop
+the measured implementation: the defect is the loop built with the switch on, the fix is the
+loop with its wake compiled in, and hypotheses, thresholds and designs are unchanged.
+
+\begin{table}[t]
+\caption{Pre-registered hypotheses and their outcomes}
+\label{tab:hyp}
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.45cm}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{4.25cm}@{}}
+\hline
+ & Criterion & Outcome \\
+\hline
+H1 & Defective loop: median $|$residual$|$ of (\ref{eq:model}) below \WakeHOneLimitPct\,\% of $\Beff$
+   & Pass on Linux (largest \WakeHOneLinuxMaxPct\,\%) and on Windows with the default timer
+     (largest \WakeIocpAbsResidualPctOneMsDefaultTimer\,\%); fail on Windows with the
+     \WakeTimerRequestedMs~ms timer at $B = \WakeBSmallMs$~ms
+     (\WakeSweepIocpAbsResidualPctOneMsTimerOneMs\,\% in the sweep,
+     \WakeIocpAbsResidualPctOneMsTimerOneMs\,\% in the matrix) \\
+H2 & Correct loop: largest to smallest median over $B$ at most \WakeHTwoLimit
+   & Fail on Linux (epoll \WakeBoundEpollRatioMax, io\_uring \WakeBoundUringRatioMax); pass on
+     Windows (\WakeBoundIocpRatioMaxTimerOneMs\ with the \WakeTimerRequestedMs~ms timer,
+     \WakeBoundIocpRatioMaxDefaultTimer\ with the default) \\
+H3 & The \WakeTestPosts-post test flags every defective and no correct configuration
+   & Pass at a gap of $\WakeMatrixGapFrac\,B$: \WakeDetectDefectFlagged\ of \WakeDetectDefectConfigs\
+     defective and \WakeDetectFixedFlagged\ of \WakeDetectFixedConfigs\ correct flagged \\
+H4 & No measurable throughput cost under load & Deferred, not run; no claim \\
+H5 & Exploratory: a \WakeQosUs~$\mu$s latency request brings the H2 ratio to \WakeHFiveLimit\ or below
+   & Fail for epoll (\WakeBoundQosEpollRatioMaxQosZeroUs) and io\_uring
+     (\WakeBoundQosUringRatioMaxQosZeroUs) \\
+\hline
+\end{tabular}
+\end{table}
+
+\emph{Machines.} Linux runs use a \WakeHostLinuxCpu\ laptop (boost off, performance governor,
+kernel \WakeHostLinuxKernel) with the \WakeCpuidleDriver\ idle driver and the
+\WakeCpuidleGovernor\ governor~\cite{kernel2026cpuidle}; its deepest idle state,
+\WakeCpuidleDeepest, reports an exit latency of \WakeCpuidleDeepestLatencyUs~$\mu$s. Windows
+runs use a \WakeHostWindowsCpu\ desktop with \WakeHostWindowsOs\ and the power plan recorded
+with the run, whose minimum processor state on mains power is set to its highest value (checked
+on the host after the runs). The runs measure the loop at repository commit
+\texttt{\WakeCodeCommitLinux} on both systems, built with \WakeCompilerLinux\ and
+\WakeCompilerWindows. The timer slack is \WakeSlackNs~ns, except in the $B = \WakeBSmallMs$~ms
+matrix cells repeated at the default of \WakeSlackDefaultUs~$\mu$s. Windows runs use the default
+timer resolution or \WakeTimerRequestedMs~ms from \texttt{timeBeginPeriod} (throttling opted
+out) and time gaps with a high-resolution waitable timer. The cell order is shuffled with a
+recorded seed, and the Windows run starts only when the processor is on average at least
+\WakeQuietThresholdPct\,\% idle.
+
+\emph{Validity.} A run counts only if every first-party file compiled into its binaries also
+passed the loop's tests and a reduced run of every design, with the same configuration and
+compiler. The sanitizers were AddressSanitizer with UndefinedBehaviorSanitizer,
+ThreadSanitizer and MemorySanitizer on Linux, and AddressSanitizer with clang-cl on Windows.
+None of them reported anything. On both systems the hashes of the compiled files are checked
+against these records before any cell runs. The tests pin the loop's semantics in both builds
+and include wake detectors, which pass in every correct build and detect the seeded defect in
+every defective build.
+
+\section{Results}\label{sec:results}
+
+\emph{Delay model.} Fig.~\ref{fig:sawtooth} shows delay against phase at $B = \WakeBSmallMs$~ms.
+On Linux the defective loops follow (\ref{eq:model}): the median absolute residual is at most
+\WakeHOneLinuxMaxPct\,\% of $\Beff$ over the gap sweeps and matrix cells, and
+\WakeRandomAbsResidualPctMax\,\% at random phases; at $B = \WakeBLargeMs$~ms, here and on
+Windows, it is checked at one phase only. $\Beff$ exceeds $B$ by \WakeEpollBEffExcessOneMs~$\mu$s
+(epoll) and \WakeUringBEffExcessOneMs~$\mu$s (io\_uring) at \WakeBSmallMs~ms, by
+\WakeSweepEpollBEffExcessTenMs\ and \WakeSweepUringBEffExcessTenMs~$\mu$s at \WakeBMidMs~ms, and
+by \WakeEpollBEffExcessOneHundredMs\ and \WakeUringBEffExcessOneHundredMs~$\mu$s at
+\WakeBLargeMs~ms. The default timer slack adds \WakeEpollSlackEffectOneMs~$\mu$s to the epoll
+period and leaves io\_uring at \WakeUringBEffOneMsDefaultSlack~$\mu$s; the man page lists
+\texttt{epoll\_wait}, not \texttt{io\_\allowbreak{}uring\_\allowbreak{}enter}, among the calls that
+slack affects~\cite{manpages2026timerslack}.
+
+\begin{figure}[t]
+\centering
+\input{fig-sawtooth}
+\caption{Delay of posted tasks against their phase in a defective loop with
+$B = \WakeBSmallMs$~ms: epoll and io\_uring on Linux, IOCP on Windows with the default timer
+resolution. Every second post of each run is shown (\WakeFigPostsShown\ of \WakeSweepCellPosts\
+per panel). The line is (\ref{eq:model}) with the measured $\Beff$.}
+\label{fig:sawtooth}
+\end{figure}
+
+On Windows the wait ends on a timer tick. At the default resolution, bounds of \WakeBSmallMs\
+and \WakeBMidMs~ms both give one period of \WakeWinDefaultTickMs~ms, and \WakeBLargeMs~ms gives
+\WakeIocpBEffOneHundredMsDefaultTimer~$\mu$s, \WakeIocpBEffOverTicksOneHundredMsDefaultTimer~$\mu$s
+more than \WakeIocpTicksOneHundredMsDefaultTimer\ times that measured tick. The largest residual
+at this resolution is \WakeIocpAbsResidualPctOneMsDefaultTimer\,\%, so H1 holds with the default
+timer, and the largest delay of a
+defective loop at bounds of \WakeBSmallMs\ and \WakeBMidMs~ms is
+\WakeIocpDefectMaxMsDefaultTimer~ms. With \WakeTimerRequestedMs~ms requested,
+bounds of \WakeBMidMs\ and \WakeBLargeMs~ms give periods \WakeSweepIocpBEffExcessTenMsTimerOneMs\
+and \WakeIocpBEffExcessOneHundredMsTimerOneMs~$\mu$s longer than $B$, with residuals of
+\WakeSweepIocpAbsResidualPctTenMsTimerOneMs\ and \WakeIocpAbsResidualPctOneHundredMsTimerOneMs\,\%.
+A \WakeBSmallMs~ms bound with the \WakeTimerRequestedMs~ms timer gives a median period of
+\WakeSweepIocpBEffOneMsTimerOneMs~$\mu$s. The sweep then loses control of the phase:
+\WakeGridPostsIocpOneMsTimerOneMs\ of \WakeSweepCellPosts\ posts land within \WakeGridTolUs~$\mu$s
+of a multiple of \WakeGridUs~$\mu$s (\WakeGridUniformPct\,\% if spread evenly), and
+\WakeBandPostsIocpOneMsTimerOneMs\ are delivered after \WakeBandLoUsIocpOneMsTimerOneMs\ to
+\WakeBandHiUsIocpOneMsTimerOneMs~$\mu$s whatever their phase. There the model misses by
+\WakeSweepIocpAbsResidualPctOneMsTimerOneMs\,\% of $\Beff$ (the matrix cell, at one phase, by
+\WakeIocpAbsResidualPctOneMsTimerOneMs\,\%), a failure we do not explain, and H1 fails for the
+\WakeTimerRequestedMs~ms timer.
+
+\emph{Detection.} In the matrix the test flagged every defective configuration and passed
+every correct one (\WakeDetectConfigsLinux\ per build on Linux, \WakeDetectConfigsWindows\ on
+Windows). Defective medians exceed $\Beff/\WakeTestDivisor$ by factors of
+\WakeDetectFactorDefectMin\ to \WakeDetectFactorDefectMax, and the largest correct median is
+\WakeDetectFactorFixedMax\ of it. $B/\WakeTestDivisor$ gives the same verdicts (factors
+\WakeDetectFactorBDefectMin\ to \WakeDetectFactorBDefectMax). But the matrix has one gap per
+configuration. The gap sweep runs the same protocol at \WakeSweepSteps\ gaps, and there the test
+misses in \WakeSweepMissedTotal\ of \WakeSweepRunsTotal\ runs (\WakeSweepMissedBTotal\ with
+$B/\WakeTestDivisor$), \WakeSweepMissedLateTotal\ of them with phases in the last
+$\Beff/\WakeTestDivisor$ of the period. For epoll at $B = \WakeBMidMs$~ms and a
+\WakeSweepEpollMinMedianGapMsTenMs~ms gap, the defective median is
+\WakeSweepEpollMinMedianTenMs~$\mu$s, close to the \WakeBoundEpollFixedTenMs~$\mu$s of the
+correct loop at that bound. Random phases shrink this blind spot. Drawing \WakeTestPosts\ posts
+at random from each sweep, the largest miss rate is \WakeResampleMissMaxPct\,\% of draws
+(\WakeResampleMissBMaxPct\,\% with $B/\WakeTestDivisor$), near the \WakeBinomialMissPct\,\% of
+Section~\ref{sec:test}. In the exploratory random-gap run on Linux the test missed
+\WakeRandomDefectMissed\ of \WakeRandomDefectTrials\ defective trials
+(\WakeRandomDefectMissPct\,\%; \WakeRandomDefectMissedB\ with $B/\WakeTestDivisor$) and flagged
+\WakeRandomFixedFlagged\ of \WakeRandomFixedTrials\ correct ones. For Windows, only the
+resampling is available.
+
+\emph{Cost of a correct wake.} H2 expected the delay of a correct loop not to depend on $B$. On
+Windows this holds, with medians of \WakeBoundIocpFixedBlockingTimerOneMs\ to
+\WakeBoundIocpFixedTenMsTimerOneMs~$\mu$s with the \WakeTimerRequestedMs~ms timer and
+\WakeBoundIocpFixedBlockingDefaultTimer\ to \WakeBoundIocpFixedOneHundredMsDefaultTimer~$\mu$s
+with the default. On Linux it fails: at a \WakeBoundGapMs~ms gap, epoll delivers in
+\WakeBoundEpollFixedOneMs~$\mu$s at $B = \WakeBSmallMs$~ms but in \WakeBoundEpollFixedTenMs\ to
+\WakeBoundEpollFixedOneHundredMs~$\mu$s with longer bounds or a blocking wait, and io\_uring in
+\WakeBoundUringFixedOneMs~$\mu$s against \WakeBoundUringFixedOneHundredMs\ to
+\WakeBoundUringFixedTenMs~$\mu$s. Under the \WakeQosUs~$\mu$s latency request, which leaves idle
+cores only a polling state~\cite{kernel2026cpuidle}, every median is lower: epoll delivers in
+\WakeBoundQosEpollFixedOneMsQosZeroUs~$\mu$s at $B = \WakeBSmallMs$~ms and in
+\WakeBoundQosEpollFixedBlockingQosZeroUs\ to \WakeBoundQosEpollFixedTenMsQosZeroUs~$\mu$s
+otherwise, and io\_uring in \WakeBoundQosUringFixedOneMsQosZeroUs\ and
+\WakeBoundQosUringFixedBlockingQosZeroUs\ to \WakeBoundQosUringFixedTenMsQosZeroUs~$\mu$s. The
+dependence on $B$ remains, so the exploratory H5 fails for both backends. With and without the
+request, the \WakeBSmallMs~ms bound gives the fastest delivery. We did not record idle-state
+residency, and the data do not show why the shortest bound is fastest.
+
+\emph{Threats to validity.} Each system ran on one machine, and the machines differ in
+processor as well as operating system, so the contrast between Linux and Windows in H2 may come
+from either. All runs use an idle loop without I/O, where the
+defect shows. Under load, completions end the wait and hide it, so our delays bound its cost
+from above and say nothing about how often it occurs in production. Each cell ran once, so the
+variation between runs is unknown. The loop is ours and minimal, and loops with I/O, timers or
+several workers may wake differently. The seeded faults are few and hand-written, and kqueue is
+not measured. The test assumes that a correct wake costs much less than $B/\WakeTestDivisor$,
+which a short bound, a sanitizer build or a deep idle state can break. The random-gap design and
+the resampling of the gap sweep were added after a review of results from the earlier
+implementation and were not pre-registered.
+
+\section{Conclusion}
+
+A wake that misses a bounded wait does not break functional correctness but costs up to one
+wait period in latency, so functional tests pass. Its delay is a sawtooth in the phase of the
+post, except for a \WakeBSmallMs~ms bound under a \WakeTimerRequestedMs~ms timer on Windows. A
+test that posts a few tasks to an idle worker and compares their median delay with
+$\Beff/\WakeTestDivisor$ flagged every seeded defect in our matrix; a fixed gap can hide the
+defect, and random gaps shrink that blind spot. On Windows the timer resolution of the process
+rounds the period up: at the default resolution a defect delayed a task by up to one period of
+about \WakeWinDefaultTickMs~ms at bounds of \WakeBSmallMs\ and \WakeBMidMs~ms; the largest delay
+in our runs was \WakeIocpDefectMaxMsDefaultTimer~ms. With a correct wake, the delay on an idle Linux
+core still depends on the bound, also under a \WakeQosUs~$\mu$s CPU latency request. We
+recommend running the latency test with random gaps alongside functional tests, and controlling
+or reporting the idle policy in benchmarks of wake latency.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}

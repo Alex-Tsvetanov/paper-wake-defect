@@ -1,0 +1,29 @@
+paper-wake-defect
+Copyright 2026 Alex I. Tsvetanov
+
+The code in this repository is licensed under the Apache License, Version 2.0 (see LICENSE).
+The grant covers the code only. The code is:
+
+  CMakeLists.txt, loop/, tests/, bench/ and analysis/, and the Python programs in paper/
+  (paper/build_docx.py and paper/check_prose.py).
+
+The grant does not cover any other file, in particular the manuscript (section 1) and the
+third-party file of section 2.
+
+1. The manuscript, not covered by the Apache-2.0 grant
+
+   The manuscript sources (paper/main.tex, paper/preamble.tex, paper/fig-sawtooth.tex and
+   paper/refs.bib) and every PDF or Word copy built from them, including
+   paper/Tsvetanov-wake-TELECOM2026.docx, are not covered by the Apache-2.0 grant. No licence
+   is granted for them.
+
+2. Third-party file not covered by the Apache-2.0 grant
+
+  paper/template.docx
+    The Word template of the TELECOM 2026 conference, an IEEE conference template (the
+    document properties of the file name IEEE as its creator). The file carries no licence
+    text. It is kept only to build the Word copy of the manuscript and stays under its
+    owner's terms.
+
+    paper/Tsvetanov-wake-TELECOM2026.docx is built from this template by paper/build_docx.py
+    (the body of the template is replaced; its styles, header and footer are kept).

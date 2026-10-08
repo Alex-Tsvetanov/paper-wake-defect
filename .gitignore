@@ -1,0 +1,17 @@
+build/
+*.aux
+*.log
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+__pycache__/
+results/raw/
+*.pdb
+NUL.*
+paper/*.pdf
+build-*/
+paper/*.docx
+!paper/template.docx

@@ -1,0 +1,307 @@
+% References for "Bounded-wait wake defects in portable event loops" (TELECOM 2026).
+% Papers: DOI metadata from https://api.crossref.org/works/<doi>, or the official proceedings
+% page where no DOI exists (CHESS). Documentation, issues and commits: the official page or
+% the primary source was read; version or date strings are copied from it. Fields that could
+% not be verified are omitted. Undated pages carry no year field; their key uses the access
+% year (2026).
+% Page ranges are written as first\BibHyphen{-}last. BibTeX still sees a hyphen, so IEEEtran
+% prints "pp.", and turns the argument into a double hyphen; \BibHyphen (main.tex) drops its
+% argument and prints one hyphen, so no en dash reaches the PDF or the Word copy.
+
+% IEEEtran control: print repeated author names instead of a dash (stctlcite in main.tex).
+@IEEEtranBSTCTL{IEEEexample:BSTcontrol,
+  CTLdash_repeated_names = "no"
+}
+
+% ===========================================================================
+% (1) Studies of concurrency and timeout bugs
+% ===========================================================================
+
+% Full text read (authors' copy): atomicity and order violations make up almost all non-deadlock
+% bugs; one example is a completion callback that clears a pending flag before the waiter
+% sets it, and the waiter hangs. The study does not cover event loops or timeouts.
+@inproceedings{lu2008learning,
+  author    = {Lu, Shan and Park, Soyeon and Seo, Eunsoo and Zhou, Yuanyuan},
+  title     = {Learning from Mistakes: A Comprehensive Study on Real World Concurrency Bug Characteristics},
+  booktitle = {Proceedings of the 13th International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS)},
+  address   = {Seattle, WA, USA},
+  publisher = {ACM},
+  year      = {2008},
+  month     = mar,
+  pages     = {329\BibHyphen{-}339},
+  doi       = {10.1145/1346281.1346323}
+}
+
+% Full text read (authors' copy): a study of timeout bugs in cloud server systems. Most of them
+% produce no error message; some cause performance degradation, and a timeout that is too
+% large causes unnecessary idle time. Not a study of lost wake-ups. Address: the venue of
+% IC2E 2018, added after the fact-check of 2026-09-30.
+@inproceedings{dai2018understanding,
+  author    = {Dai, Ting and He, Jingzhu and Gu, Xiaohui and Lu, Shan},
+  title     = {Understanding Real-World Timeout Problems in Cloud Server Systems},
+  booktitle = {2018 IEEE International Conference on Cloud Engineering (IC2E)},
+  address   = {Orlando, FL, USA},
+  publisher = {IEEE},
+  year      = {2018},
+  month     = apr,
+  pages     = {1\BibHyphen{-}11},
+  doi       = {10.1109/IC2E.2018.00022}
+}
+
+% ===========================================================================
+% (2) Reported missed wake-ups (primary sources read 2026-09-29)
+% ===========================================================================
+
+% Bounded in the reporter's test program: "the epoll_wait runs into its timeout".
+% Not printed: Reported 2019-12-20.
+@misc{neunhoffer2019epollbug,
+  author       = {Neunh{\"o}ffer, Max},
+  title        = {{There seems to be an in-kernel race between epoll\_wait and epoll\_ctl which leads to lost events on an eventfd file descriptor}},
+  howpublished = {Linux kernel Bugzilla, bug 205933},
+  year         = {2019},
+  month        = dec,
+  url          = {https://bugzilla.kernel.org/show_bug.cgi?id=205933},
+  note         = {Accessed 2026-09-29}
+}
+
+% Not printed: Closed 2020-12-30 as a Linux kernel bug.
+@misc{neunhoffer2020asio,
+  author       = {Neunh{\"o}ffer, Max},
+  title        = {{epoll\_reactor occasionally misses wakeup on Linux $\geq$ 5.3}},
+  howpublished = {Asio issue 452, GitHub},
+  year         = {2020},
+  month        = jan,
+  url          = {https://github.com/chriskohlhoff/asio/issues/452},
+  note         = {Accessed 2026-09-29}
+}
+
+% Not printed: Included in Linux 5.6, 5.5.12 and 5.4.28.
+@misc{penyaev2020epollfix,
+  author       = {Penyaev, Roman},
+  title        = {{epoll: fix possible lost wakeup on epoll\_ctl() path}},
+  howpublished = {Linux kernel commit 1b53734bd0b2},
+  year         = {2020},
+  month        = mar,
+  url          = {https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=1b53734bd0b2feed8e7761771b2e76fc9126ea0c},
+  note         = {Accessed 2026-09-29}
+}
+
+% Bounded: the task waited until the select timeout (commit message).
+% Not printed: First contained in Netty 4.1.0.Final.
+@misc{lee2016nettywakeup,
+  author       = {Lee, Hyangtack},
+  title        = {{NioEventLoop ensures that all submitted tasks are executed immediately}},
+  howpublished = {Netty commit f44f3e7, GitHub},
+  year         = {2016},
+  month        = may,
+  url          = {https://github.com/netty/netty/commit/f44f3e7926f1676315ae86d0f18bdd9b95681d9f},
+  note         = {Accessed 2026-09-29}
+}
+
+% Hang: a cross-thread event_del of the last pending event did not notify the event base.
+% Not printed: Fixes issue 623; included in libevent 2.1.9-beta.
+@misc{khuzhin2018libevent,
+  author       = {Khuzhin, Azat},
+  title        = {{Notify event base if there are no more events, so it can exit without delay}},
+  howpublished = {libevent commit 23c2914, GitHub},
+  year         = {2018},
+  month        = apr,
+  url          = {https://github.com/libevent/libevent/commit/23c2914f6b430f2c2d74c267c13ffab3dda1b325},
+  note         = {Accessed 2026-09-29}
+}
+
+% Hang: a searching worker parked with a spawned task queued. The park and the hang are shown
+% in issue 1768, "Runtime gets stuck" (Matthias247, 2019-11-13,
+% https://github.com/tokio-rs/tokio/issues/1768, read 2026-09-30), which this pull request
+% fixes; the printed note names the issue. Not printed: included in Tokio 0.2.0.
+@misc{lerche2019tokio,
+  author       = {Lerche, Carl},
+  title        = {{runtime: fix lost wakeup bug in scheduler}},
+  howpublished = {Tokio pull request 1788, GitHub},
+  year         = {2019},
+  month        = nov,
+  url          = {https://github.com/tokio-rs/tokio/pull/1788},
+  note         = {Fixes issue 1768. Accessed 2026-09-29}
+}
+
+% Hang, or a pause until more work items are enqueued.
+% Not printed: Fixes issue 121608. Backports merged for .NET 10.0.2 and 9.0.13 milestones.
+@misc{sadov2025threadpool,
+  author       = {Sadov, Vladimir},
+  title        = {{Reliability fixes for the Thread Pool}},
+  howpublished = {dotnet/runtime pull request 121887, GitHub},
+  year         = {2025},
+  month        = dec,
+  url          = {https://github.com/dotnet/runtime/pull/121887},
+  note         = {Accessed 2026-09-29}
+}
+
+% A bounded wait as a safety net: a GetQueuedCompletionStatus timeout, only when built for and
+% running on Windows versions before Vista, because the call "can appear stuck". The author
+% field names the author of Asio; authorship of the comment was not checked with git blame.
+% Year and month: the date of commit 8806a68, 2026-07-18 (GitHub API, read 2026-09-30).
+@misc{kohlhoff2026asioiocp,
+  author       = {Kohlhoff, Christopher M.},
+  title        = {{asio/detail/win\_iocp\_io\_context.hpp}},
+  howpublished = {Asio source code, commit 8806a68, lines 274 to 282},
+  year         = {2026},
+  month        = jul,
+  url          = {https://github.com/chriskohlhoff/asio/blob/8806a6803cde7054c3049d3666d3ec36786568c5/include/asio/detail/win_iocp_io_context.hpp#L274-L282},
+  note         = {Accessed 2026-09-29}
+}
+
+% ===========================================================================
+% (3) Wake-up cost and idle-state exit latency
+% ===========================================================================
+
+% Crossref metadata (title and subtitle); the authors' PDF names "CPU power saving
+% mechanisms" among the causes of tail latency. Address: the venue of SoCC 2014, added after the
+% fact-check of 2026-09-30.
+@inproceedings{li2014tales,
+  author    = {Li, Jialin and Sharma, Naveen Kr. and Ports, Dan R. K. and Gribble, Steven D.},
+  title     = {Tales of the Tail: Hardware, {OS}, and Application-Level Sources of Tail Latency},
+  booktitle = {Proceedings of the ACM Symposium on Cloud Computing (SoCC)},
+  address   = {Seattle, WA, USA},
+  publisher = {ACM},
+  year      = {2014},
+  month     = nov,
+  pages     = {1\BibHyphen{-}14},
+  doi       = {10.1145/2670979.2670988}
+}
+
+% Official page read: the menu governor predicts the idle duration and picks a state whose
+% exit latency does not exceed the PM QoS limit; user space sets that limit by opening
+% /dev/cpu_dma_latency.
+@misc{kernel2026cpuidle,
+  author       = {{The Linux Kernel documentation}},
+  title        = {{CPU} Idle Time Management},
+  howpublished = {Admin guide, kernel 7.3.0-rc4},
+  url          = {https://docs.kernel.org/admin-guide/pm/cpuidle.html},
+  note         = {Accessed 2026-09-26}
+}
+
+@inproceedings{nolte2023hawen,
+  author    = {Nolte, Lars and Twardzik, Tim and Jalier, Camille and Huang, Zhigang and Shi, Jiyuan and Kowalsky, Clara and Wild, Thomas and Herkersdorf, Andreas},
+  title     = {{HAWEN}: Hardware Accelerator for Thread Wake-Ups in {Linux} Event Notification},
+  booktitle = {2023 60th ACM/IEEE Design Automation Conference (DAC)},
+  address   = {San Francisco, CA, USA},
+  publisher = {IEEE},
+  year      = {2023},
+  month     = jul,
+  pages     = {1\BibHyphen{-}6},
+  doi       = {10.1109/DAC56929.2023.10247823}
+}
+
+@article{schone2015wakeup,
+  author    = {Sch{\"o}ne, Robert and Molka, Daniel and Werner, Michael},
+  title     = {Wake-up Latencies for Processor Idle States on Current x86 Processors},
+  journal   = {Computer Science - Research and Development},
+  publisher = {Springer},
+  volume    = {30},
+  number    = {2},
+  pages     = {219\BibHyphen{-}227},
+  year      = {2015},
+  month     = may,
+  doi       = {10.1007/s00450-014-0270-z}
+}
+
+% ===========================================================================
+% (4) Wait and cross-thread wake mechanisms
+% ===========================================================================
+
+@misc{manpages2026eventfd,
+  author       = {{Linux man-pages project}},
+  title        = {eventfd(2): Create a File Descriptor for Event Notification},
+  howpublished = {Linux man-pages 6.19},
+  year         = {2026},
+  month        = feb,
+  url          = {https://man7.org/linux/man-pages/man2/eventfd.2.html},
+  note         = {Accessed 2026-09-25}
+}
+
+% Covers the io_uring wait and both wake paths (IORING_OP_POLL_ADD, IORING_OP_MSG_RING).
+% The page footer carries the date January 22, 2019, but the text documents features up to
+% at least kernel 5.18, so no year is given.
+@misc{liburing2026iouringenter,
+  author       = {{liburing project}},
+  title        = {io\_uring\_enter(2): Initiate and/or Complete Asynchronous {I/O}},
+  howpublished = {liburing manual page},
+  url          = {https://man7.org/linux/man-pages/man2/io_uring_enter.2.html},
+  note         = {Accessed 2026-09-25}
+}
+
+% Official page read: timer slack applies to select, poll, epoll_wait, nanosleep and futex
+% waits (io_uring_enter is not listed); init's is 50 us.
+@misc{manpages2026timerslack,
+  author       = {{Linux man-pages project}},
+  title        = {{PR\_SET\_TIMERSLACK}(2const): Set the ``Current'' Timer Slack Value for the Calling Thread},
+  howpublished = {Linux man-pages 6.19},
+  year         = {2026},
+  month        = feb,
+  url          = {https://man7.org/linux/man-pages/man2/PR_SET_TIMERSLACK.2const.html},
+  note         = {Accessed 2026-09-26}
+}
+
+% Official page read: a higher resolution improves the accuracy of wait time-outs; since
+% Windows 10 version 2004 the request is per process, and a process that has not called it is
+% not guaranteed more than the default resolution. Undated page.
+@misc{microsoft2026timebeginperiod,
+  author       = {{Microsoft}},
+  title        = {{timeBeginPeriod} Function ({timeapi.h})},
+  howpublished = {Win32 documentation, Microsoft Learn},
+  url          = {https://learn.microsoft.com/en-us/windows/win32/api/timeapi/nf-timeapi-timebeginperiod},
+  note         = {Accessed 2026-09-26}
+}
+
+@misc{microsoft2026iocp,
+  author       = {{Microsoft}},
+  title        = {{I/O} Completion Ports},
+  howpublished = {Win32 documentation, Microsoft Learn},
+  year         = {2026},
+  month        = jul,
+  url          = {https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports},
+  note         = {Accessed 2026-09-25}
+}
+
+% ===========================================================================
+% (5) Dynamic race detection and systematic concurrency testing
+% ===========================================================================
+
+@inproceedings{serebryany2009threadsanitizer,
+  author    = {Serebryany, Konstantin and Iskhodzhanov, Timur},
+  title     = {{ThreadSanitizer}: Data Race Detection in Practice},
+  booktitle = {Proceedings of the Workshop on Binary Instrumentation and Applications (WBIA)},
+  address   = {New York, NY, USA},
+  publisher = {ACM},
+  year      = {2009},
+  month     = dec,
+  pages     = {62\BibHyphen{-}71},
+  doi       = {10.1145/1791194.1791203}
+}
+
+@inproceedings{musuvathi2008finding,
+  author    = {Musuvathi, Madanlal and Qadeer, Shaz and Ball, Thomas and Basler, Gerard and Nainar, Piramanayagam Arumuga and Neamtiu, Iulian},
+  title     = {Finding and Reproducing Heisenbugs in Concurrent Programs},
+  booktitle = {8th USENIX Symposium on Operating Systems Design and Implementation (OSDI 08)},
+  address   = {San Diego, CA},
+  publisher = {USENIX Association},
+  year      = {2008},
+  month     = dec,
+  url       = {https://www.usenix.org/conference/osdi-08/finding-and-reproducing-heisenbugs-concurrent-programs}
+}
+
+% ===========================================================================
+% (6) Mutation testing
+% ===========================================================================
+
+@article{jia2011analysis,
+  author    = {Jia, Yue and Harman, Mark},
+  title     = {An Analysis and Survey of the Development of Mutation Testing},
+  journal   = {IEEE Transactions on Software Engineering},
+  volume    = {37},
+  number    = {5},
+  pages     = {649\BibHyphen{-}678},
+  year      = {2011},
+  month     = sep,
+  doi       = {10.1109/TSE.2010.62}
+}

@@ -1,0 +1,59 @@
+% Measured delay against phase, defect arm, B = 1 ms: one panel per backend.
+% Data: results/rework/fig_sawtooth.csv, made by
+% analysis/fig_sawtooth.py --results results/rework from gap_sweep_posts.csv and
+% gap_sweep_summary.csv in the same directory. No cell is bimodal, so there is no kind 2.
+% Series 1 epoll (L), 2 io_uring (L), 3 IOCP (W, default timer). Kind 0 is a measured post;
+% kind 1 the model d = B_eff - (phase mod B_eff) with the pooled B_eff of the cell.
+% One column wide; the caption and label belong in main.tex. Needs pgfplots (compat 1.18).
+\pgfplotstableread[col sep=comma]{../results/rework/fig_sawtooth.csv}\WakeSawtoothTable
+\begin{tikzpicture}[
+    /pgfplots/sawtooth panel/.style={
+        scale only axis, width=0.78\columnwidth, height=2.2cm,
+        xmin=0, ymin=0, enlarge x limits={upper, value=0.02}, enlarge y limits={upper, value=0.32},
+        scaled ticks=false,
+        tick label style={font=\scriptsize, /pgf/number format/1000 sep={}},
+        label style={font=\footnotesize},
+        ylabel={Delay ($\mu$s)},
+        every axis y label/.style={at={(axis description cs:-0.15,0.5)}, rotate=90, anchor=south},
+        tick align=outside, tick pos=left,
+    },
+    /pgfplots/sawtooth posts/.style={
+        only marks, mark=*, mark size=0.8pt, color=#1,
+        mark options={draw opacity=0, fill=#1, fill opacity=0.65},
+    },
+    /pgfplots/sawtooth model/.style={no marks, thin, black!70, unbounded coords=jump},
+    /pgfplots/sawtooth select/.style={restrict expr to domain={10*\thisrow{series}+\thisrow{kind}}{#1}},
+    panel label/.style={anchor=north east, font=\scriptsize, inner sep=1.5pt},
+]
+\definecolor{sawtoothEpoll}{RGB}{0,114,178}
+\definecolor{sawtoothUring}{RGB}{213,94,0}
+\definecolor{sawtoothIocp}{RGB}{0,158,115}
+
+\begin{axis}[sawtooth panel, name=epoll,
+    legend style={font=\scriptsize, at={(0.5,1.04)}, anchor=south, legend columns=2, draw=none,
+                  /tikz/every even column/.append style={column sep=8pt}}]
+    \addplot[sawtooth model, sawtooth select=11:11] table[x=phase_us, y=delay_us] {\WakeSawtoothTable};
+    \addlegendentry{model $B_{\mathrm{eff}} - (\text{phase} \bmod B_{\mathrm{eff}})$}
+    \addplot[sawtooth posts=sawtoothEpoll, sawtooth select=10:10]
+        table[x=phase_us, y=delay_us] {\WakeSawtoothTable};
+    \addlegendentry{measured post}
+    \node[panel label] at (rel axis cs:0.99,0.98) {epoll, Linux};
+\end{axis}
+
+\begin{axis}[sawtooth panel, name=uring,
+    at={(epoll.below south west)}, anchor=north west, yshift=-2pt]
+    \addplot[sawtooth model, sawtooth select=21:21] table[x=phase_us, y=delay_us] {\WakeSawtoothTable};
+    \addplot[sawtooth posts=sawtoothUring, sawtooth select=20:20]
+        table[x=phase_us, y=delay_us] {\WakeSawtoothTable};
+    \node[panel label] at (rel axis cs:0.99,0.98) {io\_uring, Linux};
+\end{axis}
+
+\begin{axis}[sawtooth panel, name=iocp,
+    at={(uring.below south west)}, anchor=north west, yshift=-2pt,
+    xlabel={Phase since the worker parked ($\mu$s)}]
+    \addplot[sawtooth model, sawtooth select=31:31] table[x=phase_us, y=delay_us] {\WakeSawtoothTable};
+    \addplot[sawtooth posts=sawtoothIocp, sawtooth select=30:30]
+        table[x=phase_us, y=delay_us] {\WakeSawtoothTable};
+    \node[panel label] at (rel axis cs:0.99,0.98) {IOCP, Windows, default timer};
+\end{axis}
+\end{tikzpicture}

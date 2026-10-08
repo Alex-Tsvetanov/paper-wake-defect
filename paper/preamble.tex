@@ -1,0 +1,43 @@
+\documentclass[conference,a4paper]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts,mathtools}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{flushend}
+\usepackage{fancyhdr}
+\usepackage{balance}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{tabu}
+\usepackage{color}
+\usepackage{ragged2e}
+\usepackage{microtype}
+\usepackage{url}
+\def\UrlBreaks{\do\/\do-\do\_}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+ 
+\renewcommand\IEEEkeywordsname{Keywords}
+% No en or em dashes anywhere: IEEEtran ends the Abstract and Keywords labels with ---, and
+% joins a compressed citation range with ]--[. A colon and a hyphen instead, as the Word copy
+% does (build_docx.py). Two-column layout only, which is the one this paper uses.
+\makeatletter
+\def\abstract{\normalfont\@IEEEabskeysecsize\bfseries\textit{\abstractname}:\ \relax\@IEEEgobbleleadPARNLSP}
+\def\IEEEkeywords{\normalfont\@IEEEabskeysecsize\bfseries\textit{\IEEEkeywordsname}:\ \relax\@IEEEgobbleleadPARNLSP}
+\makeatother
+\renewcommand{\citedash}{]-[}
+
+\setlength{\headheight}{13mm}
+% Page Layout setup
+\voffset = 4mm
+\headsep = 16pt
+\textwidth = 182mm
+\textheight = 238mm
+\footskip = 12.157mm
+\usepackage{hyperref}
