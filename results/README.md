@@ -4,7 +4,8 @@ The paper measures this repository's minimal event loop (`loop/`, `design/minima
 at code commit `0af1ac4`, in two arms built from one tree: fixed (`WAKELOOP_DEFECT=OFF`) and
 defect (`WAKELOOP_DEFECT=ON`). The paper takes every number in its prose from
 `rework/macros.tex`. The hypotheses are in `../hypotheses.md`; its revision log records the
-change to this loop (2026-09-29).
+change to this loop (2026-09-29). `../PROVENANCE.md` maps `0af1ac4` to this repository's
+history and shows that the compiled code is the same.
 
 ## Generated files (`rework/`)
 

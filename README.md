@@ -38,7 +38,8 @@ missing wake. `WAKELOOP_SANITIZER` selects a sanitizer (see the top of `CMakeLis
     python paper/check_prose.py --outputs     # typed digits and dashes
 
 An earlier implementation's runs, archived, are described at the end of `results/README.md`;
-none of their data is used. The repository's earlier history is archived privately.
+none of their data is used. The repository's earlier history is archived privately;
+`PROVENANCE.md` maps the commits that the paper and the results cite to this history.
 
 ## Licence
 
