@@ -2,21 +2,28 @@
 
 The public history of this repository starts at the root commit
 `47f14f09efac14e2a14f39195a0c891b6c6f2e27`. The work before it was done in an earlier history
-of this repository, which is archived privately. The paper, `results/README.md`,
-`results/rework/macros.tex`, `analysis/summarize.py` and `design/minimal-loop.md` cite commits
-of that earlier history. This file maps each of them to this history. Checked on 2026-10-08.
+of this repository, which is archived privately. `results/README.md`,
+`results/rework/macros.tex`, the tables of `results/rework/` (the columns `code_commit` and
+`bench_commit`), `analysis/summarize.py`, `design/minimal-loop.md`, the raw runs and the sanitizer
+records cite commits of that earlier history. This file maps each of them to this
+history, for the record. Checked on 2026-10-08.
+
+The paper cites none of them, and none of its claims rests on them. It names this
+history's root commit and rests the identity of the measured code on public material: the inputs
+hashes that each raw run records (the runs are the assets of the release `data-2026-10`), the
+files at the root commit, which give the same hashes (below), and the sanitizer records in
+`lab/sanitizer-records/`, which name them too.
 
 ## The measured code: `0af1ac4`
 
 `0af1ac47ec708595b91e5c15300556f2714314c1` is the code commit of every publication run, the
-commit the builds were made at. The paper names it as the commit the runs were built at
-(`\WakeMeasuredCommitLinux` and `\WakeMeasuredCommitWindows` in `results/rework/macros.tex`) and
-names the root commit of this history as the repository commit of the loop
-(`\WakeCodeCommitLinux` and `\WakeCodeCommitWindows`). `analysis/summarize.py` maps the one to
-the other (`PUBLIC_COMMIT`) and stops on a measured commit it does not list. `macros.tex` gives
-both in full in its header, `results/README.md` cites both, and the names of the raw runs
-(`...-0af1ac4`) and of the first sanitizer records (`wakeloop-0af1ac47e-...`) carry
-`0af1ac4`.
+commit the builds were made at. `analysis/summarize.py` maps it to the root commit of this
+history (`PUBLIC_COMMIT`) and stops on a measured commit it does not list; `results/rework/macros.tex`
+holds the root commit as `\WakeCodeCommitLinux` and `\WakeCodeCommitWindows`, which the paper
+names, and `0af1ac4` as `\WakeMeasuredCommitLinux` and `\WakeMeasuredCommitWindows`, which the
+paper named until 2026-10-08 and no longer uses. `macros.tex` gives both in full in its header,
+`results/README.md` cites both, and the names of the raw runs (`...-0af1ac4`) and of the first
+sanitizer records (`wakeloop-0af1ac47e-...`) carry `0af1ac4`.
 
 It maps to the root commit `47f14f09efac14e2a14f39195a0c891b6c6f2e27`. What the builds compile
 is byte-identical at the two commits.
@@ -47,7 +54,8 @@ Each publication run and each sanitizer record states an inputs hash per build t
 the sha256 of the text made of one line `<path>\t<sha256 of the file>\n` per first-party file
 the target compiled, sorted by path. A path is relative to the repository root, prefixed with
 `project/` and lower-cased on Windows; a file is hashed with CRLF read as LF.
-`bench/inputs_gate.py` computes it from a built tree.
+`bench/inputs_gate.py` computes it from a built tree, through the laboratory's
+`lab/bin/inputs_hash.py`, which is not published; the recomputation below needs only Python.
 
 | Target | Build | Files | Inputs hash |
 |---|---|---|---|
@@ -92,8 +100,9 @@ def inputs_hash(files):
 
 ### Sanitizer records
 
-The measured builds are covered by these records, kept in the author's laboratory repository
-(not public). Each covers both arms, is green, and reports 0 sanitizer findings. A record covers
+The measured builds were gated by these records, made in the author's laboratory repository;
+`lab/sanitizer-records/` of this repository holds them, identical to the committed laboratory
+records. Each covers both arms, is green, and reports 0 sanitizer findings. A record covers
 a build when it names the same inputs hash per target and the same values of the options that
 select compiled code (`WAKELOOP_DEFECT`, `WAKELOOP_BACKENDS`).
 
@@ -110,7 +119,8 @@ history as well.
 
 #### Records named for this history
 
-These records were made on 2026-10-08 for this history. They are named for its code commit, the
+These records were made on 2026-10-08 for this history, and `lab/sanitizer-records/` of this
+repository holds them, identical to the committed laboratory records. They are named for its code commit, the
 root commit `47f14f09efac14e2a14f39195a0c891b6c6f2e27` (`47f14f09e`), as
 `bench/sanitize_wakeprobe.sh` and `bench/sanitize_wakeprobe.ps1` name a record.
 `bench/check_records.py` accepts them for this code commit on both hosts (`--host L` and
@@ -118,7 +128,16 @@ root commit `47f14f09efac14e2a14f39195a0c891b6c6f2e27` (`47f14f09e`), as
 of every test and every probe cell, and names the same inputs hashes, configuration and
 compiler as the record of the same kind for `0af1ac4`. The tests passed in both arms: 33 of 33
 on Linux, 17 of 17 on Windows. Each record names the repository head it was made at
-(`repo_head`) and the sha256 of the archive of its logs.
+(`repo_head`) and the sha256 of the archive of its logs; the logs are not published.
+
+The public check: `bench/check_records.py --records lab/sanitizer-records --code
+47f14f09efac14e2a14f39195a0c891b6c6f2e27`, with `--host L` and with `--host W`, passes and writes
+a gate whose compiler, inputs hashes and configuration per arm equal those of the `gate.json` of
+each L run (the publication run and the random-gap run) and of the W run, which name the records
+of `0af1ac4`. The inputs hashes and configuration of each run's `inputs.json`, what its builds
+compiled, are the same. With `--code 0af1ac47ec708595b91e5c15300556f2714314c1`, the same script
+on the same directory writes a gate equal to each run's `gate.json`, record names included.
+Checked on W on 2026-10-08, with the runs unpacked from the tarballs that are the release's assets.
 
 | Record | Compiler and sanitizer | `wakeloop` | `wakeprobe` |
 |---|---|---|---|
@@ -133,7 +152,9 @@ on Linux, 17 of 17 on Windows. Each record names the repository head it was made
 At the root commit, `analysis/summarize.py` and `analysis/fig_sawtooth.py`, run on the three
 raw runs with the commands in `results/README.md`, regenerate all nine files of
 `results/rework/`, each identical to the committed file after line endings are converted to
-LF. The raw runs are not in git; `results/README.md` lists their archives and sha256.
+LF. The raw runs are not in git; they are the assets of the release `data-2026-10`, and
+`results/README.md` lists them with their sha256. On 2026-10-08 the regeneration was repeated
+from the tarballs that are the release's assets, with the same result.
 
 ## Other cited commits
 
@@ -141,7 +162,7 @@ None of these is a measured state, and none is in this history.
 
 | Commit | Cited in | What it is |
 |---|---|---|
-| `4d34f460daf25f5b68bb980541acd9dd71ff7873` | the raw runs on Linux (`env.txt`, `repo_head`) and the three Linux records | the repository head when those runs and records were made; its compiled code is that of `0af1ac4` (no difference in the paths of `bench/code_paths.txt`) |
-| `62408d4a089e70b3cac46e9695b4cc0be1a05776` | the Windows publication run (`env.txt`, `repo_head`) | the repository head when that run was made; its compiled code is that of `0af1ac4` |
+| `4d34f460daf25f5b68bb980541acd9dd71ff7873` | the raw runs on Linux (`env.txt`, `repo_head`), the three Linux records of `0af1ac4`, and the column `bench_commit` of the tables of `results/rework/` | the repository head when those runs and records were made; its compiled code is that of `0af1ac4` (no difference in the paths of `bench/code_paths.txt`) |
+| `62408d4a089e70b3cac46e9695b4cc0be1a05776` | the Windows publication run (`env.txt`, `repo_head`), and the column `bench_commit` of the tables of `results/rework/` | the repository head when that run was made; its compiled code is that of `0af1ac4` |
 | `2233155` | `design/minimal-loop.md`, line 13 | the state before the minimal loop, when the probe was built on the earlier, withdrawn implementation; the design note's line numbers refer to its files. The note is frozen and keeps the reference |
-| `4abc958` | `analysis/summarize.py`, the comment on `DROPPED_FIXED_BOUND_US` | the first version of `hypotheses.md` (2026-09-25); the comment quotes the sentence it cites |
+| `4abc958` | `analysis/summarize.py`, the comment on `DROPPED_FIXED_BOUND_US` | the first version of `hypotheses.md` (2026-09-25); the comment quotes the sentence it cites, and the revision log of `hypotheses.md` (2026-10-08) quotes the whole first version |

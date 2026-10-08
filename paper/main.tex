@@ -103,9 +103,9 @@ interfaces used by portable C++ servers (Section~\ref{sec:background}), model it
 (Section~\ref{sec:model}), and propose a portable test that needs no access to the internals
 of the loop (Section~\ref{sec:test}). We measure both on a minimal event loop written for this
 study, with epoll, io\_uring and IOCP backends and a compile-time switch that seeds the defect
-in each (Sections~\ref{sec:method} and~\ref{sec:results}). Everything needed to repeat the
-study (the loop, its tests, the probe, the run scripts, the generated tables and the hypotheses
-with their revision log) \PaperRepoAvailability\ at \PaperRepo.
+in each (Sections~\ref{sec:method} and~\ref{sec:results}). The repository of the
+study, with the loop, its tests, the probe, the run scripts, the raw runs, the sanitizer records and
+the hypotheses with their revision log, \PaperRepoAvailability\ at \PaperRepo.
 
 \section{Background}\label{sec:background}
 
@@ -211,7 +211,7 @@ for both systems we instead resample the gap sweep, \WakeResampleTrials\ draws o
 \WakeTestPosts\ posts without replacement per configuration, with a recorded seed.
 
 \emph{Hypotheses.} The hypotheses and their acceptance criteria were fixed before any
-publication run (Table~\ref{tab:hyp}) and are kept in the repository with a dated revision log.
+publication run (Table~\ref{tab:hyp}), as their dated revision log in the repository records.
 Revisions after smoke runs, before any publication run, renumbered and reworded them as H1 to
 H4 (a prediction from the measured phase and $\Beff$, a fixed-gap test of independence from
 $B$, a threshold of $\Beff/\WakeTestDivisor$ instead of $B/\WakeTestDivisor$, an explicit
@@ -227,7 +227,7 @@ the measured implementation: the defect is the loop built with the switch on, th
 loop with its wake compiled in, and hypotheses, thresholds and designs are unchanged.
 
 \begin{table}[t]
-\caption{Pre-registered hypotheses and their outcomes}
+\caption{Pre-specified hypotheses and their outcomes}
 \label{tab:hyp}
 \centering
 \footnotesize
@@ -263,10 +263,9 @@ kernel \WakeHostLinuxKernel) with the \WakeCpuidleDriver\ idle driver and the
 \WakeCpuidleDeepest, reports an exit latency of \WakeCpuidleDeepestLatencyUs~$\mu$s. Windows
 runs use a \WakeHostWindowsCpu\ desktop with \WakeHostWindowsOs\ and the power plan recorded
 with the run, whose minimum processor state on mains power is set to its highest value (checked
-on the host after the runs). The runs measure the loop at repository commit
-\texttt{\WakeCodeCommitLinux}, built at commit \texttt{\WakeMeasuredCommitLinux}, which the
-published history does not contain, from identical first-party files
-(\texttt{PROVENANCE.md}), with \WakeCompilerLinux\ and \WakeCompilerWindows. The timer slack is \WakeSlackNs~ns, except in the $B = \WakeBSmallMs$~ms
+on the host after the runs). The runs measure the loop at commit
+\texttt{\WakeCodeCommitLinux}, built with \WakeCompilerLinux\ and \WakeCompilerWindows; the
+compiled files' hashes, recorded with each run, match that commit. The timer slack is \WakeSlackNs~ns, except in the $B = \WakeBSmallMs$~ms
 matrix cells repeated at the default of \WakeSlackDefaultUs~$\mu$s. Windows runs use the default
 timer resolution or \WakeTimerRequestedMs~ms from \texttt{timeBeginPeriod} (throttling opted
 out) and time gaps with a high-resolution waitable timer. The cell order is shuffled with a
@@ -278,7 +277,8 @@ passed the loop's tests and a reduced run of every design, with the same configu
 compiler. The sanitizers were AddressSanitizer with UndefinedBehaviorSanitizer,
 ThreadSanitizer and MemorySanitizer on Linux, and AddressSanitizer with clang-cl on Windows.
 None of them reported anything. On both systems the hashes of the compiled files are checked
-against these records before any cell runs. The tests pin the loop's semantics in both builds
+against these records before any cell runs. These records, and those made later for the published
+commit, are in the repository. The tests pin the loop's semantics in both builds
 and include wake detectors, which pass in every correct build and detect the seeded defect in
 every defective build.
 
@@ -377,7 +377,7 @@ several workers may wake differently. The seeded faults are few and hand-written
 not measured. The test assumes that a correct wake costs much less than $B/\WakeTestDivisor$,
 which a short bound, a sanitizer build or a deep idle state can break. The random-gap design and
 the resampling of the gap sweep were added after a review of results from the earlier
-implementation and were not pre-registered.
+implementation and were not pre-specified.
 
 \section{Conclusion}
 

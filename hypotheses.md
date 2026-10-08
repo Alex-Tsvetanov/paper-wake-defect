@@ -45,3 +45,21 @@ Recorded factors: Linux timer slack; Windows timer resolution obtained by the pr
   writes an eventfd that its ring does not watch, and IOCP omits the completion packet. In
   H2 and H4, "the fix" is the loop with its wake compiled in. H1 to H5, their thresholds, the
   designs and the random-gap design are unchanged; H4 stays deferred.
+- 2026-10-08, a record that changes nothing: the public history of this repository starts after
+  the publication runs, so it does not hold the first version (2026-09-25). Its text, below its
+  title, read:
+
+      Setup: one worker parked in the backend's wait with bound B; a second thread posts a task
+      every g milliseconds; the measured quantity is the delay from post to execution.
+
+      H1. With the wake defect present, the median delay is B minus (g mod B), to within 5% of B.
+          With the fix, the median delay is independent of B and below 100 microseconds.
+      H2. A test that posts N = 21 times and compares the median delay with B/5 flags every
+          defective backend and passes every fixed backend, at B = 1 ms and B = 100 ms.
+      H3. The fix costs no measurable throughput when the worker is busy (posted work rides on
+          existing completions), measured as a paired A/B on the lab laptop.
+
+      Backends: epoll and io_uring on Linux (laptop L), IOCP on Windows (desktop W).
+
+  The revision of 2026-09-26 renumbered these as H1 to H4 above and dropped the bound of 100
+  microseconds on the median delay with the fix. Its entry above does not say so.
