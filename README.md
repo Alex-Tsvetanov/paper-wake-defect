@@ -45,9 +45,8 @@ none of their data is used. The repository's earlier history is archived private
 
 Copyright 2026 Alex I. Tsvetanov.
 
-The code in this repository (`CMakeLists.txt`, `loop/`, `tests/`, `bench/`, `analysis/` and the
-Python programs in `paper/`) is licensed under the Apache License, Version 2.0. The full text
-is in `LICENSE`. The grant covers the code only. It does not cover the manuscript (the LaTeX
-sources in `paper/` and every PDF or Word copy built from them) or the conference Word
-template `paper/template.docx`, a third-party file kept in this repository only to build the
-manuscript. `NOTICE` lists what the grant covers and what it does not.
+This repository is licensed under the Apache License, Version 2.0. The full text is in
+`LICENSE`. The licence covers every file except the manuscript (the LaTeX and BibTeX sources
+in `paper/` and every PDF or Word copy built from them) and the conference Word template
+`paper/template.docx`, a third-party file kept in this repository only to build the manuscript.
+`NOTICE` lists what the licence does not cover.

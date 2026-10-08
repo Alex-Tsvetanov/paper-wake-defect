@@ -1,14 +1,15 @@
 paper-wake-defect
 Copyright 2026 Alex I. Tsvetanov
 
-The code in this repository is licensed under the Apache License, Version 2.0 (see LICENSE).
-The grant covers the code only. The code is:
+This repository is licensed under the Apache License, Version 2.0 (see LICENSE). The licence
+covers every file in the repository except the manuscript (section 1) and the third-party file
+(section 2). That includes:
 
-  CMakeLists.txt, loop/, tests/, bench/ and analysis/, and the Python programs in paper/
-  (paper/build_docx.py and paper/check_prose.py).
-
-The grant does not cover any other file, in particular the manuscript (section 1) and the
-third-party file of section 2.
+  the code: CMakeLists.txt, loop/, tests/, bench/ and analysis/, and the Python programs in
+  paper/ (paper/build_docx.py and paper/check_prose.py);
+  the data and notes: results/ (the tables and the generated macros.tex of results/rework/,
+  made by analysis/summarize.py and analysis/fig_sawtooth.py; macros.tex is a .tex file and is
+  covered), design/, hypotheses.md, PROVENANCE.md and the README files.
 
 1. The manuscript, not covered by the Apache-2.0 grant
 
