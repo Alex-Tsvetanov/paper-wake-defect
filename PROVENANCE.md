@@ -8,11 +8,15 @@ of that earlier history. This file maps each of them to this history. Checked on
 
 ## The measured code: `0af1ac4`
 
-`0af1ac47ec708595b91e5c15300556f2714314c1` is the code commit of every publication run. The
-paper names it ("repository commit 0af1ac4", from `\WakeCodeCommitLinux` and
-`\WakeCodeCommitWindows` in `results/rework/macros.tex`), `macros.tex` gives it in full in its
-header, `results/README.md` cites it, and the names of the raw runs (`...-0af1ac4`) and of the
-sanitizer records (`wakeloop-0af1ac47e-...`) carry it.
+`0af1ac47ec708595b91e5c15300556f2714314c1` is the code commit of every publication run, the
+commit the builds were made at. The paper names it as the commit the runs were built at
+(`\WakeMeasuredCommitLinux` and `\WakeMeasuredCommitWindows` in `results/rework/macros.tex`) and
+names the root commit of this history as the repository commit of the loop
+(`\WakeCodeCommitLinux` and `\WakeCodeCommitWindows`). `analysis/summarize.py` maps the one to
+the other (`PUBLIC_COMMIT`) and stops on a measured commit it does not list. `macros.tex` gives
+both in full in its header, `results/README.md` cites both, and the names of the raw runs
+(`...-0af1ac4`) and of the first sanitizer records (`wakeloop-0af1ac47e-...`) carry
+`0af1ac4`.
 
 It maps to the root commit `47f14f09efac14e2a14f39195a0c891b6c6f2e27`. What the builds compile
 is byte-identical at the two commits.
@@ -34,6 +38,8 @@ and at the root commit:
 | `bench/code_paths.txt` | blob | `b8229de3626d73f0f13ac1cc4ef59803e080e47d` |
 
 To check a commit of this history: `git rev-parse <commit>:loop`, and so on for each path.
+They are also the same at every later commit of this history that does not change these paths.
+The code commit of this history, the last commit that changed one of them, is the root commit.
 
 ### Same inputs hashes
 
@@ -67,9 +73,12 @@ reproduced at the root commit as follows.
   `--expect` against the gate of the Windows record reported that both builds match:
   `wakeloop` `040988e8...`, `wakeprobe` `976db6c5...`. The loop's tests passed in both arms
   (17 of 17 each).
-- Linux, by recomputation, not by a build. The rule above, applied to the files of the root
-  commit, gives `593662db...` and `976db6c5...`. The same recomputation gives the two Windows
-  hashes that the build produced, which checks the rule.
+- Linux, by builds. The sanitizer records named for the root commit (below) were made on
+  2026-10-08 on the Linux host, which built both arms with clang 22.1.8 from a clone of this
+  history. Each names `wakeloop` `593662db...` and `wakeprobe` `976db6c5...`, as the records of
+  `0af1ac4` do. The rule above, applied to the files of the root commit, gives the same
+  hashes, and gives the two Windows hashes that the Windows build produced, which checks the
+  rule.
 
 A recomputation from a checkout, in Python:
 
@@ -98,6 +107,26 @@ select compiled code (`WAKELOOP_DEFECT`, `WAKELOOP_BACKENDS`).
 
 The inputs hashes at the root commit equal the records', so the records cover builds of this
 history as well.
+
+#### Records named for this history
+
+These records were made on 2026-10-08 for this history. They are named for its code commit, the
+root commit `47f14f09efac14e2a14f39195a0c891b6c6f2e27` (`47f14f09e`), as
+`bench/sanitize_wakeprobe.sh` and `bench/sanitize_wakeprobe.ps1` name a record.
+`bench/check_records.py` accepts them for this code commit on both hosts (`--host L` and
+`--host W`). Each is green, covers both arms, reports 0 sanitizer findings in the full output
+of every test and every probe cell, and names the same inputs hashes, configuration and
+compiler as the record of the same kind for `0af1ac4`. The tests passed in both arms: 33 of 33
+on Linux, 17 of 17 on Windows. Each record names the repository head it was made at
+(`repo_head`) and the sha256 of the archive of its logs.
+
+| Record | Compiler and sanitizer | `wakeloop` | `wakeprobe` |
+|---|---|---|---|
+| `wakeloop-47f14f09e-L-asan.json` | Clang 22.1.8, ASan and UBSan | `593662db...` | `976db6c5...` |
+| `wakeloop-47f14f09e-L-tsan.json` | Clang 22.1.8, TSan | `593662db...` | `976db6c5...` |
+| `wakeloop-47f14f09e-L-msan.json` | Clang 22.1.8, MSan | `593662db...` | `976db6c5...` |
+| `wakeloop-47f14f09e-W-asan-clangcl.json` | clang-cl 22.1.0, ASan | `040988e8...` | `976db6c5...` |
+| `wakeloop-47f14f09e-W-asan.json` | MSVC 19.51.36246.0, ASan (extra coverage) | `040988e8...` | `976db6c5...` |
 
 ### Generated results
 

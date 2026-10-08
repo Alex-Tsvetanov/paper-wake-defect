@@ -79,6 +79,10 @@ first-party inputs, in the same configuration, with the same compiler.
     a sha256 file;
   - W: `wakeloop-0af1ac47e-W-asan-clangcl.json` (gates the W runs) and
     `wakeloop-0af1ac47e-W-asan.json` (MSVC ASan, extra coverage).
+- The same five kinds of record exist for this history's code commit `47f14f09e` (made on
+  2026-10-08, named `wakeloop-47f14f09e-...`). They are all green with 0 sanitizer reports and
+  name the same inputs hashes, configuration and compilers as the records above, so
+  `bench/check_records.py` passes on this history too. `../PROVENANCE.md` lists them.
 - Each record runs the loop's tests (in the defect arm, the five wake detectors per backend
   must detect) and a reduced run of every design, and scans all of their output.
 - `bench/check_records.py` builds the gate from the records (`gate.json`);
