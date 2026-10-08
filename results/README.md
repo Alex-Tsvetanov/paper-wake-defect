@@ -1,11 +1,13 @@
 # P1 results
 
 The paper measures this repository's minimal event loop (`loop/`, `design/minimal-loop.md`)
-at code commit `0af1ac4`, in two arms built from one tree: fixed (`WAKELOOP_DEFECT=OFF`) and
-defect (`WAKELOOP_DEFECT=ON`). The paper takes every number in its prose from
-`rework/macros.tex`. The hypotheses are in `../hypotheses.md`; its revision log records the
-change to this loop (2026-09-29). `../PROVENANCE.md` maps `0af1ac4` to this repository's
-history and shows that the compiled code is the same.
+at code commit `47f14f0` (the root commit of this history), in two arms built from one tree:
+fixed (`WAKELOOP_DEFECT=OFF`) and defect (`WAKELOOP_DEFECT=ON`). The runs were built at commit
+`0af1ac4` of the repository's earlier history, which is archived privately; the names of the
+raw runs below carry it. `../PROVENANCE.md` maps `0af1ac4` to `47f14f0` and shows that the
+first-party files the builds compiled are the same. The paper takes every number in its prose
+from `rework/macros.tex`, which names both commits. The hypotheses are in `../hypotheses.md`;
+its revision log records the change to this loop (2026-09-29).
 
 ## Generated files (`rework/`)
 

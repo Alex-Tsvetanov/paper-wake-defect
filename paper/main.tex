@@ -264,8 +264,9 @@ kernel \WakeHostLinuxKernel) with the \WakeCpuidleDriver\ idle driver and the
 runs use a \WakeHostWindowsCpu\ desktop with \WakeHostWindowsOs\ and the power plan recorded
 with the run, whose minimum processor state on mains power is set to its highest value (checked
 on the host after the runs). The runs measure the loop at repository commit
-\texttt{\WakeCodeCommitLinux} on both systems, built with \WakeCompilerLinux\ and
-\WakeCompilerWindows. The timer slack is \WakeSlackNs~ns, except in the $B = \WakeBSmallMs$~ms
+\texttt{\WakeCodeCommitLinux}, built at commit \texttt{\WakeMeasuredCommitLinux}, which the
+published history does not contain, from identical first-party files
+(\texttt{PROVENANCE.md}), with \WakeCompilerLinux\ and \WakeCompilerWindows. The timer slack is \WakeSlackNs~ns, except in the $B = \WakeBSmallMs$~ms
 matrix cells repeated at the default of \WakeSlackDefaultUs~$\mu$s. Windows runs use the default
 timer resolution or \WakeTimerRequestedMs~ms from \texttt{timeBeginPeriod} (throttling opted
 out) and time gaps with a high-resolution waitable timer. The cell order is shuffled with a

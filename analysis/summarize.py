@@ -97,6 +97,13 @@ DELAY_BAND = 0.1
 # revision before the publication runs dropped that bound; the paper reports what it would
 # have given.
 DROPPED_FIXED_BOUND_US = 100
+# The publication runs were built at a commit of this repository's earlier, archived history,
+# which the public history does not contain. PROVENANCE.md shows that the first-party files the
+# builds compiled are byte-identical at the root commit of the public history (same git object
+# ids for the paths of bench/code_paths.txt, same inputs hashes). The paper names the public
+# commit; the measured commit is kept where provenance needs it. A measured commit that is
+# not listed here stops a non-smoke run.
+PUBLIC_COMMIT = {"0af1ac47ec708595b91e5c15300556f2714314c1": "47f14f09efac14e2a14f39195a0c891b6c6f2e27"}
 # paper/fig-sawtooth.tex, through analysis/fig_sawtooth.py, draws the gap sweep at the smallest
 # B for these cells, keeping every second measured post of each step ([1::2] by index).
 FIG_CELLS = [("epoll", "slack=1ns"), ("io_uring", "slack=1ns"), ("iocp", "timer=default")]
@@ -574,9 +581,18 @@ def only(values, what: str):
     return distinct[0]
 
 
+def public_commit(measured: str, smoke: bool) -> str:
+    """The public-history commit with the same compiled files as the measured commit."""
+    if measured in PUBLIC_COMMIT:
+        return PUBLIC_COMMIT[measured]
+    if smoke:
+        return measured
+    raise SystemExit(f"code commit {measured} is not in PUBLIC_COMMIT (see PROVENANCE.md)")
+
+
 def derived_macros(runs: list[dict], matrix: list[dict], steps: list[dict], sweep: list[dict],
                    bound: list[dict], random_rows: list[dict], modes: list[dict], meta: dict,
-                   resample: dict) -> list[tuple[str, object, int | None]]:
+                   resample: dict, smoke: bool = False) -> list[tuple[str, object, int | None]]:
     """Macros for the paper's prose beyond the per-cell values: design constants, host facts,
     aggregates over cells, B_eff against B, the resampling and random-gap results. A digit
     count of None marks a text macro."""
@@ -644,7 +660,9 @@ def derived_macros(runs: list[dict], matrix: list[dict], steps: list[dict], swee
         sel = [r for r in runs if pred(r) and r["design"] != "random-gap"]
         add(f"WakeCompiler{os_word}", tex_text(" ".join(only([r["summary"]["compiler"] for r in sel], "compiler")
                                                         .split()[:2])), None)
-        add(f"WakeCodeCommit{os_word}", only([r["summary"]["bench_code_commit"][:7] for r in sel], "code commit"), None)
+        measured = only([r["summary"]["bench_code_commit"] for r in sel], "code commit")
+        add(f"WakeCodeCommit{os_word}", public_commit(measured, smoke)[:7], None)
+        add(f"WakeMeasuredCommit{os_word}", measured[:7], None)
     # The bound the first version put on the correct loop, against the largest correct median
     # of the publication designs (matrix and bound sweeps, with and without the QoS request).
     add("WakeHDroppedBoundUs", DROPPED_FIXED_BOUND_US, 0)
@@ -834,7 +852,9 @@ def write_macros(path: Path, sources: list[Path], smoke: bool, matrix: list[dict
              "% Sources: " + ", ".join(sorted({display_path(s.parent) for s in sources}))]
     runs = matrix + bound
     commits = sorted({r["code_commit"] + ("-dirty" if r["bench_dirty"] else "") for r in runs})
-    lines.append("% Code commit: " + ", ".join(commits))
+    lines.append("% Code commit measured: " + ", ".join(commits))
+    lines.append("% Public commit with the same compiled files (PROVENANCE.md): "
+                 + ", ".join(sorted({public_commit(r["code_commit"], smoke) for r in runs})))
     lines.append(f"% Resampling of the gap sweep: random.Random({resample['seed']}), {resample['trials']} draws "
                  f"per cell, Python {resample['python']}.")
     if smoke:
@@ -940,7 +960,7 @@ def main() -> int:
     modes = mode_rows(by_design, sweep)
     all_runs = [r for d in by_design.values() for r in d]
     extra = derived_macros(all_runs, matrix, steps, sweep, bound, random_rows, modes,
-                           host_meta(args.inputs), resample)
+                           host_meta(args.inputs), resample, smoke)
     write_csv(matrix, out / "matrix.csv")
     write_csv(steps, out / "gap_sweep.csv")
     write_csv(sweep, out / "gap_sweep_summary.csv")
