@@ -12,6 +12,7 @@ results/raw/
 *.pdb
 NUL.*
 paper/*.pdf
+!paper/main.pdf
 build-*/
 paper/*.docx
 !paper/template.docx

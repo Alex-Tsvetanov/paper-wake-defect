@@ -42,6 +42,9 @@ missing wake. `WAKELOOP_SANITIZER` selects a sanitizer (see the top of `CMakeLis
     python paper/build_docx.py --word-check   # PDF build, Word copy, page count in Word
     python paper/check_prose.py --outputs     # typed digits and dashes
 
+`paper/main.pdf` is the manuscript's PDF, rebuilt from the sources with
+`cd paper && latexmk -pdf main.tex` and committed with them.
+
 ## Public material
 
 The paper rests only on public material: this repository from its root commit on, and the raw
