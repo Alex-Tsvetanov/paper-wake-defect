@@ -4,11 +4,12 @@
 % gap_sweep_summary.csv in the same directory. No cell is bimodal, so there is no kind 2.
 % Series 1 epoll (L), 2 io_uring (L), 3 IOCP (W, default timer). Kind 0 is a measured post;
 % kind 1 the model d = B_eff - (phase mod B_eff) with the pooled B_eff of the cell.
-% One column wide; the caption and label belong in main.tex. Needs pgfplots (compat 1.18).
+% Panel width is \WakePanelWidth from the preamble. The caption and label belong in main.tex.
+% Needs pgfplots (compat 1.18).
 \pgfplotstableread[col sep=comma]{../results/rework/fig_sawtooth.csv}\WakeSawtoothTable
 \begin{tikzpicture}[
     /pgfplots/sawtooth panel/.style={
-        scale only axis, width=0.78\columnwidth, height=2.2cm,
+        scale only axis, width=\WakePanelWidth, height=2.2cm,
         xmin=0, ymin=0, enlarge x limits={upper, value=0.02}, enlarge y limits={upper, value=0.32},
         scaled ticks=false,
         tick label style={font=\scriptsize, /pgf/number format/1000 sep={}},

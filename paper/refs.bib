@@ -1,4 +1,5 @@
-% References for "Bounded-wait wake defects in portable event loops" (TELECOM 2026).
+% References for "Bounded-wait wake defects in portable event loops"
+% (draft for Software: Practice and Experience; not a submission).
 % Papers: DOI metadata from https://api.crossref.org/works/<doi>, or the official proceedings
 % page where no DOI exists (CHESS). Documentation, issues and commits: the official page or
 % the primary source was read; version or date strings are copied from it. Fields that could
@@ -108,6 +109,37 @@
   month        = apr,
   url          = {https://github.com/libevent/libevent/commit/23c2914f6b430f2c2d74c267c13ffab3dda1b325},
   note         = {Accessed 2026-09-29}
+}
+
+% Reproduced in this repository at the buggy commit (historical/tokio-yield-lost-wake).
+% The crates.io archive of Tokio 1.41.1 records git commit
+% bb7ca7507b94d01ffe0e275ddc669734ab3bf783. Its context.rs blob is
+% 76918114bc3079708d5768d794a515db6915696b, the pre-image named in the fix diff.
+% On that build the reproduction prints "start" and does not print "done" before the
+% test is stopped. Not printed in the paper: version, commit, blob, or the stop time.
+% Author field: the name on the issue and on the fix commit is quininer.
+@misc{quininer2024yieldbug,
+  author       = {quininer},
+  title        = {{external executor block\_on and yield defer do not work together}},
+  howpublished = {Tokio issue 6996, GitHub},
+  year         = {2024},
+  month        = nov,
+  url          = {https://github.com/tokio-rs/tokio/issues/6996},
+  note         = {Buggy source reproduced here: Tokio 1.41.1, commit bb7ca7507b94d01ffe0e275ddc669734ab3bf783. Accessed 2026-10-22}
+}
+
+% The completing build is Tokio 1.42.0, commit bb9d57017e100985f86d8ca41ac105ee9140423e.
+% Its context.rs blob is 12f6edf13216f8a534365868267995680eb7d23c, the post-image of
+% commit c6f9e61. The changelog line is "do not defer yield_now inside block_in_place".
+% On that build the same source prints "start", "done" and "finished".
+@misc{quininer2024yieldfix,
+  author       = {quininer},
+  title        = {{runtime: fixed yield\_now lost wakeup}},
+  howpublished = {Tokio commit c6f9e61, pull request 6999, GitHub},
+  year         = {2024},
+  month        = nov,
+  url          = {https://github.com/tokio-rs/tokio/commit/c6f9e61d9ee7e69c1e6c47dacd5a7478bc011b59},
+  note         = {Contained in Tokio 1.42.0, commit bb9d57017e100985f86d8ca41ac105ee9140423e. Accessed 2026-10-22}
 }
 
 % Hang: a searching worker parked with a spawned task queued. The park and the hang are shown
@@ -266,6 +298,20 @@
 % ===========================================================================
 % (5) Dynamic race detection and systematic concurrency testing
 % ===========================================================================
+
+% Crossref 2026-10-22: Software: Practice and Experience, 16(3), March 1986, pages 225-233.
+% A delay inserted into a concurrent program can mask synchronization errors.
+@article{gait1986probe,
+  author  = {Gait, Jason},
+  title   = {A probe effect in concurrent programs},
+  journal = {Software: Practice and Experience},
+  volume  = {16},
+  number  = {3},
+  pages   = {225\BibHyphen{-}233},
+  year    = {1986},
+  month   = mar,
+  doi     = {10.1002/spe.4380160304}
+}
 
 @inproceedings{serebryany2009threadsanitizer,
   author    = {Serebryany, Konstantin and Iskhodzhanov, Timur},

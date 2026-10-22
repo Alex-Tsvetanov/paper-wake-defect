@@ -6,39 +6,24 @@
 \input{../results/rework/macros}
 \newcommand{\Beff}{B_{\mathrm{eff}}}
 % Code availability. The repository is published, so the phrase is "is available".
-% build_docx.py reads the same macro, so the PDF and the Word copy always agree.
 \newcommand{\PaperRepoAvailability}{is available}
 \newcommand{\PaperRepo}{\url{https://github.com/Alex-Tsvetanov/paper-wake-defect}}
 % Page ranges in refs.bib: BibTeX dashifies the argument, which is dropped; one hyphen prints.
 \newcommand{\BibHyphen}[1]{-}
-% A line break in the Word title only (the template's larger title font wraps one word onto
-% the second line); nothing in LaTeX. build_docx.py turns it into a break.
-\newcommand{\WordTitleBreak}{}
 
 \begin{document}
 \bstctlcite{IEEEexample:BSTcontrol}
 
-\title{{\fontsize{21}{14.4}\selectfont
-Bounded-Wait Wake Defects \WordTitleBreak in Portable Event Loops}%
-\thanks{\textsuperscript{1}Alex I. Tsvetanov is with the Faculty of Computer Systems and Technologies, Technical University of Sofia, Sofia, Bulgaria (e-mail: \href{mailto:atsvetanov@tu-sofia.bg}{atsvetanov@tu-sofia.bg}).}%
-}
+\title{Bounded-Wait Wake Defects\\ in Portable Event Loops}
 
-\author{
-\IEEEauthorblockN{{\fontsize{14}{14.4}\selectfont
-Alex I. Tsvetanov\textsuperscript{1}}}
-}
+\author{Alex I. Tsvetanov\\
+Faculty of Computer Systems and Technologies\\
+Technical University of Sofia\\
+Sofia, Bulgaria\\
+\href{mailto:atsvetanov@tu-sofia.bg}{atsvetanov@tu-sofia.bg}}
 
+\date{}
 \maketitle
-
-\pagenumbering{arabic}
-\setcounter{page}{1}
-\renewcommand{\headrulewidth}{0pt}
-\renewcommand{\footrulewidth}{0pt}
-\thispagestyle{fancy}
-% The running header, as in template.docx (straight quotes under T1).
-	\chead{{\fontsize{10}{13.0}\selectfont
-34th National Conference with International Participation "Telecom 2026", November 26 - 28, 2026, Sofia, Bulgaria}  }
-    \fancyfoot[C]{\thepage}
 
 \begin{abstract}
 An idle event-loop worker parks in a wait with a timeout. When another thread posts a task,
@@ -57,13 +42,27 @@ below a multiple of the wait period hides the defect. With random gaps, in an ex
 it missed \WakeRandomDefectMissed\ of \WakeRandomDefectTrials\ defective trials and flagged
 \WakeRandomFixedFlagged\ of \WakeRandomFixedTrials\ correct ones. With a correct wake, the
 delay on an idle Linux core still depends on the wait bound, also under a \WakeQosUs~$\mu$s CPU
-latency request.
+latency request. Separately, one missed wake in Tokio hangs at a buggy commit and completes
+at the commit that contains the fix. That case is a hang, and it is not part of the latency
+matrix.
 \end{abstract}
 
-\begin{IEEEkeywords}
-event loop, lost wake-up, epoll, io\_uring, I/O completion ports, timer resolution, processor
-idle states, performance testing
-\end{IEEEkeywords}
+\noindent\textit{Keywords:} event loop, lost wake-up, epoll, io\_uring, I/O completion ports,
+timer resolution, processor idle states, performance testing.
+
+\section*{Status of this draft}
+\label{sec:status}
+
+This manuscript is a draft for \emph{Software: Practice and Experience}. It is not a
+submission. The conference running header and the conference front matter are gone. One
+historical missed wake, in Tokio, is reproduced at the buggy commit by the test under
+\path{historical/tokio-yield-lost-wake}, and Section~\ref{sec:historical} states the
+outcome. That case hangs, because the runtime parks without a bound. The latency matrix was
+not applied to it, and this draft reports no power and no false-positive rate for it. The
+matrix itself is one compile-time seed on a minimal loop written for this study. It is not
+a historical result, and it is not a set of six historical faults. A submission still needs
+the latency test on a historical bounded-wait miss. The reports cited in the introduction
+are not that test.
 
 \section{Introduction}
 
@@ -97,6 +96,11 @@ leave a queued work item unprocessed unless more work was queued~\cite{sadov2025
 Conversely, Asio, when built for and running on Windows versions before Vista, bounds each wait
 for completions, because the call can appear stuck while completions are
 queued~\cite{kohlhoff2026asioiocp}: a bounded wait as a safety net.
+
+These are citations of reports. Citing them does not reproduce a bug at its commit.
+Section~\ref{sec:historical} reproduces one later missed wake in Tokio, a hang in
+\texttt{yield\_now} under \texttt{block\_in\_place}, which is not the scheduler hang cited
+above. The latency matrix in this draft is not that reproduction.
 
 We call this a \emph{bounded-wait wake defect}. We describe how it arises with the kernel
 interfaces used by portable C++ servers (Section~\ref{sec:background}), model its delay
@@ -163,6 +167,10 @@ which for $N = \WakeTestPosts$ has probability \WakeBinomialMissPct\,\%. $\Beff$
 from a defective build; a test of an unknown build can use $B/\WakeTestDivisor$, which is no
 larger.
 
+Gait measured a probe effect in concurrent programs: a delay inserted into the program can
+mask synchronization errors~\cite{gait1986probe}. A bounded wait is a delay of that kind. It
+turns a missed wake into latency, and a test of eventual delivery passes.
+
 The test is a latency oracle. For an omitted or misdirected wake, as in our seeded builds, race
 detectors have nothing to find: no access is racy, and
 ThreadSanitizer~\cite{serebryany2009threadsanitizer} reports nothing on our defective builds.
@@ -189,7 +197,8 @@ argument. The IOCP backend posts a completion packet and waits in
 milliseconds. $B$ is a run-time parameter, and the wait can also block. Stop has its own path
 in every backend. The defect switch guards one site per backend, and a test checks that there
 is no other: epoll and IOCP omit the wake, and io\_uring writes its \texttt{eventfd} but never
-arms the poll that watches it.
+arms the poll that watches it. This is the only seeded defect in the measured loop. It is
+not a set of six historical faults.
 
 \emph{Probe.} A standalone program starts the loop, measures $\Beff$ in the defective build
 from \WakeCalibPosts\ calibration posts, and after a few warm-up posts records the phase, delay
@@ -349,6 +358,23 @@ Section~\ref{sec:test}. In the exploratory random-gap run on Linux the test miss
 \WakeRandomFixedFlagged\ of \WakeRandomFixedTrials\ correct ones. For Windows, only the
 resampling is available.
 
+\subsection{A historical missed wake}
+\label{sec:historical}
+The citations in the introduction are reports. Separate from those citations, the test under
+\path{historical/tokio-yield-lost-wake} builds Tokio at the buggy commit named with the
+yield deferral report~\cite{quininer2024yieldbug} and at the commit that contains the
+fix~\cite{quininer2024yieldfix}. The program parks a worker with \texttt{block\_in\_place},
+then waits on \texttt{yield\_now} from an external \texttt{block\_on}, which is the shape of
+the test added with the fix. On the buggy commit the task prints its start line and does not
+reach the line after the yield before the test is stopped. On the commit that contains the
+fix, the same source prints that line and then returns. The two builds were made on one
+Windows host, outside the publication runs, and neither build is a sanitizer-gated
+measurement of this paper's loop. The runtime parks without a bound, so the miss is a hang
+rather than the bounded delay of (\ref{eq:model}). The latency test of
+Section~\ref{sec:test} was not applied, and there is no power and no false-positive rate to
+report. An earlier shape of the same program, without \texttt{block\_in\_place}, did not
+finish on either commit, so it does not separate them.
+
 \emph{Cost of a correct wake.} H2 expected the delay of a correct loop not to depend on $B$. On
 Windows this holds, with medians of \WakeBoundIocpFixedBlockingTimerOneMs\ to
 \WakeBoundIocpFixedTenMsTimerOneMs~$\mu$s with the \WakeTimerRequestedMs~ms timer and
@@ -377,7 +403,9 @@ several workers may wake differently. The seeded faults are few and hand-written
 not measured. The test assumes that a correct wake costs much less than $B/\WakeTestDivisor$,
 which a short bound, a sanitizer build or a deep idle state can break. The random-gap design and
 the resampling of the gap sweep were added after a review of results from the earlier
-implementation and were not pre-specified.
+implementation and were not pre-specified. The Tokio reproduction is one program on one
+Windows host, stopped by the tester rather than by a pre-registered latency threshold, and
+it does not measure how often the hang occurs.
 
 \section{Conclusion}
 
@@ -392,7 +420,11 @@ about \WakeWinDefaultTickMs~ms at bounds of \WakeBSmallMs\ and \WakeBMidMs~ms; t
 in our runs was \WakeIocpDefectMaxMsDefaultTimer~ms. With a correct wake, the delay on an idle Linux
 core still depends on the bound, also under a \WakeQosUs~$\mu$s CPU latency request. We
 recommend running the latency test with random gaps alongside functional tests, and controlling
-or reporting the idle policy in benchmarks of wake latency.
+or reporting the idle policy in benchmarks of wake latency. A later missed wake in Tokio
+hangs at the buggy commit and completes once the fix is present
+(Section~\ref{sec:historical}). That reproduction is not a cell of the latency matrix. The
+matrix remains a self-seeded defect on the loop written for this study, so this draft is
+not a submission to \emph{Software: Practice and Experience}.
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
