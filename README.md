@@ -24,8 +24,10 @@ switch, `WAKELOOP_DEFECT`, seeds the defect at one site per backend.
 - `results/`  the generated tables and `macros.tex` of the publication runs, in `rework/`;
               `results/README.md` lists the runs, their archives (the assets of release
               `data-2026-10`) and their sanitizer gate
-- `paper/`    LaTeX source, the Word build (`build_docx.py`) and the prose check
-              (`check_prose.py`)
+- `paper/`    LaTeX source of the Software: Practice and Experience draft, the prose check
+              (`check_prose.py`), and the unpublished conference Word copy
+- `historical/tokio-yield-lost-wake/` the Tokio yield lost-wake reproduction
+- `paper/revision-spe.md` the retarget and that reproduction; not a frozen hypotheses file
 - `hypotheses.md` written before the publication runs, with its revision log
 
 ## Build and test
@@ -39,11 +41,23 @@ missing wake. `WAKELOOP_SANITIZER` selects a sanitizer (see the top of `CMakeLis
 
 ## Paper
 
-    python paper/build_docx.py --word-check   # PDF build, Word copy, page count in Word
-    python paper/check_prose.py --outputs     # typed digits and dashes
+`paper/main.tex` is a draft for Software: Practice and Experience. It is not a submission.
+The conference running header is gone. Rebuild the PDF, then check the prose:
 
-`paper/main.pdf` is the manuscript's PDF, rebuilt from the sources with
-`cd paper && latexmk -pdf main.tex` and committed with them.
+    cd paper && latexmk -pdf main.tex
+    python paper/check_prose.py
+    python paper/check_prose.py --outputs
+
+`paper/main.pdf` is that draft and is committed with the sources.
+`paper/Tsvetanov-wake-TELECOM2026.docx` is the unpublished conference manuscript.
+`paper/build_docx.py` still targets that conference template and refuses to rebuild the
+draft, so the Word file is not regenerated from the current sources.
+
+## Historical wake
+
+`historical/tokio-yield-lost-wake/` builds one Tokio program at the buggy release and at
+the release that contains the fix. See its README. It is not part of the C++ build, and
+it does not produce a latency number for the paper.
 
 ## Public material
 

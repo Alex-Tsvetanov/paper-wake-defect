@@ -1,0 +1,13 @@
+[package]
+name = "tokio_yield_lost_wake_fixed"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "tokio_yield_lost_wake"
+path = "../src/main.rs"
+
+[dependencies]
+futures-executor = "0.3"
+tokio = { version = "=1.42.0", features = ["rt-multi-thread", "macros", "sync"] }

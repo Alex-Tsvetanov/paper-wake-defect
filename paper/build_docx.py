@@ -1,4 +1,10 @@
-r"""Build the TELECOM 2026 Word copy of P1 from its LaTeX sources.
+r"""Retired for the current draft: this builds the unpublished TELECOM Word copy.
+
+paper/main.tex is the Software: Practice and Experience draft. Running this script
+stops before it writes, so it does not overwrite Tsvetanov-wake-TELECOM2026.docx.
+The steps below describe the conference builder, which is not used for the draft.
+
+Build the TELECOM 2026 Word copy of P1 from its LaTeX sources.
 
 One command, from any directory:
 
@@ -1287,7 +1293,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--no-latex", action="store_true", help="reuse build-docx/ from the last run")
     ap.add_argument("--word-check", action="store_true", help="count pages in Word (Windows)")
-    args = ap.parse_args()
+    ap.parse_args()
+    sys.exit(
+        "paper/main.tex is the Software: Practice and Experience draft. "
+        "build_docx.py builds the unpublished conference Word copy and is not run for that draft. "
+        "It does not overwrite paper/Tsvetanov-wake-TELECOM2026.docx."
+    )
     if not args.no_latex:
         build_latex()
     src = read(MAIN_TEX)
