@@ -219,21 +219,24 @@ in $[\WakeRandomGapLo\,B, \WakeRandomGapHi\,B]$ and a recorded seed. Windows has
 for both systems we instead resample the gap sweep, \WakeResampleTrials\ draws of
 \WakeTestPosts\ posts without replacement per configuration, with a recorded seed.
 
-\emph{Hypotheses.} The hypotheses and their acceptance criteria were fixed before any
+\emph{Hypotheses.} The hypotheses and their acceptance criteria were pre-specified before any
 publication run (Table~\ref{tab:hyp}), as their dated revision log in the repository records.
-Revisions after smoke runs, before any publication run, renumbered and reworded them as H1 to
-H4 (a prediction from the measured phase and $\Beff$, a fixed-gap test of independence from
-$B$, a threshold of $\Beff/\WakeTestDivisor$ instead of $B/\WakeTestDivisor$, an explicit
-throughput criterion). They also added the exploratory H5 after the smoke data contradicted H2,
-which was kept as written. The first version's bound of \WakeHDroppedBoundUs~$\mu$s on the
-correct loop's median and its threshold $B/\WakeTestDivisor$ would change no verdict (largest
-correct median \WakeFixedMedianMaxUs~$\mu$s; the same H3 verdicts). H4 was then deferred and not
-run for this paper, and we make no claim about it. The hypotheses were first measured on an
-earlier implementation, which we withdrew; none of its data is used. After those runs and a
-review, the random-gap design and the resampling of the gap sweep were added as exploratory.
-Before any sanitizer record or run on the present loop, a last revision made the present loop
-the measured implementation: the defect is the loop built with the switch on, the fix is the
-loop with its wake compiled in, and hypotheses, thresholds and designs are unchanged.
+A revision made after smoke runs, before any publication run, restated them as four main
+comparisons: the delay-model fit (a prediction from the measured phase and $\Beff$), the
+bound-independence check (a fixed-gap test of independence from $B$), the detection test (a
+threshold of $\Beff/\WakeTestDivisor$ instead of $B/\WakeTestDivisor$), and the throughput check
+(an explicit throughput criterion). That revision also added the exploratory latency-request
+check after the smoke data contradicted the bound-independence check, which was kept as
+written. The earlier bound of \WakeHDroppedBoundUs~$\mu$s on the correct loop's median and its
+threshold $B/\WakeTestDivisor$ would change no verdict (largest correct median
+\WakeFixedMedianMaxUs~$\mu$s; the same detection-test verdicts). The throughput check was then
+deferred and not run for this paper, and we make no claim about it. The hypotheses were first
+measured on an earlier implementation, which we withdrew; none of its data is used. After those
+runs and a review, the random-gap design and the resampling of the gap sweep were added as
+exploratory. Before any sanitizer record or run on the present loop, a last revision made the
+present loop the measured implementation: the defect is the loop built with the switch on, the
+fix is the loop with its wake compiled in, and the hypotheses, thresholds and designs are
+unchanged.
 
 \begin{table}[t]
 \caption{Pre-specified hypotheses and their outcomes}
@@ -241,25 +244,26 @@ loop with its wake compiled in, and hypotheses, thresholds and designs are uncha
 \centering
 \footnotesize
 \renewcommand{\arraystretch}{1.1}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.45cm}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{4.25cm}@{}}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{24mm}>{\raggedright\arraybackslash}p{66mm}>{\raggedright\arraybackslash}p{66mm}@{}}
 \hline
- & Criterion & Outcome \\
+Name & Criterion & Outcome \\
 \hline
-H1 & Defective loop: median $|$residual$|$ of (\ref{eq:model}) below \WakeHOneLimitPct\,\% of $\Beff$
+Delay-model fit & Defective loop: median $|$residual$|$ of (\ref{eq:model}) below \WakeHOneLimitPct\,\% of $\Beff$
    & Pass on Linux (largest \WakeHOneLinuxMaxPct\,\%) and on Windows with the default timer
      (largest \WakeIocpAbsResidualPctOneMsDefaultTimer\,\%); fail on Windows with the
      \WakeTimerRequestedMs~ms timer at $B = \WakeBSmallMs$~ms
      (\WakeSweepIocpAbsResidualPctOneMsTimerOneMs\,\% in the sweep,
      \WakeIocpAbsResidualPctOneMsTimerOneMs\,\% in the matrix) \\
-H2 & Correct loop: largest to smallest median over $B$ at most \WakeHTwoLimit
+Bound-independence check & Correct loop: largest to smallest median over $B$ at most \WakeHTwoLimit
    & Fail on Linux (epoll \WakeBoundEpollRatioMax, io\_uring \WakeBoundUringRatioMax); pass on
      Windows (\WakeBoundIocpRatioMaxTimerOneMs\ with the \WakeTimerRequestedMs~ms timer,
      \WakeBoundIocpRatioMaxDefaultTimer\ with the default) \\
-H3 & The \WakeTestPosts-post test flags every defective and no correct configuration
+Detection test & The \WakeTestPosts-post test flags every defective and no correct configuration
    & Pass at a gap of $\WakeMatrixGapFrac\,B$: \WakeDetectDefectFlagged\ of \WakeDetectDefectConfigs\
      defective and \WakeDetectFixedFlagged\ of \WakeDetectFixedConfigs\ correct flagged \\
-H4 & No measurable throughput cost under load & Deferred, not run; no claim \\
-H5 & Exploratory: a \WakeQosUs~$\mu$s latency request brings the H2 ratio to \WakeHFiveLimit\ or below
+Throughput check & No measurable throughput cost under load & Deferred, not run; no claim \\
+Latency-request check & Exploratory: a \WakeQosUs~$\mu$s latency request brings the bound-independence
+     check's ratio to \WakeHFiveLimit\ or below
    & Fail for epoll (\WakeBoundQosEpollRatioMaxQosZeroUs) and io\_uring
      (\WakeBoundQosUringRatioMaxQosZeroUs) \\
 \hline
@@ -320,7 +324,7 @@ On Windows the wait ends on a timer tick. At the default resolution, bounds of \
 and \WakeBMidMs~ms both give one period of \WakeWinDefaultTickMs~ms, and \WakeBLargeMs~ms gives
 \WakeIocpBEffOneHundredMsDefaultTimer~$\mu$s, \WakeIocpBEffOverTicksOneHundredMsDefaultTimer~$\mu$s
 more than \WakeIocpTicksOneHundredMsDefaultTimer\ times that measured tick. The largest residual
-at this resolution is \WakeIocpAbsResidualPctOneMsDefaultTimer\,\%, so H1 holds with the default
+at this resolution is \WakeIocpAbsResidualPctOneMsDefaultTimer\,\%, so the delay-model fit holds with the default
 timer, and the largest delay of a
 defective loop at bounds of \WakeBSmallMs\ and \WakeBMidMs~ms is
 \WakeIocpDefectMaxMsDefaultTimer~ms. With \WakeTimerRequestedMs~ms requested,
@@ -334,7 +338,8 @@ of a multiple of \WakeGridUs~$\mu$s (\WakeGridUniformPct\,\% if spread evenly), 
 \WakeBandPostsIocpOneMsTimerOneMs\ are delivered after \WakeBandLoUsIocpOneMsTimerOneMs\ to
 \WakeBandHiUsIocpOneMsTimerOneMs~$\mu$s whatever their phase. There the model misses by
 \WakeSweepIocpAbsResidualPctOneMsTimerOneMs\,\% of $\Beff$ (the matrix cell, at one phase, by
-\WakeIocpAbsResidualPctOneMsTimerOneMs\,\%), a failure we do not explain, and H1 fails for the
+\WakeIocpAbsResidualPctOneMsTimerOneMs\,\%), a failure we do not explain, and the delay-model fit
+fails for the
 \WakeTimerRequestedMs~ms timer.
 
 \emph{Detection.} In the matrix the test flagged every defective configuration and passed
@@ -375,7 +380,7 @@ Section~\ref{sec:test} was not applied, and there is no power and no false-posit
 report. An earlier shape of the same program, without \texttt{block\_in\_place}, did not
 finish on either commit, so it does not separate them.
 
-\emph{Cost of a correct wake.} H2 expected the delay of a correct loop not to depend on $B$. On
+\emph{Cost of a correct wake.} The bound-independence check expected the delay of a correct loop not to depend on $B$. On
 Windows this holds, with medians of \WakeBoundIocpFixedBlockingTimerOneMs\ to
 \WakeBoundIocpFixedTenMsTimerOneMs~$\mu$s with the \WakeTimerRequestedMs~ms timer and
 \WakeBoundIocpFixedBlockingDefaultTimer\ to \WakeBoundIocpFixedOneHundredMsDefaultTimer~$\mu$s
@@ -389,12 +394,13 @@ cores only a polling state~\cite{kernel2026cpuidle}, every median is lower: epol
 \WakeBoundQosEpollFixedBlockingQosZeroUs\ to \WakeBoundQosEpollFixedTenMsQosZeroUs~$\mu$s
 otherwise, and io\_uring in \WakeBoundQosUringFixedOneMsQosZeroUs\ and
 \WakeBoundQosUringFixedBlockingQosZeroUs\ to \WakeBoundQosUringFixedTenMsQosZeroUs~$\mu$s. The
-dependence on $B$ remains, so the exploratory H5 fails for both backends. With and without the
+dependence on $B$ remains, so the exploratory latency-request check fails for both backends. With and without the
 request, the \WakeBSmallMs~ms bound gives the fastest delivery. We did not record idle-state
 residency, and the data do not show why the shortest bound is fastest.
 
 \emph{Threats to validity.} Each system ran on one machine, and the machines differ in
-processor as well as operating system, so the contrast between Linux and Windows in H2 may come
+processor as well as operating system, so the contrast between Linux and Windows in the
+bound-independence check may come
 from either. All runs use an idle loop without I/O, where the
 defect shows. Under load, completions end the wait and hide it, so our delays bound its cost
 from above and say nothing about how often it occurs in production. Each cell ran once, so the
