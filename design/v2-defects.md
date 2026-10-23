@@ -123,8 +123,8 @@ bound, every defect is a delay and never a loss.
   stall, which measures the defect, not the fix.
 - `bench/abpair.cpp`: P producers keep K tasks each in flight on W workers; each window runs
   one arm; pairs are ordered ABBA (or by a seeded shuffle); one process holds both arms. The
-  output is one record per window with the arm, the tasks completed, the wakes issued and the
-  passes. Throughput is computed only on the laptop. On the desktop the program runs only
+  output is one record per window with the arm, the tasks completed and each worker's passes.
+  The loop does not count wakes issued: a counter would add code to the fixed loop's post path. Throughput is computed only on the laptop. On the desktop the program runs only
   `--check`, which uses count-based windows and prints counts and the pair order, never a time.
 - Engineering note (D2). If the laptop probe shows the wake costs throughput under a busy
   worker, the standard remedy is to skip the wake while the worker is known to be running (a

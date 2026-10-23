@@ -1,27 +1,36 @@
-// wakeprobe: post-to-execution delay on an otherwise idle wakeloop worker.
+// wakeprobe: post-to-execution delay on an otherwise idle wakeloop.
 //
-// One worker parks in its backend's bounded wait. The main thread posts one task at a
-// time: steady_clock just before post(), steady_clock again when the task runs, then it
-// waits for delivery, sleeps the gap and posts again.
+// The workers park in their backend's bounded wait. The main thread posts one task at a
+// time: steady_clock just before post_to(), steady_clock again when the task runs, then it
+// waits for delivery, sleeps the gap and posts again. The backend and the variant (the fixed
+// loop or one of the six defects) are chosen at run time; so is the worker count W.
 //
-// In a defect build nothing wakes the worker, so a post runs at the worker's next timeout
-// wake. The period of those wakes, B_eff, is measured first with calibration posts sent
-// B/10 after each delivery: each lands just after a wake and runs at the next, so
-// consecutive deliveries are one period apart. It is not derived from the measured posts, because
-// then the prediction below would match them by construction.
+// Four variants delay a single post: absent wake, unobserved primitive, wrong worker (from
+// W = 2) and no re-trigger (every post after the worker's first wake). Nothing wakes the
+// worker for such a post, so it runs at the worker's next timeout wake. The period of those
+// wakes, B_eff, is measured first with calibration posts sent B/10 after each delivery: each
+// lands just after a wake and runs at the next, so consecutive deliveries are one period
+// apart. It is not derived from the measured posts, because then the prediction below would
+// match them by construction. Lazy-wake race and undrained edge do not delay a single post;
+// they run the plain protocol, and what they show is a measured property.
 //
-// Each post records phase = its post time minus the previous delivery (the worker's last
-// wake, as it re-parks right after running the task), and in a defect build
+// Each post records phase = its post time minus the last wake of the worker it went to (that
+// worker's previous delivery; for wrong worker also the latest post to the worker before it,
+// whose misdirected wake restarted this worker's wait), and for a delaying variant
 // predicted = B_eff - (phase mod B_eff) and residual = delay - predicted.
 //
-// The gap is fixed (--gap-us), a target phase (--phase-frac), or drawn afresh before each
-// post from a seeded uniform distribution over a range of multiples of B (--gap-frac-range),
-// so that the phases of successive posts are spread over the wake period.
+// With W > 1 the probe and the calibration posts go to worker 0, so that B_eff is one
+// worker's period; the warmup and measured posts go round robin over the workers.
+//
+// The gap is fixed (--gap-us), a target phase (--phase-frac, W = 1 only), or drawn afresh
+// before each post from a seeded uniform distribution over a range of multiples of B
+// (--gap-frac-range), so that the phases of successive posts are spread over the wake period.
 //
 // Output: one JSON object per post, then one summary object (also printed to stdout).
 
-#include "wakeloop/loop.hpp"
+#include "wakeloop/variants.hpp"
 
+#include "bench_common.hpp"
 #include "probe_platform.hpp"
 
 #include <algorithm>
@@ -71,17 +80,17 @@ namespace
 	// Timeout used when the bound is 0 (blocking).
 	constexpr std::int64_t kUnboundedTimeoutUs = 5'000'000;
 
-#if defined(__linux__)
-	constexpr const char* kBackends = "epoll|io_uring";
-#elif defined(_WIN32)
-	constexpr const char* kBackends = "iocp";
-#else
-	constexpr const char* kBackends = "";
-#endif
+	using benchutil::json_escape;
+
+	// The largest worker count the programs accept; the wake tests stop at the same number.
+	constexpr unsigned kMaxWorkers = 64;
 
 	struct Options
 	{
 		std::string backend;
+		std::string variant = "none";
+		wakeloop::Defect defect = wakeloop::Defect::none;  // the parsed variant
+		unsigned workers = 1;
 		std::int64_t wait_us = -1;
 		std::int64_t gap_us = 0;
 		int posts = 51;
@@ -126,6 +135,7 @@ namespace
 	{
 		int index = 0;
 		Kind kind = Kind::Measured;
+		unsigned worker = 0;  // the worker the post went to
 		std::int64_t post_ns = 0;  // since the run epoch
 		std::optional<std::int64_t> exec_ns;
 		bool timed_out = false;
@@ -168,28 +178,52 @@ namespace
 		int pm_qos_errno = 0;
 		long long pm_qos_readback = -1;
 		long long run_uid = -1;
-		wakeloop::Defect defect = wakeloop::Defect::none;  // this backend's seeded form
+		wakeloop::Defect defect = wakeloop::Defect::none;
+		bool delaying = false;  // the variant delays a single post (delays_single_posts)
 		std::string wait_method;
-		std::uint64_t loop_passes = 0;
+		std::uint64_t loop_passes = 0;  // wait returns, summed over the workers
+		std::vector<std::uint64_t> worker_passes;
 		std::string error;
 	};
+
+	/// True when a post to a parked worker is not woken, so it runs at the worker's next
+	/// timeout wake. No re-trigger counts from each worker's second post: its one-shot
+	/// registration still serves the first. Lazy-wake race and undrained edge leave single
+	/// posts alone; that is a measured property, not an error.
+	constexpr bool delays_single_posts(wakeloop::Defect d, unsigned workers) noexcept
+	{
+		switch (d)
+		{
+			case wakeloop::Defect::absent_wake:
+			case wakeloop::Defect::unobserved_primitive:
+			case wakeloop::Defect::no_retrigger: return true;
+			case wakeloop::Defect::wrong_worker: return workers >= 2;
+			case wakeloop::Defect::none:
+			case wakeloop::Defect::lazy_wake_race:
+			case wakeloop::Defect::undrained_edge: return false;
+		}
+		return false;
+	}
 
 	[[noreturn]] void usage(const std::string& why)
 	{
 		std::cerr << "wakeprobe: " << why << "\n"
-		          << "usage: wakeprobe --backend " << kBackends << " --wait-us N --gap-us G --out FILE\n"
+		          << "usage: wakeprobe --backend " << benchutil::backend_list() << " --wait-us N --gap-us G --out FILE\n"
+		          << "       [--variant " << benchutil::variant_list() << "] (default none)\n"
+		          << "       [--workers W] (1 to " << kMaxWorkers << ", default 1; wrong_worker needs 2)\n"
 		          << "       [--posts N] [--warmup K] [--calibrate C] [--label TEXT] [--design NAME]\n"
 		          << "       --wait-us is the bound B in us; 0 blocks\n"
 		          << "       [--timerslack-ns N]   Linux: set before any thread starts; 0 = leave default (default 1)\n"
 		          << "       [--timer-period-ms N] Windows: timeBeginPeriod(N); 0 = leave default (default 0)\n"
-		          << "       [--phase-frac F]      instead of --gap-us: post F x B_eff after each delivery (defect)\n"
+		          << "       [--phase-frac F]      instead of --gap-us: post F x B_eff after each delivery (a variant that\n"
+		          << "                             delays single posts, W = 1)\n"
 		          << "       [--gap-frac-range LO:HI] instead of --gap-us: each gap drawn uniformly from\n"
 		          << "                             [LO x B, HI x B] (needs B > 0); [--gap-seed N] seeds it (default 0)\n"
 		          << "       [--pm-qos-us N]       Linux, needs root: hold a CPU latency request of N us for the run;\n"
 		          << "                             under sudo the run then drops back to the invoking user\n"
 		          << "  --posts measured posts (default 51); --warmup posts before them (default 5);\n"
-		          << "  --calibrate posts, B/10 after each delivery, that measure B_eff in a defect build\n"
-		          << "              (default 11, 0 = none)\n";
+		          << "  --calibrate posts to worker 0, B/10 after each delivery, that measure B_eff for a variant that\n"
+		          << "              delays single posts (default 11, 0 = none)\n";
 		std::exit(2);
 	}
 
@@ -219,19 +253,6 @@ namespace
 		return v;
 	}
 
-	bool known_backend(std::string_view name)
-	{
-		std::string_view all = kBackends;
-		while (!all.empty())
-		{
-			const auto bar = all.find('|');
-			if (all.substr(0, bar) == name) return true;
-			if (bar == std::string_view::npos) break;
-			all.remove_prefix(bar + 1);
-		}
-		return false;
-	}
-
 	Options parse_args(int argc, char** argv)
 	{
 		Options o;
@@ -243,6 +264,8 @@ namespace
 			if (i + 1 >= argc) usage("missing value for " + std::string(flag));
 			const std::string_view value = argv[++i];
 			if (flag == "--backend") o.backend = value;
+			else if (flag == "--variant") o.variant = value;
+			else if (flag == "--workers") o.workers = parse_int<unsigned>(flag, value);
 			else if (flag == "--wait-us") { o.wait_us = parse_int<std::int64_t>(flag, value); have_wait = true; }
 			else if (flag == "--gap-us") { o.gap_us = parse_int<std::int64_t>(flag, value); have_gap = true; }
 			else if (flag == "--posts") o.posts = parse_int<int>(flag, value);
@@ -283,13 +306,38 @@ namespace
 		{
 			usage("give exactly one of --gap-us, --phase-frac and --gap-frac-range");
 		}
-		if (!known_backend(o.backend)) usage("--backend must be one of " + std::string(kBackends));
+		const auto defect = wakeloop::parse_defect(o.variant);
+		if (!defect) usage("--variant must be one of " + benchutil::variant_list());
+		o.defect = *defect;
+		if (!wakeloop::known_backend(o.backend)) usage("--backend must be one of " + benchutil::backend_list());
+		if (!wakeloop::has_site(o.backend, o.defect))
+		{
+			usage("the variant " + o.variant + " has no site on the " + o.backend + " backend");
+		}
+		if (o.workers < 1 || o.workers > kMaxWorkers)
+		{
+			usage("--workers must be a whole number from 1 to " + std::to_string(kMaxWorkers));
+		}
+		if (o.workers < wakeloop::min_workers(o.defect))
+		{
+			usage("the variant " + o.variant + " needs --workers >= " + std::to_string(wakeloop::min_workers(o.defect)));
+		}
 		if (!have_wait || o.out.empty()) usage("--backend, --wait-us and --out are required");
 		if (o.wait_us < 0) usage("--wait-us must be >= 0 (0 blocks)");
 		if (o.random_gap() && o.wait_us <= 0) usage("--gap-frac-range needs a bound (--wait-us > 0)");
 		if (o.posts < 1 || o.warmup < 0 || o.calibrate < 0 || o.gap_us < 0 || o.timerslack_ns < 0)
 		{
 			usage("need posts >= 1 and warmup, calibrate, gap, timerslack >= 0");
+		}
+		if (o.phase_frac > 0 && o.workers > 1)
+		{
+			usage("--phase-frac holds a phase against one worker's wake schedule; with --workers > 1 use --gap-us or --gap-frac-range");
+		}
+		if (o.defect == wakeloop::Defect::no_retrigger && o.workers > 1 && o.warmup < static_cast<int>(o.workers))
+		{
+			// Each worker's first post uses its one working wake and is fast; the warmup spends it.
+			usage("no_retrigger with --workers > 1 needs --warmup >= --workers, so that every worker's first wake is spent "
+			      "before the measured posts");
 		}
 		return o;
 	}
@@ -319,24 +367,25 @@ namespace
 		std::atomic<long long>* slack_out = nullptr;  // the probe post reads the worker's timer slack
 	};
 
-	// Runs the loop on its own thread; stops and joins it on scope exit, so an exception in the
-	// measurement cannot reach std::thread's destructor and lose the records collected so far.
+	// Runs worker w of the loop on a thread of its own, for every w; stops and joins them on scope
+	// exit, so an exception in the measurement cannot reach std::thread's destructor and lose the
+	// records collected so far.
 	template <class Loop>
 	class LoopRunner
 	{
 	public:
-		explicit LoopRunner(Loop& loop)
-			: loop_(loop), thread_([this] {
-				  try
-				  {
-					  loop_.run();
-				  }
-				  catch (...)
-				  {
-					  error_ = std::current_exception();
-				  }
-			  })
+		explicit LoopRunner(Loop& loop) : loop_(loop), errors_(loop.workers())
 		{
+			threads_.reserve(loop.workers());
+			try
+			{
+				for (unsigned w = 0; w < loop.workers(); ++w) threads_.emplace_back([this, w] { work(w); });
+			}
+			catch (...)
+			{
+				stop_and_join();
+				throw;
+			}
 		}
 		~LoopRunner() { stop_and_join(); }
 		LoopRunner(const LoopRunner&) = delete;
@@ -344,23 +393,44 @@ namespace
 
 		void stop_and_join()
 		{
-			if (!thread_.joinable()) return;
 			loop_.stop();
-			thread_.join();
+			for (auto& t : threads_)
+			{
+				if (t.joinable()) t.join();
+			}
 		}
 		// Valid after stop_and_join().
-		bool failed() const { return error_ != nullptr; }
+		bool failed() const
+		{
+			for (const auto& e : errors_)
+			{
+				if (e != nullptr) return true;
+			}
+			return false;
+		}
 
 	private:
+		void work(unsigned w)
+		{
+			try
+			{
+				loop_.run(w);
+			}
+			catch (...)
+			{
+				errors_[w] = std::current_exception();  // each worker writes its own element
+			}
+		}
+
 		Loop& loop_;
-		std::exception_ptr error_;
-		std::thread thread_;
+		std::vector<std::exception_ptr> errors_;
+		std::vector<std::thread> threads_;
 	};
 
-	// One post: returns when the task ran or the hard limit passed.
+	// One post to `worker`: returns when the task ran or the hard limit passed.
 	template <class Loop>
-	Record measure_one(Loop& loop, std::deque<PostNode>& nodes, Kind kind, int index, Clock::time_point epoch,
-	                   std::chrono::microseconds timeout, std::atomic<long long>* slack_out = nullptr)
+	Record measure_one(Loop& loop, std::deque<PostNode>& nodes, Kind kind, int index, unsigned worker,
+	                   Clock::time_point epoch, std::chrono::microseconds timeout, std::atomic<long long>* slack_out = nullptr)
 	{
 		PostNode& node = nodes.emplace_back();
 		node.slack_out = slack_out;
@@ -369,8 +439,9 @@ namespace
 		Record r;
 		r.index = index;
 		r.kind = kind;
+		r.worker = worker;
 		const auto posted = Clock::now();
-		loop.post(node);
+		loop.post_to(worker, node);
 		r.post_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(posted - epoch).count();
 
 		if (ran.wait_until(posted + timeout) != std::future_status::ready)
@@ -417,18 +488,35 @@ namespace
 		return c;
 	}
 
-	// Phase against the previous delivery; prediction and residual where B_eff is known.
-	void annotate(std::vector<Record>& records, const std::optional<std::int64_t>& b_eff)
+	// Phase against the last wake of the post's worker: its previous delivery, which is the
+	// previous record at W = 1. With a misdirected wake (wrong worker) the post to the worker
+	// before it also woke this worker and restarted its wait, so that post's time counts when
+	// it is later. Prediction and residual where B_eff is known.
+	void annotate(std::vector<Record>& records, const std::optional<std::int64_t>& b_eff, wakeloop::Defect defect,
+	              unsigned workers)
 	{
-		for (std::size_t i = 1; i < records.size(); ++i)
+		std::vector<std::optional<std::int64_t>> last_exec(workers);  // per worker, ns since the epoch
+		std::vector<std::optional<std::int64_t>> last_post(workers);
+		const bool misdirected = defect == wakeloop::Defect::wrong_worker && workers >= 2;
+		for (Record& r : records)
 		{
-			Record& r = records[i];
-			const Record& prev = records[i - 1];
-			if (!prev.exec_ns) continue;
-			r.phase_ns = r.post_ns - *prev.exec_ns;
-			if (!b_eff || *b_eff <= 0 || *r.phase_ns < 0) continue;
-			r.predicted_ns = *b_eff - (*r.phase_ns % *b_eff);
-			if (const auto d = r.delay_ns()) r.residual_ns = *d - *r.predicted_ns;
+			std::optional<std::int64_t> anchor = last_exec[r.worker];
+			if (misdirected)
+			{
+				const auto& woken = last_post[(r.worker + workers - 1) % workers];
+				if (woken && (!anchor || *woken > *anchor)) anchor = woken;
+			}
+			if (anchor)
+			{
+				r.phase_ns = r.post_ns - *anchor;
+				if (b_eff && *b_eff > 0 && *r.phase_ns >= 0)
+				{
+					r.predicted_ns = *b_eff - (*r.phase_ns % *b_eff);
+					if (const auto d = r.delay_ns()) r.residual_ns = *d - *r.predicted_ns;
+				}
+			}
+			last_post[r.worker] = r.post_ns;
+			if (r.exec_ns) last_exec[r.worker] = *r.exec_ns;
 		}
 	}
 
@@ -458,10 +546,12 @@ namespace
 		std::mt19937_64 rng_;
 	};
 
-	// The post sequence: probe, calibration (defect only), warmup, measured. Records are
-	// appended as they are taken, so a throw leaves everything before it in place.
+	// The post sequence: probe, calibration (a delaying variant only), warmup, measured. The probe
+	// and the calibration posts go to worker 0; warmup and measured posts go round robin over
+	// the workers. Records are appended as they are taken, so a throw leaves everything before
+	// it in place.
 	template <class Loop>
-	void run_protocol(Loop& loop, std::deque<PostNode>& nodes, const Options& opt, RunInfo& info, bool defect,
+	void run_protocol(Loop& loop, std::deque<PostNode>& nodes, const Options& opt, RunInfo& info, bool delaying,
 	                  wakeprobe::GapSleeper& gap, std::vector<Record>& records)
 	{
 		std::this_thread::sleep_for(kSettle);
@@ -469,17 +559,17 @@ namespace
 		int index = 0;
 
 		// The probe reads the worker's timer slack, which shows whether it was inherited.
-		records.push_back(measure_one(loop, nodes, Kind::Probe, index++, epoch, timeout_for(opt.wait_us), &info.slack_worker));
+		records.push_back(measure_one(loop, nodes, Kind::Probe, index++, 0, epoch, timeout_for(opt.wait_us), &info.slack_worker));
 		if (!records.back().exec_ns) return;
 
-		if (defect)
+		if (delaying)
 		{
 			for (int k = 0; k < opt.calibrate; ++k)
 			{
 				// B/10 first, so the worker has re-parked: a post that lands while it is still
 				// draining would run in the same pass. Still far inside one period.
 				if (opt.wait_us > 0) gap.sleep(std::chrono::microseconds(opt.wait_us / 10));
-				records.push_back(measure_one(loop, nodes, Kind::Calib, index++, epoch, timeout_for(opt.wait_us)));
+				records.push_back(measure_one(loop, nodes, Kind::Calib, index++, 0, epoch, timeout_for(opt.wait_us)));
 				if (!records.back().exec_ns) return;
 			}
 			info.calib = calibrate(records, opt.wait_us);
@@ -507,7 +597,9 @@ namespace
 		for (int i = 0; i < total; ++i)
 		{
 			const Kind kind = i < opt.warmup ? Kind::Warmup : Kind::Measured;
-			records.push_back(measure_one(loop, nodes, kind, index++, epoch, std::chrono::microseconds(info.timeout_us)));
+			const unsigned worker = static_cast<unsigned>(i) % opt.workers;
+			records.push_back(
+				measure_one(loop, nodes, kind, index++, worker, epoch, std::chrono::microseconds(info.timeout_us)));
 			records.back().gap_drawn_ns = drawn_ns;
 			if (!records.back().exec_ns) return;
 			if (i + 1 == total) break;
@@ -538,34 +630,6 @@ namespace
 		}
 	}
 
-	std::string json_escape(std::string_view s)
-	{
-		std::string out;
-		for (const char c : s)
-		{
-			switch (c)
-			{
-				case '"': out += "\\\""; break;
-				case '\\': out += "\\\\"; break;
-				case '\n': out += "\\n"; break;
-				case '\r': out += "\\r"; break;
-				case '\t': out += "\\t"; break;
-				default:
-					if (static_cast<unsigned char>(c) < 0x20)
-					{
-						char buf[8];
-						std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned>(c));
-						out += buf;
-					}
-					else
-					{
-						out += c;
-					}
-			}
-		}
-		return out;
-	}
-
 	std::string num(const std::optional<std::int64_t>& v) { return v ? std::to_string(*v) : "null"; }
 
 	std::string ratio(double v)
@@ -591,7 +655,8 @@ namespace
 		std::ostringstream s;
 		s << "{\"design\":\"" << json_escape(o.design) << "\",\"label\":\"" << json_escape(o.label)
 		  << "\",\"backend\":\"" << backend << "\",\"wait_us\":" << o.wait_us << ",\"gap_us\":" << gap_json(o)
-		  << ",\"phase_frac\":" << frac_json(o) << ",\"index\":" << r.index << ",\"kind\":\"" << kind_name(r.kind)
+		  << ",\"phase_frac\":" << frac_json(o) << ",\"index\":" << r.index << ",\"worker\":" << r.worker
+		  << ",\"kind\":\"" << kind_name(r.kind)
 		  << "\",\"warmup\":" << (r.kind != Kind::Measured ? "true" : "false") << ",\"delay_ns\":" << num(r.delay_ns())
 		  << ",\"post_ns\":" << r.post_ns << ",\"exec_ns\":" << num(r.exec_ns)
 		  << ",\"timed_out\":" << (r.timed_out ? "true" : "false") << ",\"phase_ns\":" << num(r.phase_ns)
@@ -609,9 +674,10 @@ namespace
 		int timeouts = 0;
 		int lost = 0;
 		int jumps = 0;  // |residual| > B_eff / 2
+		int over_half_b = 0;  // delay > B / 2, the bound's own half (0 when B = 0)
 	};
 
-	Stats measured_stats(const std::vector<Record>& records, const std::optional<std::int64_t>& b_eff)
+	Stats measured_stats(const std::vector<Record>& records, const std::optional<std::int64_t>& b_eff, std::int64_t bound_us)
 	{
 		Stats s;
 		for (const auto& r : records)
@@ -625,6 +691,7 @@ namespace
 				continue;
 			}
 			s.delays.push_back(*d);
+			if (bound_us > 0 && 2 * *d > bound_us * 1000) ++s.over_half_b;
 			if (r.residual_ns)
 			{
 				s.residuals.push_back(*r.residual_ns);
@@ -642,7 +709,7 @@ namespace
 	                         const wakeprobe::TimerPeriod& period)
 	{
 		const auto& b_eff = info.calib.b_eff_ns;
-		const Stats st = measured_stats(records, b_eff);
+		const Stats st = measured_stats(records, b_eff, o.wait_us);
 		auto pct = [](const std::vector<std::int64_t>& v, int p) {
 			return v.empty() ? std::string("null") : std::to_string(nearest_rank(v, p));
 		};
@@ -675,7 +742,8 @@ namespace
 		{
 			s << ",\"median_residual_over_beff\":null,\"median_abs_residual_over_beff\":null";
 		}
-		s << ",\"residual_jumps\":" << st.jumps << ",\"percentile_method\":\"nearest-rank\"";
+		s << ",\"residual_jumps\":" << st.jumps << ",\"count_over_half_b\":" << st.over_half_b
+		  << ",\"percentile_method\":\"nearest-rank\"";
 
 		if (wakeprobe::kHaveTimerSlack)
 		{
@@ -718,8 +786,12 @@ namespace
 		  << ",\"wait_failures\":" << info.gap_wait_failures << "}"
 		  << ",\"defect_mode\":\"" << wakeloop::defect_name(info.defect) << "\""
 		  << ",\"defect_active\":" << (info.defect != wakeloop::Defect::none ? "true" : "false")
+		  << ",\"variant\":\"" << wakeloop::defect_name(info.defect) << "\",\"workers\":" << o.workers
+		  << ",\"delays_single_posts\":" << (info.delaying ? "true" : "false")
 		  << ",\"wait_method\":\"" << json_escape(info.wait_method) << "\""
-		  << ",\"loop_passes\":" << info.loop_passes << ",\"compiler\":\""
+		  << ",\"loop_passes\":" << info.loop_passes << ",\"worker_passes\":[";
+		for (std::size_t i = 0; i < info.worker_passes.size(); ++i) s << (i ? "," : "") << info.worker_passes[i];
+		s << "],\"compiler\":\""
 		  << json_escape(wakeprobe::compiler_name()) << "\",\"build_type\":\"" << WAKEPROBE_BUILD_TYPE
 		  << "\",\"bench_commit\":\"" << WAKEPROBE_BENCH_COMMIT << "\",\"bench_dirty\":"
 		  << (WAKEPROBE_BENCH_DIRTY ? "true" : "false") << ",\"bench_code_commit\":\"" << WAKEPROBE_BENCH_CODE_COMMIT << "\""
@@ -736,7 +808,7 @@ namespace
 		std::unique_ptr<Loop> loop;
 		try
 		{
-			loop = std::make_unique<Loop>(opt.wait_us);
+			loop = std::make_unique<Loop>(wakeloop::Config{.wait_us = opt.wait_us, .workers = opt.workers, .poll = false});
 		}
 		catch (const std::exception& e)
 		{
@@ -745,15 +817,16 @@ namespace
 		}
 		info.backend = Loop::name;
 		info.defect = Loop::defect;
-		const bool defect = Loop::defect != wakeloop::Defect::none;
-		if (opt.wait_us == 0 && defect)
+		const bool delaying = delays_single_posts(Loop::defect, opt.workers);
+		info.delaying = delaying;
+		if (opt.wait_us == 0 && delaying)
 		{
-			std::cerr << "wakeprobe: a defect build with a blocking wait never delivers a post\n";
+			std::cerr << "wakeprobe: a variant that delays single posts, with a blocking wait, never delivers a post\n";
 			return 2;
 		}
-		if (opt.phase_frac > 0 && (!defect || opt.calibrate < 1))
+		if (opt.phase_frac > 0 && (!delaying || opt.calibrate < 1))
 		{
-			std::cerr << "wakeprobe: --phase-frac needs a defect build and calibration posts\n";
+			std::cerr << "wakeprobe: --phase-frac needs a variant that delays single posts and calibration posts\n";
 			return 2;
 		}
 
@@ -771,7 +844,7 @@ namespace
 			LoopRunner<Loop> runner(*loop);
 			try
 			{
-				run_protocol(*loop, nodes, opt, info, defect, gap, records);
+				run_protocol(*loop, nodes, opt, info, delaying, gap, records);
 			}
 			catch (const std::exception& e)
 			{
@@ -785,13 +858,17 @@ namespace
 			if (runner.failed()) info.error += (info.error.empty() ? "" : "; ") + std::string("the event loop threw");
 		}
 		info.wait_method = loop->wait_method();
-		info.loop_passes = loop->passes();
+		for (unsigned w = 0; w < opt.workers; ++w)
+		{
+			info.worker_passes.push_back(loop->passes(w));
+			info.loop_passes += info.worker_passes.back();
+		}
 		info.timer_res_end = wakeprobe::timer_resolution_100ns();
 		info.gap_method = gap.method();
 		info.gap_set_failures = gap.set_failures();
 		info.gap_wait_failures = gap.wait_failures();
 
-		annotate(records, info.calib.b_eff_ns);
+		annotate(records, info.calib.b_eff_ns, Loop::defect, opt.workers);
 		for (const auto& r : records) out << post_line(opt, info.backend, r) << "\n";
 		const std::string summary = summary_line(opt, info, records, period);
 		out << summary << "\n";
@@ -839,7 +916,7 @@ int main(int argc, char** argv)
 	}
 
 	// Before any thread exists: a thread inherits the timer slack of the thread creating it,
-	// and the loop's worker is the runner thread this thread starts later.
+	// and the loop's workers are the runner threads this thread starts later.
 	if (wakeprobe::kHaveTimerSlack && opt.timerslack_ns > 0)
 	{
 		info.slack_set_rc = wakeprobe::set_timer_slack(static_cast<unsigned long>(opt.timerslack_ns));
@@ -848,11 +925,13 @@ int main(int argc, char** argv)
 	const wakeprobe::TimerPeriod period(opt.timer_period_ms);
 	info.timer_res_start = wakeprobe::timer_resolution_100ns();
 
-#if defined(__linux__)
-	if (opt.backend == wakeloop::EpollLoop::name) return run_with<wakeloop::EpollLoop>(opt, info, period);
-	if (opt.backend == wakeloop::UringLoop::name) return run_with<wakeloop::UringLoop>(opt, info, period);
-#elif defined(_WIN32)
-	if (opt.backend == wakeloop::IocpLoop::name) return run_with<wakeloop::IocpLoop>(opt, info, period);
-#endif
-	usage("--backend must be one of " + std::string(kBackends));
+	int rc = 3;
+	const bool dispatched = wakeloop::with_loop(opt.backend, opt.defect, [&]<class L>() { rc = run_with<L>(opt, info, period); });
+	if (!dispatched)
+	{
+		// parse_args checked the backend, the variant and the site; this is not a usage error.
+		std::cerr << "wakeprobe: no loop for backend " << opt.backend << " and variant " << opt.variant << "\n";
+		return 3;
+	}
+	return rc;
 }

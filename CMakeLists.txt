@@ -21,6 +21,13 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+# The 2026-09 scripts (bench/run_*, inputs_gate.py) chose the defect arm with this option. v2
+# selects the variant at run time, so a build that names it would measure the fixed loop.
+if(DEFINED WAKELOOP_DEFECT)
+    message(FATAL_ERROR "WAKELOOP_DEFECT is the 2026-09 build switch and v2 has none: "
+                        "every variant is in one build, selected at run time (--variant)")
+endif()
+
 set(WAKELOOP_SANITIZER "" CACHE STRING "address+undefined, thread, memory (clang, Linux); address (Windows)")
 set(WAKELOOP_MSAN_LIBCXX "$ENV{HOME}/opt/libcxx-msan-gcc" CACHE PATH "Prefix of an MSan-instrumented libc++")
 option(WAKELOOP_BENCH "Build the measurement programs" ON)

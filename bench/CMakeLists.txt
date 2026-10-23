@@ -1,4 +1,6 @@
-# wakeprobe: post-to-execution delay on an idle wakeloop worker. Built from the root project.
+# The measurement programs, built from the root project:
+#   wakeprobe  post-to-execution delay on an idle wakeloop (single-post latency protocol)
+#   abpair     the paired A/B throughput harness of H4 (design/v2-defects.md, section 6)
 
 # Provenance, captured at configure time; the run scripts configure every time they build.
 find_package(Git REQUIRED)
@@ -23,9 +25,9 @@ execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${PROJECT_SOURCE_DIR}" log -1 --
 if(NOT BENCH_CODE_COMMIT)
     set(BENCH_CODE_COMMIT "unknown")
 endif()
-message(STATUS "wakeprobe: repo ${BENCH_COMMIT} dirty=${BENCH_DIRTY}, code ${BENCH_CODE_COMMIT}")
+message(STATUS "bench: repo ${BENCH_COMMIT} dirty=${BENCH_DIRTY}, code ${BENCH_CODE_COMMIT}")
 
-add_executable(wakeprobe wakeprobe.cpp probe_platform.hpp)
+add_executable(wakeprobe wakeprobe.cpp bench_common.hpp probe_platform.hpp)
 target_link_libraries(wakeprobe PRIVATE wakeloop)
 if(WIN32)
     target_link_libraries(wakeprobe PRIVATE winmm)  # timeBeginPeriod
@@ -36,3 +38,19 @@ target_compile_definitions(wakeprobe PRIVATE
     WAKEPROBE_BENCH_CODE_COMMIT="${BENCH_CODE_COMMIT}"
     WAKEPROBE_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 wakeloop_warnings(wakeprobe)
+
+add_executable(abpair abpair.cpp bench_common.hpp probe_platform.hpp)
+target_link_libraries(abpair PRIVATE wakeloop)
+target_compile_definitions(abpair PRIVATE
+    ABPAIR_BENCH_COMMIT="${BENCH_COMMIT}"
+    ABPAIR_BENCH_DIRTY=${BENCH_DIRTY}
+    ABPAIR_BENCH_CODE_COMMIT="${BENCH_CODE_COMMIT}"
+    ABPAIR_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
+wakeloop_warnings(abpair)
+
+# abpair's self-test: count-based windows, no clock reading and no time in the output. The only
+# run of abpair on a development machine. Names: abpair_check.<backend>.
+foreach(_backend IN LISTS WAKELOOP_BACKENDS)
+    add_test(NAME abpair_check.${_backend} COMMAND abpair --backend ${_backend} --check)
+    set_tests_properties(abpair_check.${_backend} PROPERTIES TIMEOUT 120 LABELS "${_backend};abpair")
+endforeach()
