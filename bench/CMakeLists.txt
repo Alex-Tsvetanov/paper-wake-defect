@@ -52,5 +52,6 @@ wakeloop_warnings(abpair)
 # run of abpair on a development machine. Names: abpair_check.<backend>.
 foreach(_backend IN LISTS WAKELOOP_BACKENDS)
     add_test(NAME abpair_check.${_backend} COMMAND abpair --backend ${_backend} --check)
-    set_tests_properties(abpair_check.${_backend} PROPERTIES TIMEOUT 120 LABELS "${_backend};abpair")
+    # Serial: its poll-mode workers spin, which would slow the wake tests' threads beside it.
+    set_tests_properties(abpair_check.${_backend} PROPERTIES TIMEOUT 120 LABELS "${_backend};abpair" RUN_SERIAL TRUE)
 endforeach()

@@ -258,6 +258,12 @@ namespace wakeloop
 	void UringBackend<D>::after_wait()
 	{
 		reap();
+	}
+
+	/// After the core's stop check, as in the 2026-09 loop: a stopping worker submits nothing.
+	template <Defect D>
+	void UringBackend<D>::before_drain()
+	{
 		if (!rearm_) return;
 		// The kernel ended the wake poll. Re-armed before the core drains, as at start.
 		rearm_ = false;

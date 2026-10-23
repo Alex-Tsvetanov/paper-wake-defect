@@ -17,9 +17,13 @@ namespace wakeloop::detail
 
 	std::int64_t checked_bound(std::int64_t wait_us)
 	{
-		if (wait_us < 0)
+		// One day. Far above any bound the study uses, and far below the values at which the
+		// backends' conversions (rounding to milliseconds, wait_for's nanoseconds) overflow.
+		constexpr std::int64_t kMaxBoundUs = 86'400'000'000;
+		if (wait_us < 0 || wait_us > kMaxBoundUs)
 		{
-			throw std::invalid_argument("wakeloop: the wait bound must be >= 0 us, got " + std::to_string(wait_us));
+			throw std::invalid_argument("wakeloop: the wait bound must be from 0 to " + std::to_string(kMaxBoundUs) +
+			                            " us, got " + std::to_string(wait_us));
 		}
 		return wait_us;
 	}

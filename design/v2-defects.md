@@ -13,7 +13,9 @@ it. Section numbers "v1 2.3" and so on refer to that note.
   `epoll_pwait2`; io_uring on raw system calls with a multishot poll on the wake eventfd,
   single issuer and deferred task run; IOCP with a wake packet; a stop path of its own in each.
 - The fixed loop with one worker issues the same system calls in the same order as v1's fixed
-  arm. Two v2 rows equal the two v1 defects: **absent wake** on epoll and IOCP is v1's
+  arm (io_uring re-arms its wake poll after the stop check, as v1 did). One behaviour differs:
+  the core checks the stop flag after a backend's start as well as before it, so on epoll and
+  IOCP a stop that lands between the two checks skips the first drain, which v1 would have run. Two v2 rows equal the two v1 defects: **absent wake** on epoll and IOCP is v1's
   "omit", and **unobserved primitive** on io_uring is v1's "misdirect" (eventfd written, wake
   poll never armed).
 
@@ -22,8 +24,12 @@ it. Section numbers "v1 2.3" and so on refer to that note.
 - `Loop<Backend, D, Hooks>` (`loop/include/wakeloop/loop.hpp`) holds the core: W workers, each
   with its own task stack and its own backend object (wake object and wait). The backend is a
   class template on the defect too, defined in its own source file and explicitly instantiated.
-- Every defect is a compile-time deviation at named sites (`if constexpr`). The fixed
-  instantiation holds no defect code, so an A/B between variants compares exactly the sites.
+- Every defect is a compile-time deviation at named sites (`if constexpr`). No defect code
+  path runs in the fixed instantiation, so an A/B between variants compares exactly the sites.
+  The fixed instantiation still carries a few defect-only members that it never uses: the
+  spare descriptor or port handle (left empty), the condition variable backend's spare mutex,
+  condition variable and predicate, and the undrained-edge leftover pointer. Both arms of an
+  A/B carry the same members.
 - One binary instantiates every variant on every backend of the platform. `variants.hpp`
   dispatches by backend name and variant name at run time. That removes the build-layout noise
   of separate builds (memory: iteration grids need same-arm builds).
@@ -124,7 +130,10 @@ bound, every defect is a delay and never a loss.
 - `bench/abpair.cpp`: P producers keep K tasks each in flight on W workers; each window runs
   one arm; pairs are ordered ABBA (or by a seeded shuffle); one process holds both arms. The
   output is one record per window with the arm, the tasks completed and each worker's passes.
-  The loop does not count wakes issued: a counter would add code to the fixed loop's post path. Throughput is computed only on the laptop. On the desktop the program runs only
+  The loop does not count wakes issued: a counter would add code to the fixed loop's post path.
+  `--check` leaves the pass counts out too: in poll mode they grow with elapsed time.
+- Unobserved primitive on IOCP is a poor abpair arm: its wake packets go to a port that no
+  one dequeues, so in a long timed window that port's queue grows without bound. Throughput is computed only on the laptop. On the desktop the program runs only
   `--check`, which uses count-based windows and prints counts and the pair order, never a time.
 - Engineering note (D2). If the laptop probe shows the wake costs throughput under a busy
   worker, the standard remedy is to skip the wake while the worker is known to be running (a

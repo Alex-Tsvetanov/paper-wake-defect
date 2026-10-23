@@ -805,6 +805,7 @@ namespace
 	template <class Loop>
 	int run_with(const Options& opt, RunInfo& info, const wakeprobe::TimerPeriod& period)
 	{
+		std::deque<PostNode> nodes;  // outlives the loop, which may still hold some of them
 		std::unique_ptr<Loop> loop;
 		try
 		{
@@ -838,7 +839,6 @@ namespace
 		}
 
 		std::vector<Record> records;
-		std::deque<PostNode> nodes;  // outlives the worker: declared before the runner
 		wakeprobe::GapSleeper gap;
 		{
 			LoopRunner<Loop> runner(*loop);

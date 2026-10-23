@@ -115,6 +115,7 @@ namespace wakeloop
 				w.passes.fetch_add(1, std::memory_order_relaxed);
 				w.backend.after_wait();
 				if (stop_.load(std::memory_order_acquire)) return;
+				w.backend.before_drain();
 				drain(w);
 			}
 		}

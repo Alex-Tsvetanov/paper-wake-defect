@@ -31,7 +31,7 @@ namespace wakeloop::detail
 #endif
 	}
 
-	/// Checks the bound: B >= 0 microseconds. Throws std::invalid_argument otherwise.
+	/// Checks the bound: 0 <= B <= one day, in microseconds. Throws std::invalid_argument otherwise.
 	std::int64_t checked_bound(std::int64_t wait_us);
 
 }  // namespace wakeloop::detail

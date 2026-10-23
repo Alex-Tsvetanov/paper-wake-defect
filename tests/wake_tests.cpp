@@ -99,14 +99,14 @@ namespace
 	template <class Loop>
 	struct Poster : Task
 	{
-		Poster(Loop& l, Task& t, Latch& lt) : loop(&l), then(&t), latch(&lt) { run = &Poster::on_run; }
+		Poster(Task& t, Latch& lt) : then(&t), latch(&lt) { run = &Poster::on_run; }
 		static void on_run(Task& t) noexcept
 		{
 			auto& p = static_cast<Poster&>(t);
 			p.loop->post(*p.then);
 			p.latch->add();
 		}
-		Loop* loop;
+		Loop* loop = nullptr;  // set once the loop exists; the task is declared before it
 		Task* then;
 		Latch* latch;
 	};
@@ -115,9 +115,9 @@ namespace
 	template <class Loop>
 	struct Stopper : Task
 	{
-		explicit Stopper(Loop& l) : loop(&l) { run = &Stopper::on_run; }
+		Stopper() { run = &Stopper::on_run; }
 		static void on_run(Task& t) noexcept { static_cast<Stopper&>(t).loop->stop(); }
-		Loop* loop;
+		Loop* loop = nullptr;  // set once the loop exists; the task is declared before it
 	};
 
 	/// A task that holds its worker until released (at most 10 s, so a broken test still ends).
@@ -352,8 +352,9 @@ namespace
 	{
 		Latch latch;
 		Probe second(latch);
+		Poster<Loop> first(second, latch);
 		Loop loop(cfg(5000));
-		Poster<Loop> first(loop, second, latch);
+		first.loop = &loop;
 		Runner r(loop);
 		loop.post(first);
 		CHECK(latch.wait_for(2, 2s), "the self-posted task was not delivered within 2 s");
@@ -393,8 +394,9 @@ namespace
 	template <class Loop>
 	Outcome stop_from_task()
 	{
+		Stopper<Loop> s;
 		Loop loop(cfg(5000));
-		Stopper<Loop> s(loop);
+		s.loop = &loop;
 		Runner r(loop);
 		loop.post(s);
 		CHECK(r.wait_finished(2s), "run() did not return within 2 s of a task calling stop()");
@@ -490,6 +492,16 @@ namespace
 		return {};
 	}
 
+	/// A detection, unless a worker's run() threw: then the test fails, because a dead worker
+	/// would look exactly like a missing wake.
+#define DETECT_LIVE(runner, msg)                                                   \
+	do                                                                             \
+	{                                                                              \
+		const std::string worker_error_ = (runner).error();                        \
+		CHECK(worker_error_.empty(), "a worker's run() threw: " << worker_error_); \
+		DETECT(msg);                                                               \
+	} while (false)
+
 	// ------------------------------------------------------------------ wake detectors, blocking
 
 	// D1: a blocking loop delivers one post.
@@ -504,7 +516,7 @@ namespace
 		Runner r(loop);
 		CHECK(starters.settle(loop, true), "the workers did not start and settle within 5 s");
 		loop.post(p);
-		if (!latch.wait_for(1, 1s)) DETECT("a post to a parked blocking loop was not delivered within 1 s");
+		if (!latch.wait_for(1, 1s)) DETECT_LIVE(r, "a post to a parked blocking loop was not delivered within 1 s");
 		return {};
 	}
 
@@ -521,7 +533,7 @@ namespace
 		Runner r(loop);
 		CHECK(starters.settle(loop, true), "the workers did not start and settle within 5 s");
 		for (int i = 0; i < kPosts; ++i) loop.post(probes.emplace_back(latch));
-		if (!latch.wait_for(kPosts, 1s)) DETECT(latch.count() << " of " << kPosts << " back-to-back posts delivered within 1 s");
+		if (!latch.wait_for(kPosts, 1s)) DETECT_LIVE(r, latch.count() << " of " << kPosts << " back-to-back posts delivered within 1 s");
 		return {};
 	}
 
@@ -544,7 +556,7 @@ namespace
 		// No overall deadline: a slow but progressing loop is not a missing wake.
 		if (!log.latch.wait_progress(kTotal, 1s))
 		{
-			DETECT(log.latch.count() << " of " << kTotal << " posts from " << kProducers << " threads delivered; none for 1 s");
+			DETECT_LIVE(r, log.latch.count() << " of " << kTotal << " posts from " << kProducers << " threads delivered; none for 1 s");
 		}
 		return {};
 	}
@@ -556,15 +568,16 @@ namespace
 		Latch first_ran;
 		Latch second_ran;
 		Probe second(second_ran);
+		Poster<Loop> first(second, first_ran);
 		Starters starters;
 		Loop loop(cfg(0));
+		first.loop = &loop;
 		starters.post(loop);
-		Poster<Loop> first(loop, second, first_ran);
 		Runner r(loop);
 		CHECK(starters.settle(loop, true), "the workers did not start and settle within 5 s");
 		loop.post(first);
-		if (!first_ran.wait_for(1, 1s)) DETECT("the first post was not delivered within 1 s");
-		if (!second_ran.wait_for(1, 1s)) DETECT("a task posted by a task was not delivered within 1 s");
+		if (!first_ran.wait_for(1, 1s)) DETECT_LIVE(r, "the first post was not delivered within 1 s");
+		if (!second_ran.wait_for(1, 1s)) DETECT_LIVE(r, "a task posted by a task was not delivered within 1 s");
 		return {};
 	}
 
@@ -583,7 +596,7 @@ namespace
 		for (int i = 0; i < kPosts; ++i)
 		{
 			loop.post(probes.emplace_back(latch));
-			if (!latch.wait_for(i + 1, 1s)) DETECT("post " << i << " of a sequence was not delivered within 1 s");
+			if (!latch.wait_for(i + 1, 1s)) DETECT_LIVE(r, "post " << i << " of a sequence was not delivered within 1 s");
 			std::this_thread::sleep_for(2ms);
 		}
 		return {};
@@ -603,12 +616,12 @@ namespace
 		GateOpener opener{gate};
 		CHECK(starters.settle(loop, true), "the workers did not start and settle within 5 s");
 		loop.post(gate);
-		if (!gate.entered.wait_for(1, 1s)) DETECT("the gate task was not delivered within 1 s");
+		if (!gate.entered.wait_for(1, 1s)) DETECT_LIVE(r, "the gate task was not delivered within 1 s");
 		for (int i = 0; i < kBatch; ++i) loop.post(probes.emplace_back(latch));
 		gate.release.add();
 		if (!latch.wait_for(kBatch, 1s))
 		{
-			DETECT(latch.count() << " of " << kBatch << " posts made behind a running task delivered within 1 s");
+			DETECT_LIVE(r, latch.count() << " of " << kBatch << " posts made behind a running task delivered within 1 s");
 		}
 		return {};
 	}
@@ -675,7 +688,7 @@ namespace
 		if (auto why = forced_round(loop, round, 1s, failed))
 		{
 			CHECK(!failed, *why);
-			DETECT(*why << " (deadline 1 s)");
+			DETECT_LIVE(r, *why << " (deadline 1 s)");
 		}
 		return {};
 	}
@@ -709,19 +722,19 @@ namespace
 		};
 
 		// Warmup: the worker has woken once and parked again.
-		if (!post_one(0)) DETECT("the warmup post was not delivered within 5 B");
+		if (!post_one(0)) DETECT_LIVE(r, "the warmup post was not delivered within 5 B");
 		std::vector<Clock::duration> delays;
 		for (int i = 1; i <= kPosts; ++i)
 		{
 			std::this_thread::sleep_until(probes.back().ran_at + kGap);
 			const auto delivered = post_one(i);
-			if (!delivered) DETECT("post " << i << " was not delivered within 5 B");
+			if (!delivered) DETECT_LIVE(r, "post " << i << " was not delivered within 5 B");
 			delays.push_back(*delivered);
 		}
 		const auto median = median_of(delays);
 		std::printf("median delay %.3f ms over %d posts (threshold %.1f ms); %d posts over B / 2\n", ms(median), kPosts,
 		            ms(kThreshold), count_over(delays, kBound / 2));
-		if (median > kThreshold) DETECT("median delay " << ms(median) << " ms exceeds B / 5 = " << ms(kThreshold) << " ms");
+		if (median > kThreshold) DETECT_LIVE(r, "median delay " << ms(median) << " ms exceeds B / 5 = " << ms(kThreshold) << " ms");
 		return {};
 	}
 
@@ -752,13 +765,13 @@ namespace
 			auto& round = rounds.emplace_back();
 			GateOpener opener{round.gate};
 			loop.post(round.gate);
-			if (!round.gate.entered.wait_for(1, 5 * kBound)) DETECT("round " << k << ": the gate task was not delivered within 5 B");
+			if (!round.gate.entered.wait_for(1, 5 * kBound)) DETECT_LIVE(r, "round " << k << ": the gate task was not delivered within 5 B");
 			for (int i = 0; i < kBatch; ++i) loop.post(round.probes.emplace_back(round.ran));
 			const auto released = Clock::now();
 			round.gate.release.add();
 			if (!round.ran.wait_for(kBatch, 5 * kBound))
 			{
-				DETECT("round " << k << ": " << round.ran.count() << " of " << kBatch << " tasks delivered within 5 B");
+				DETECT_LIVE(r, "round " << k << ": " << round.ran.count() << " of " << kBatch << " tasks delivered within 5 B");
 			}
 			Clock::time_point last{};
 			for (const auto& p : round.probes) last = std::max(last, p.ran_at);
@@ -767,7 +780,7 @@ namespace
 		const auto median = median_of(delays);
 		std::printf("median slowest-task delay %.3f ms over %d rounds of %d (threshold %.1f ms); %d rounds over B / 2\n",
 		            ms(median), kRounds, kBatch, ms(kThreshold), count_over(delays, kBound / 2));
-		if (median > kThreshold) DETECT("median delay " << ms(median) << " ms exceeds B / 5 = " << ms(kThreshold) << " ms");
+		if (median > kThreshold) DETECT_LIVE(r, "median delay " << ms(median) << " ms exceeds B / 5 = " << ms(kThreshold) << " ms");
 		return {};
 	}
 
@@ -794,7 +807,7 @@ namespace
 			if (auto why = forced_round(loop, round, 5 * kBound, failed))
 			{
 				CHECK(!failed, "round " << k << ": " << *why);
-				DETECT("round " << k << ": " << *why << " (deadline 5 B)");
+				DETECT_LIVE(r, "round " << k << ": " << *why << " (deadline 5 B)");
 			}
 			delays.push_back(round.b.ran_at - round.released_at);
 			std::this_thread::sleep_for(kBound / 10);
@@ -802,7 +815,7 @@ namespace
 		const auto median = median_of(delays);
 		std::printf("median delay %.3f ms over %d forced rounds (threshold %.1f ms); %d rounds over B / 2\n", ms(median), kRounds,
 		            ms(kThreshold), count_over(delays, kBound / 2));
-		if (median > kThreshold) DETECT("median delay " << ms(median) << " ms exceeds B / 5 = " << ms(kThreshold) << " ms");
+		if (median > kThreshold) DETECT_LIVE(r, "median delay " << ms(median) << " ms exceeds B / 5 = " << ms(kThreshold) << " ms");
 		return {};
 	}
 

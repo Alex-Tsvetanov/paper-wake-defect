@@ -277,6 +277,7 @@ namespace
 		std::optional<std::int64_t> elapsed_ns;  // timed mode only
 		std::string wait_method;
 		std::string error;
+		std::string ran;  // the variant of the loop type that ran, from L::defect
 	};
 
 	/// The tasks producer p posts in count mode: N / P, and one more for the first N mod P.
@@ -482,9 +483,16 @@ namespace
 	{
 		std::ostringstream s;
 		s << "{\"pair\":" << d.pair << ",\"position\":" << d.position << ",\"side\":\"" << (d.side_b ? 'B' : 'A')
-		  << "\",\"arm\":\"" << json_escape(o.arm(d.side_b)) << "\",\"tasks\":" << d.result.tasks << ",\"passes\":[";
-		for (std::size_t i = 0; i < d.result.passes.size(); ++i) s << (i ? "," : "") << d.result.passes[i];
-		s << "]";
+		  << "\",\"arm\":\"" << json_escape(o.arm(d.side_b)) << "\",\"ran\":\"" << json_escape(d.result.ran)
+		  << "\",\"tasks\":" << d.result.tasks;
+		// Not in --check: in poll mode a pass count grows with elapsed time, so the two arms' counts
+		// over the same task count would compare their throughput on a development machine.
+		if (!o.check)
+		{
+			s << ",\"passes\":[";
+			for (std::size_t i = 0; i < d.result.passes.size(); ++i) s << (i ? "," : "") << d.result.passes[i];
+			s << "]";
+		}
 		if (d.result.elapsed_ns)
 		{
 			const double seconds = static_cast<double>(*d.result.elapsed_ns) * 1e-9;
@@ -570,11 +578,21 @@ namespace
 		if (windows_a != o.pairs) bad.push_back("side A ran " + std::to_string(windows_a) + " windows, expected " + std::to_string(o.pairs));
 		if (windows_b != o.pairs) bad.push_back("side B ran " + std::to_string(windows_b) + " windows, expected " + std::to_string(o.pairs));
 
-		// The order, rebuilt from a fresh generator with the same seed.
+		// The variant that ran must be the arm's. Then the order: abba is written out here
+		// independently of make_order(); shuffle can only be rebuilt from the same generator.
+		for (const Done& d : done)
+		{
+			if (d.result.ran != o.arm(d.side_b))
+			{
+				bad.push_back("pair " + std::to_string(d.pair) + ": side " + (d.side_b ? "B" : "A") + " ran " + d.result.ran +
+				              ", not " + o.arm(d.side_b));
+			}
+		}
 		const std::vector<bool> ba = make_order(o);
 		for (std::size_t i = 0; i < done.size() && i / 2 < ba.size(); ++i)
 		{
-			const bool want_b = (i % 2 == 1) != ba[i / 2];
+			const bool pair_is_ba = o.shuffle ? ba[i / 2] : (i / 2) % 2 == 1;
+			const bool want_b = (i % 2 == 1) != pair_is_ba;
 			if (done[i].pair != i / 2 || done[i].position != i % 2 || done[i].side_b != want_b)
 			{
 				bad.push_back("window " + std::to_string(i) + " is pair " + std::to_string(done[i].pair) + " position " +
@@ -616,7 +634,10 @@ namespace
 	/// Runs one window of the arm's variant. False when this platform has no such loop.
 	bool run_one(const Options& opt, Done& d)
 	{
-		return wakeloop::with_loop(opt.backend, opt.defect(d.side_b), [&]<class L>() { d.result = run_window<L>(opt); });
+		return wakeloop::with_loop(opt.backend, opt.defect(d.side_b), [&]<class L>() {
+			d.result = run_window<L>(opt);
+			d.result.ran = std::string(wakeloop::defect_name(L::defect));
+		});
 	}
 
 	int run_all(const Options& opt)
