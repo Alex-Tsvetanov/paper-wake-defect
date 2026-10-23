@@ -1,11 +1,16 @@
-// io_uring backend, on raw system calls. See design/minimal-loop.md, section 2.5.
+// io_uring backend, on raw system calls. See design/minimal-loop.md, section 2.5, and
+// design/v2-defects.md, section 4.
 //
 // Only the worker touches the ring, so it is created SINGLE_ISSUER and DEFER_TASKRUN, disabled,
-// and enabled by run() on the worker thread, which makes the worker its issuer. Posters write
+// and enabled by start() on the worker thread, which makes the worker its issuer. Posters write
 // the wake eventfd and never touch the ring. A multishot poll watches that eventfd; io_uring
 // polls are edge-triggered unless IORING_POLL_ADD_LEVEL is set, so each write ends one wait and
 // the eventfd is never read. Stop has its own eventfd and a single-shot poll.
-#include "wakeloop/loop.hpp"
+//
+// Defect sites: unobserved primitive never arms the wake poll, so posters write an eventfd the
+// ring does not watch (the 2026-09 "misdirect"); no re-trigger arms the wake poll single-shot
+// and skips the re-arm when the kernel ends it.
+#include "wakeloop/backends.hpp"
 
 #if defined(__linux__)
 
@@ -13,7 +18,6 @@
 #include "linux_fd.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <bit>
 #include <cerrno>
 #include <csignal>
@@ -92,7 +96,8 @@ namespace wakeloop
 
 	}  // namespace
 
-	UringLoop::UringLoop(std::int64_t wait_us) : wait_us_(detail::checked_bound(wait_us))
+	template <Defect D>
+	UringBackend<D>::UringBackend(WaitSpec spec) : wait_us_(detail::checked_bound(spec.wait_us)), poll_(spec.poll)
 	{
 		detail::Fd wake_fd = detail::make_eventfd("eventfd (wake)");
 		detail::Fd stop_fd = detail::make_eventfd("eventfd (stop)");
@@ -140,7 +145,8 @@ namespace wakeloop
 		stop_fd_ = stop_fd.release();
 	}
 
-	UringLoop::~UringLoop()
+	template <Defect D>
+	UringBackend<D>::~UringBackend()
 	{
 		::munmap(ring_.sqes, ring_.sqes_size);
 		::munmap(ring_.map, ring_.map_size);
@@ -149,57 +155,36 @@ namespace wakeloop
 		::close(stop_fd_);
 	}
 
-	void UringLoop::run()
+	template <Defect D>
+	void UringBackend<D>::start()
 	{
-		if (ran_.exchange(true)) throw std::logic_error("wakeloop: run() may be called once");
-		if (stop_.load(std::memory_order_acquire)) return;
 		// The enabling thread becomes the ring's single issuer.
 		if (sys_register(ring_.fd, IORING_REGISTER_ENABLE_RINGS, nullptr, 0) < 0) detail::throw_errno("io_uring_register (enable)");
 		arm_stop_poll();
-#if !WAKELOOP_DEFECT
-		arm_wake_poll();
-#endif
+		if constexpr (D != Defect::unobserved_primitive) arm_wake_poll();
 		submit();
-		// Armed before drained: a post whose push precedes this drain is run by it; any later
-		// post writes the eventfd after the poll was armed. Likewise for stop's flag and write.
-		if (stop_.load(std::memory_order_acquire)) return;
-		detail::run_all(stack_.take_all());
-		while (!stop_.load(std::memory_order_acquire))
-		{
-			wait_once();
-			passes_.fetch_add(1, std::memory_order_relaxed);
-			reap();
-			if (stop_.load(std::memory_order_acquire)) return;
-			if (rearm_)
-			{
-				// The kernel ended the multishot poll. Re-armed, then drained, as at start.
-				rearm_ = false;
-				arm_wake_poll();
-				submit();
-			}
-			detail::run_all(stack_.take_all());
-		}
 	}
 
-	void UringLoop::stop() noexcept
+	template <Defect D>
+	void UringBackend<D>::wake() noexcept
 	{
-		stop_.store(true, std::memory_order_release);
+		detail::signal_eventfd(wake_fd_, "io_uring: write to the wake eventfd failed");
+	}
+
+	template <Defect D>
+	void UringBackend<D>::stop() noexcept
+	{
 		detail::signal_eventfd(stop_fd_, "io_uring: write to the stop eventfd failed");
 	}
 
-	void UringLoop::post(Task& task) noexcept
-	{
-		if (stack_.push(task)) wake();
-	}
-
-	void UringLoop::wake() noexcept { detail::signal_eventfd(wake_fd_, "io_uring: write to the wake eventfd failed"); }
-
-	const char* UringLoop::wait_method() const noexcept
+	template <Defect D>
+	const char* UringBackend<D>::wait_method() const noexcept
 	{
 		return "io_uring_enter(getevents, ext_arg; single_issuer, defer_taskrun)";
 	}
 
-	void* UringLoop::next_sqe()
+	template <Defect D>
+	void* UringBackend<D>::next_sqe()
 	{
 		const unsigned head = load_acquire(ring_.sq_head);
 		const unsigned tail = load_relaxed(ring_.sq_tail) + sq_pending_;
@@ -212,17 +197,20 @@ namespace wakeloop
 		return sqe;
 	}
 
-	void UringLoop::arm_wake_poll()
+	template <Defect D>
+	void UringBackend<D>::arm_wake_poll()
 	{
 		auto* sqe = static_cast<io_uring_sqe*>(next_sqe());
 		sqe->opcode = IORING_OP_POLL_ADD;
 		sqe->fd = wake_fd_;
 		sqe->poll32_events = POLLIN;
 		sqe->len = IORING_POLL_ADD_MULTI;
+		if constexpr (D == Defect::no_retrigger) sqe->len = 0;  // single-shot
 		sqe->user_data = kWakeTag;
 	}
 
-	void UringLoop::arm_stop_poll()
+	template <Defect D>
+	void UringBackend<D>::arm_stop_poll()
 	{
 		auto* sqe = static_cast<io_uring_sqe*>(next_sqe());
 		sqe->opcode = IORING_OP_POLL_ADD;
@@ -231,7 +219,8 @@ namespace wakeloop
 		sqe->user_data = kStopTag;
 	}
 
-	void UringLoop::submit()
+	template <Defect D>
+	void UringBackend<D>::submit()
 	{
 		if (sq_pending_ == 0) return;
 		const unsigned n = sq_pending_;
@@ -246,21 +235,41 @@ namespace wakeloop
 		if (static_cast<unsigned>(submitted) != n) throw std::runtime_error("io_uring: the kernel took fewer submissions than given");
 	}
 
-	void UringLoop::wait_once()
+	template <Defect D>
+	void UringBackend<D>::wait()
 	{
-		// Value-initialized, as the kernel reads them through a raw system call.
+		// Value-initialized, as the kernel reads them through a raw system call. Zero in poll mode.
 		__kernel_timespec ts{};
-		ts.tv_sec = wait_us_ / 1000000;
-		ts.tv_nsec = (wait_us_ % 1000000) * 1000;
+		if (!poll_)
+		{
+			ts.tv_sec = wait_us_ / 1000000;
+			ts.tv_nsec = (wait_us_ % 1000000) * 1000;
+		}
+		const bool blocks = !poll_ && wait_us_ == 0;
 		io_uring_getevents_arg arg{};
 		arg.sigmask = 0;
 		arg.sigmask_sz = _NSIG / 8;
-		arg.ts = wait_us_ == 0 ? 0 : reinterpret_cast<std::uintptr_t>(&ts);
+		arg.ts = blocks ? 0 : reinterpret_cast<std::uintptr_t>(&ts);
 		const int r = sys_enter(ring_.fd, 0, 1, IORING_ENTER_GETEVENTS | IORING_ENTER_EXT_ARG, &arg, sizeof(arg));
 		if (r < 0 && errno != ETIME && errno != EINTR) detail::throw_errno("io_uring_enter (wait)");
 	}
 
-	void UringLoop::reap()
+	template <Defect D>
+	void UringBackend<D>::after_wait()
+	{
+		reap();
+		if (!rearm_) return;
+		// The kernel ended the wake poll. Re-armed before the core drains, as at start.
+		rearm_ = false;
+		if constexpr (D != Defect::no_retrigger)
+		{
+			arm_wake_poll();
+			submit();
+		}
+	}
+
+	template <Defect D>
+	void UringBackend<D>::reap()
 	{
 		unsigned head = load_relaxed(ring_.cq_head);
 		const unsigned tail = load_acquire(ring_.cq_tail);
@@ -281,6 +290,8 @@ namespace wakeloop
 		}
 		store_release(ring_.cq_head, head);
 	}
+
+	WAKELOOP_INSTANTIATE_ALL(UringBackend)
 
 }  // namespace wakeloop
 

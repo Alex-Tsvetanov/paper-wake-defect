@@ -1,174 +1,219 @@
-// wakeloop: a minimal event loop with one worker, for measuring bounded-wait wake defects.
+// wakeloop: a minimal event loop with W workers, for measuring bounded-wait wake defects.
 //
-// The worker waits with a bound of B microseconds (B = 0 blocks). Any thread may post a task;
-// a post that finds the queue empty wakes the worker through the backend's wake object:
+// Each worker owns a task stack and one backend object (backends.hpp) and waits with a bound of
+// B microseconds (B = 0 blocks). Any thread may post a task to a worker; a post whose push finds
+// that worker's stack empty wakes it (the wake rule of design/minimal-loop.md, section 2.3,
+// which holds per worker because each stack has one consumer). With W = 1 the fixed loop is
+// the 2026-09 loop.
 //
-//   epoll     an eventfd in the epoll set, edge-triggered, never read by the worker
-//   io_uring  an eventfd watched by a multishot poll in the worker's ring
-//   IOCP      a completion packet with the wake key
-//
-// A build with WAKELOOP_DEFECT=1 seeds the defect at one site per backend: epoll and IOCP omit
-// the wake; io_uring still writes the eventfd but never arms the poll that watches it. Stop has
-// its own path in every backend and is never affected. See design/minimal-loop.md.
+// The defect D is a compile-time parameter. This header holds the core's four defect sites
+// (absent wake, lazy-wake race, wrong worker, undrained edge); the backends hold the others.
+// tests/defect_sites.cmake counts every site. See design/v2-defects.md.
 #pragma once
 
+#include "wakeloop/backends.hpp"
+#include "wakeloop/defect.hpp"
 #include "wakeloop/task_stack.hpp"
 
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <stdexcept>
+#include <vector>
 
 namespace wakeloop
 {
 
-	/// The form of the seeded defect in a backend of this build.
-	enum class Defect
+	/// The measured hooks: none. Tests substitute a type whose before_push() can stop a poster
+	/// between its look at the stack and its push (design/v2-defects.md, section 4).
+	struct NoHooks
 	{
-		none,
-		omit,       // the post does not signal
-		misdirect,  // the post signals an object the wait does not watch
+		void before_push() noexcept {}
 	};
 
-	const char* defect_name(Defect d) noexcept;
-
-	/// True in a build that seeds the defect. The build defines WAKELOOP_DEFECT as 0 or 1.
-	inline constexpr bool kDefectSeeded = WAKELOOP_DEFECT != 0;
-
-#if defined(__linux__)
-
-	class EpollLoop
+	struct Config
 	{
-	public:
-		/// wait_us is the bound B in microseconds; 0 blocks. Throws std::invalid_argument for a
-		/// negative bound and std::system_error when a setup call fails.
-		explicit EpollLoop(std::int64_t wait_us);
-		~EpollLoop();
-		EpollLoop(const EpollLoop&) = delete;
-		EpollLoop& operator=(const EpollLoop&) = delete;
-
-		/// The calling thread becomes the worker until stop(). Call it once.
-		void run();
-		/// Any thread, any time, more than once. Wakes a blocked worker in both arms.
-		void stop() noexcept;
-		/// Any thread. Never blocks, never allocates.
-		void post(Task& task) noexcept;
-
-		static constexpr const char* name = "epoll";
-		static constexpr Defect defect = kDefectSeeded ? Defect::omit : Defect::none;
-
-		/// Number of wait returns so far.
-		std::uint64_t passes() const noexcept { return passes_.load(std::memory_order_relaxed); }
-		/// The wait call in use: "epoll_pwait2", or "epoll_wait" where the kernel lacks it.
-		const char* wait_method() const noexcept;
-
-	private:
-		void wake() noexcept;
-		void wait_once();
-
-		detail::TaskStack stack_;
-		std::atomic<bool> stop_{false};
-		std::atomic<bool> ran_{false};
-		std::atomic<std::uint64_t> passes_{0};
-		std::atomic<bool> use_pwait2_{true};
-		std::int64_t wait_us_;
-		int epoll_fd_ = -1;
-		int wake_fd_ = -1;
-		int stop_fd_ = -1;
+		std::int64_t wait_us = 0;  // the bound B in microseconds; 0 blocks
+		unsigned workers = 1;      // W
+		bool poll = false;         // every wait returns at once (H4's busy worker); wait_us unused
 	};
 
-	class UringLoop
+	namespace detail
 	{
-	public:
-		/// As EpollLoop. Also throws std::system_error when the kernel refuses the ring or lacks
-		/// a required feature (extended wait argument, single mmap, no-drop completions).
-		explicit UringLoop(std::int64_t wait_us);
-		~UringLoop();
-		UringLoop(const UringLoop&) = delete;
-		UringLoop& operator=(const UringLoop&) = delete;
 
-		void run();
-		void stop() noexcept;
-		void post(Task& task) noexcept;
+		/// A broken invariant on a path that cannot report an error. Prints `what` and the OS
+		/// error, then aborts: a lost wake must never be silent. Defined in loop/src/common.cpp.
+		[[noreturn]] void fatal(const char* what, long os_error) noexcept;
 
-		static constexpr const char* name = "io_uring";
-		static constexpr Defect defect = kDefectSeeded ? Defect::misdirect : Defect::none;
-
-		std::uint64_t passes() const noexcept { return passes_.load(std::memory_order_relaxed); }
-		const char* wait_method() const noexcept;
-
-	private:
-		// Views into the rings the kernel shares with this process.
-		struct Ring
+		/// Appends list b to list a (both oldest first) and returns the joined list.
+		inline Task* append(Task* a, Task* b) noexcept
 		{
-			int fd = -1;
-			void* map = nullptr;
-			std::size_t map_size = 0;
-			void* sqes = nullptr;
-			std::size_t sqes_size = 0;
-			unsigned* sq_head = nullptr;
-			unsigned* sq_tail = nullptr;
-			unsigned* sq_array = nullptr;
-			unsigned sq_mask = 0;
-			unsigned sq_entries = 0;
-			unsigned* cq_head = nullptr;
-			unsigned* cq_tail = nullptr;
-			unsigned cq_mask = 0;
-			void* cqes = nullptr;
-		};
+			if (a == nullptr) return b;
+			Task* tail = a;
+			while (tail->next != nullptr) tail = tail->next;
+			tail->next = b;
+			return a;
+		}
 
-		void wake() noexcept;
-		void arm_wake_poll();
-		void arm_stop_poll();
-		void submit();
-		void wait_once();
-		void reap();
-		void* next_sqe();
+		/// Runs at most n tasks of a list and returns the rest. Reads each link before running.
+		inline Task* run_some(Task* task, unsigned n) noexcept
+		{
+			for (; task != nullptr && n > 0; --n)
+			{
+				Task* next = task->next;
+				task->run(*task);
+				task = next;
+			}
+			return task;
+		}
 
-		detail::TaskStack stack_;
-		std::atomic<bool> stop_{false};
-		std::atomic<bool> ran_{false};
-		std::atomic<std::uint64_t> passes_{0};
-		std::int64_t wait_us_;
-		Ring ring_;
-		unsigned sq_pending_ = 0;  // SQEs written but not yet submitted; worker only
-		bool rearm_ = false;       // the kernel ended the multishot poll; worker only
-		int wake_fd_ = -1;
-		int stop_fd_ = -1;
-	};
+	}  // namespace detail
 
-#elif defined(_WIN32)
-
-	class IocpLoop
+	template <template <Defect> class Backend, Defect D, class Hooks = NoHooks>
+	class Loop
 	{
 	public:
-		/// As EpollLoop. The bound is rounded up to whole milliseconds, as the wait call takes it.
-		explicit IocpLoop(std::int64_t wait_us);
-		~IocpLoop();
-		IocpLoop(const IocpLoop&) = delete;
-		IocpLoop& operator=(const IocpLoop&) = delete;
+		using backend_type = Backend<D>;
+		template <class H>
+		using with_hooks = Loop<Backend, D, H>;
 
-		void run();
-		void stop() noexcept;
-		void post(Task& task) noexcept;
+		static constexpr const char* name = backend_type::name;
+		static constexpr Defect defect = D;
 
-		static constexpr const char* name = "iocp";
-		static constexpr Defect defect = kDefectSeeded ? Defect::omit : Defect::none;
+		/// One worker with bound wait_us, as the 2026-09 loop.
+		explicit Loop(std::int64_t wait_us) : Loop(Config{wait_us, 1, false}) {}
 
-		std::uint64_t passes() const noexcept { return passes_.load(std::memory_order_relaxed); }
-		const char* wait_method() const noexcept;
+		/// Throws std::invalid_argument for no workers or a negative bound, and std::system_error
+		/// when a backend's setup fails.
+		explicit Loop(const Config& cfg)
+		{
+			if (cfg.workers == 0) throw std::invalid_argument("wakeloop: a loop needs at least one worker");
+			const WaitSpec spec{cfg.wait_us, cfg.poll};
+			workers_.reserve(cfg.workers);
+			for (unsigned i = 0; i < cfg.workers; ++i) workers_.push_back(std::make_unique<Worker>(spec));
+		}
+
+		Loop(const Loop&) = delete;
+		Loop& operator=(const Loop&) = delete;
+
+		/// The calling thread becomes worker `worker` until stop(). Call it once per worker.
+		/// Throws std::out_of_range for a worker the loop does not have.
+		void run(unsigned worker = 0)
+		{
+			if (worker >= workers_.size()) throw std::out_of_range("wakeloop: run() names a worker the loop does not have");
+			Worker& w = *workers_[worker];
+			if (w.ran.exchange(true)) throw std::logic_error("wakeloop: run() may be called once per worker");
+			if (stop_.load(std::memory_order_acquire)) return;
+			w.backend.start();
+			// Started before drained: a post whose push precedes this drain is run by it, and any
+			// later post signals a wake object the backend already watches.
+			if (stop_.load(std::memory_order_acquire)) return;
+			drain(w);
+			while (!stop_.load(std::memory_order_acquire))
+			{
+				w.backend.wait();
+				w.passes.fetch_add(1, std::memory_order_relaxed);
+				w.backend.after_wait();
+				if (stop_.load(std::memory_order_acquire)) return;
+				drain(w);
+			}
+		}
+
+		/// Any thread, any time, more than once. Ends every worker's run(), blocked or not.
+		void stop() noexcept
+		{
+			stop_.store(true, std::memory_order_release);
+			for (auto& w : workers_) w->backend.stop();
+		}
+
+		/// Posts to worker 0. Any thread. Never blocks, never allocates.
+		void post(Task& task) noexcept { post_unchecked(0, task); }
+
+		/// Posts to worker `worker`. Any thread. Never blocks, never allocates. A worker the loop
+		/// does not have is a broken invariant: the process aborts.
+		void post_to(unsigned worker, Task& task) noexcept
+		{
+			if (worker >= workers_.size()) detail::fatal("wakeloop: post_to() names a worker the loop does not have", 0);
+			post_unchecked(worker, task);
+		}
+
+		unsigned workers() const noexcept { return static_cast<unsigned>(workers_.size()); }
+
+		/// Number of wait returns of a worker so far.
+		std::uint64_t passes(unsigned worker = 0) const noexcept
+		{
+			return workers_[worker]->passes.load(std::memory_order_relaxed);
+		}
+
+		const char* wait_method() const noexcept { return workers_[0]->backend.wait_method(); }
+
+		Hooks& hooks() noexcept { return hooks_; }
 
 	private:
-		void wake() noexcept;
-		void wait_once();
-
-		detail::TaskStack stack_;
-		std::atomic<bool> stop_{false};
-		std::atomic<bool> ran_{false};
-		std::atomic<std::uint64_t> passes_{0};
-		unsigned long wait_ms_;  // DWORD; INFINITE for B = 0
-		void* port_ = nullptr;   // HANDLE
-	};
-
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4324)  // the padding is the point: workers do not share a cache line
 #endif
+		struct alignas(64) Worker
+		{
+			explicit Worker(WaitSpec spec) : backend(spec) {}
+
+			detail::TaskStack stack;
+			backend_type backend;
+			std::atomic<std::uint64_t> passes{0};
+			std::atomic<bool> ran{false};
+			Task* leftover = nullptr;  // undrained edge only; worker thread only
+		};
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
+		void post_unchecked(unsigned index, Task& task) noexcept
+		{
+			Worker& w = *workers_[index];
+			bool was_empty = false;
+			if constexpr (D == Defect::lazy_wake_race)
+			{
+				const bool looked_empty = w.stack.empty();
+				hooks_.before_push();
+				w.stack.push(task);
+				was_empty = looked_empty;
+			}
+			else
+			{
+				hooks_.before_push();
+				was_empty = w.stack.push(task);
+			}
+			if (!was_empty) return;
+			if constexpr (D == Defect::absent_wake)
+			{
+				return;
+			}
+			else if constexpr (D == Defect::wrong_worker)
+			{
+				workers_[(index + 1) % workers_.size()]->backend.wake();
+			}
+			else
+			{
+				w.backend.wake();
+			}
+		}
+
+		void drain(Worker& w) noexcept
+		{
+			if constexpr (D == Defect::undrained_edge)
+			{
+				w.leftover = detail::run_some(detail::append(w.leftover, w.stack.take_all()), kUndrainedBudget);
+			}
+			else
+			{
+				detail::run_all(w.stack.take_all());
+			}
+		}
+
+		std::vector<std::unique_ptr<Worker>> workers_;
+		std::atomic<bool> stop_{false};
+		[[no_unique_address]] Hooks hooks_;
+	};
 
 }  // namespace wakeloop

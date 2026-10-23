@@ -53,6 +53,10 @@ namespace wakeloop
 				return oldest_first;
 			}
 
+			/// A look at the stack, separate from any push. Only the lazy-wake-race variant
+			/// decides on it; every other variant decides on push()'s own result.
+			bool empty() const noexcept { return head_.load(std::memory_order_acquire) == nullptr; }
+
 		private:
 			std::atomic<Task*> head_{nullptr};
 		};

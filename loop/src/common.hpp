@@ -35,3 +35,14 @@ namespace wakeloop::detail
 	std::int64_t checked_bound(std::int64_t wait_us);
 
 }  // namespace wakeloop::detail
+
+/// Instantiates a backend for every variant (wakeloop/defect.hpp). Variants without a site on
+/// the backend compile to the fixed code; variants.hpp never selects them.
+#define WAKELOOP_INSTANTIATE_ALL(Backend)              \
+	template class Backend<Defect::none>;                \
+	template class Backend<Defect::absent_wake>;         \
+	template class Backend<Defect::unobserved_primitive>; \
+	template class Backend<Defect::lazy_wake_race>;      \
+	template class Backend<Defect::wrong_worker>;        \
+	template class Backend<Defect::no_retrigger>;        \
+	template class Backend<Defect::undrained_edge>;

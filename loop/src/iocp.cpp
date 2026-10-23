@@ -1,10 +1,13 @@
-// IOCP backend. See design/minimal-loop.md, section 2.6.
+// IOCP backend. See design/minimal-loop.md, section 2.6, and design/v2-defects.md, section 4.
 //
-// One completion port. A post that finds the stack empty queues a packet with the wake key; stop
-// queues a packet with the stop key. The worker waits in GetQueuedCompletionStatus with the bound
-// rounded up to whole milliseconds, as the call takes it, so the process's timer resolution sets
-// the period of timed returns. The stack is drained after every return, timed or not.
-#include "wakeloop/loop.hpp"
+// One completion port per worker. A post that finds the stack empty queues a packet with the wake
+// key; stop queues a packet with the stop key. The worker waits in GetQueuedCompletionStatus with
+// the bound rounded up to whole milliseconds, as the call takes it, so the process's timer
+// resolution sets the period of timed returns.
+//
+// Defect site: unobserved primitive creates a second port that nobody waits on and posts the wake
+// packet there. No re-trigger has no site: a posted packet needs no registration.
+#include "wakeloop/backends.hpp"
 
 #if defined(_WIN32)
 
@@ -36,11 +39,20 @@ namespace wakeloop
 			throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), what);
 		}
 
-		DWORD to_wait_ms(std::int64_t wait_us)
+		DWORD to_wait_ms(WaitSpec spec)
 		{
+			const std::int64_t wait_us = detail::checked_bound(spec.wait_us);
+			if (spec.poll) return 0;
 			if (wait_us == 0) return INFINITE;
 			const std::int64_t ms = (wait_us + 999) / 1000;
 			return ms >= static_cast<std::int64_t>(INFINITE) ? INFINITE - 1 : static_cast<DWORD>(ms);
+		}
+
+		HANDLE make_port()
+		{
+			HANDLE port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 1);
+			if (port == nullptr) throw_last_error("CreateIoCompletionPort");
+			return port;
 		}
 
 		void post_packet(void* port, ULONG_PTR key, const char* what) noexcept
@@ -53,51 +65,61 @@ namespace wakeloop
 
 	}  // namespace
 
-	IocpLoop::IocpLoop(std::int64_t wait_us) : wait_ms_(to_wait_ms(detail::checked_bound(wait_us)))
+	template <Defect D>
+	IocpBackend<D>::IocpBackend(WaitSpec spec) : wait_ms_(to_wait_ms(spec))
 	{
-		port_ = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 1);
-		if (port_ == nullptr) throw_last_error("CreateIoCompletionPort");
-	}
-
-	IocpLoop::~IocpLoop() { CloseHandle(static_cast<HANDLE>(port_)); }
-
-	void IocpLoop::run()
-	{
-		if (ran_.exchange(true)) throw std::logic_error("wakeloop: run() may be called once");
-		if (stop_.load(std::memory_order_acquire)) return;
-		detail::run_all(stack_.take_all());
-		while (!stop_.load(std::memory_order_acquire))
+		port_ = make_port();
+		if constexpr (D == Defect::unobserved_primitive)
 		{
-			wait_once();
-			passes_.fetch_add(1, std::memory_order_relaxed);
-			if (stop_.load(std::memory_order_acquire)) return;
-			detail::run_all(stack_.take_all());
+			try
+			{
+				spare_ = make_port();
+			}
+			catch (...)
+			{
+				CloseHandle(static_cast<HANDLE>(port_));
+				throw;
+			}
 		}
 	}
 
-	void IocpLoop::stop() noexcept
+	template <Defect D>
+	IocpBackend<D>::~IocpBackend()
 	{
-		stop_.store(true, std::memory_order_release);
+		CloseHandle(static_cast<HANDLE>(port_));
+		if (spare_ != nullptr) CloseHandle(static_cast<HANDLE>(spare_));
+	}
+
+	template <Defect D>
+	void IocpBackend<D>::wake() noexcept
+	{
+		if constexpr (D == Defect::unobserved_primitive)
+		{
+			post_packet(spare_, kWakeKey, "iocp: posting the wake packet to the spare port failed");
+		}
+		else
+		{
+			post_packet(port_, kWakeKey, "iocp: posting the wake packet failed");
+		}
+	}
+
+	template <Defect D>
+	void IocpBackend<D>::stop() noexcept
+	{
 		post_packet(port_, kStopKey, "iocp: posting the stop packet failed");
 	}
 
-	void IocpLoop::post(Task& task) noexcept
+	template <Defect D>
+	const char* IocpBackend<D>::wait_method() const noexcept
 	{
-		if (stack_.push(task))
-		{
-#if !WAKELOOP_DEFECT
-			wake();
-#endif
-		}
+		return "GetQueuedCompletionStatus";
 	}
 
-	void IocpLoop::wake() noexcept { post_packet(port_, kWakeKey, "iocp: posting the wake packet failed"); }
-
-	const char* IocpLoop::wait_method() const noexcept { return "GetQueuedCompletionStatus"; }
-
-	/// One wait. A packet's key is not needed: stop() sets its flag before it posts, and posted
-	/// work is taken from the stack after every return.
-	void IocpLoop::wait_once()
+	/// One wait. A packet's key is not needed: the core checks its stop flag and takes posted
+	/// work after every return. A stop packet is consumed by one wait, but the core returns on
+	/// the flag that stop() set before posting it.
+	template <Defect D>
+	void IocpBackend<D>::wait()
 	{
 		DWORD bytes = 0;
 		ULONG_PTR key = 0;
@@ -107,6 +129,8 @@ namespace wakeloop
 		if (overlapped == nullptr && error == WAIT_TIMEOUT) return;
 		throw std::system_error(static_cast<int>(error), std::system_category(), "GetQueuedCompletionStatus");
 	}
+
+	WAKELOOP_INSTANTIATE_ALL(IocpBackend)
 
 }  // namespace wakeloop
 

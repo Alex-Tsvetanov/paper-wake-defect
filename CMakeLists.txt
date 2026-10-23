@@ -1,9 +1,13 @@
-# P1: a minimal event loop (wakeloop), its wake tests, and the wakeprobe measurement program.
+# P1: a minimal event loop (wakeloop), its wake tests, and the measurement programs.
 #
-#   -DWAKELOOP_DEFECT=ON        the defect arm: the wake is seeded out at one site per backend
+# One build holds every variant (the fixed loop and the six defects) of every backend this
+# platform compiles; the programs select a backend and a variant at run time
+# (design/v2-defects.md, section 2).
+#
 #   -DWAKELOOP_SANITIZER=...    address+undefined, thread or memory with clang on Linux;
 #                               address with MSVC or clang-cl on Windows
 #   -DWAKELOOP_MSAN_LIBCXX=DIR  prefix of an MSan-instrumented libc++ (memory only)
+#   -DWAKELOOP_BENCH=OFF        build the loop and its tests only
 #
 # The repository root is the project root, so every first-party file lies under the CMake home
 # directory and counts in the inputs hash of the sanitizer gate.
@@ -17,15 +21,15 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-option(WAKELOOP_DEFECT "Seed the wake defect in every backend (measurement only)" OFF)
 set(WAKELOOP_SANITIZER "" CACHE STRING "address+undefined, thread, memory (clang, Linux); address (Windows)")
 set(WAKELOOP_MSAN_LIBCXX "$ENV{HOME}/opt/libcxx-msan-gcc" CACHE PATH "Prefix of an MSan-instrumented libc++")
+option(WAKELOOP_BENCH "Build the measurement programs" ON)
 
 # The backends this platform compiles. Recorded in the cache, where the sanitizer gate reads it.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(WAKELOOP_BACKENDS "epoll;io_uring" CACHE INTERNAL "Backends compiled on this platform")
+    set(WAKELOOP_BACKENDS "epoll;io_uring;condvar" CACHE INTERNAL "Backends compiled on this platform")
 elseif(WIN32)
-    set(WAKELOOP_BACKENDS "iocp" CACHE INTERNAL "Backends compiled on this platform")
+    set(WAKELOOP_BACKENDS "iocp;condvar" CACHE INTERNAL "Backends compiled on this platform")
 else()
     message(FATAL_ERROR "wakeloop has backends for Linux and Windows only")
 endif()
@@ -58,7 +62,7 @@ endif()
 
 function(wakeloop_warnings target)
     if(MSVC)
-        target_compile_options(${target} PRIVATE /W4)
+        target_compile_options(${target} PRIVATE /W4 /permissive- /bigobj)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra)
     endif()
@@ -66,21 +70,23 @@ endfunction()
 
 find_package(Threads REQUIRED)
 
-add_library(wakeloop STATIC loop/src/common.cpp loop/src/common.hpp
-            loop/include/wakeloop/loop.hpp loop/include/wakeloop/task_stack.hpp)
+add_library(wakeloop STATIC
+            loop/src/common.cpp loop/src/common.hpp loop/src/condvar.cpp
+            loop/include/wakeloop/backends.hpp loop/include/wakeloop/defect.hpp
+            loop/include/wakeloop/loop.hpp loop/include/wakeloop/task_stack.hpp
+            loop/include/wakeloop/variants.hpp)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(wakeloop PRIVATE loop/src/epoll.cpp loop/src/uring.cpp loop/src/linux_fd.hpp)
 else()
     target_sources(wakeloop PRIVATE loop/src/iocp.cpp)
 endif()
 target_include_directories(wakeloop PUBLIC loop/include)
-# 0 or 1, always defined: the header reads its value, and each backend source has exactly one
-# conditional on it (tests/defect_sites.cmake checks that).
-target_compile_definitions(wakeloop PUBLIC WAKELOOP_DEFECT=$<IF:$<BOOL:${WAKELOOP_DEFECT}>,1,0>)
 target_link_libraries(wakeloop PUBLIC Threads::Threads)
 wakeloop_warnings(wakeloop)
-message(STATUS "wakeloop: backends ${WAKELOOP_BACKENDS}, defect ${WAKELOOP_DEFECT}")
+message(STATUS "wakeloop: backends ${WAKELOOP_BACKENDS}")
 
 enable_testing()
 add_subdirectory(tests)
-add_subdirectory(bench)
+if(WAKELOOP_BENCH)
+    add_subdirectory(bench)
+endif()

@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace harness
 {
@@ -112,29 +113,29 @@ namespace harness
 		int count_ = 0;
 	};
 
-	/// Runs loop.run() on its own thread. Stops the loop and joins on destruction, so a failed
-	/// check cannot leave the worker running.
+	/// Runs loop.run(w) for every worker w on a thread of its own. Stops the loop and joins on
+	/// destruction, so a failed check cannot leave a worker running.
 	template <class Loop>
 	class Runner
 	{
 	public:
-		explicit Runner(Loop& loop)
-			: loop_(loop), thread_([this] {
-				  try
-				  {
-					  loop_.run();
-				  }
-				  catch (const std::exception& e)
-				  {
-					  error_ = e.what();
-				  }
-				  catch (...)
-				  {
-					  error_ = "non-standard exception";
-				  }
-				  finished_.add();
-			  })
+		explicit Runner(Loop& loop) : loop_(loop), errors_(loop.workers())
 		{
+			const unsigned n = loop.workers();
+			threads_.reserve(n);
+			try
+			{
+				for (unsigned w = 0; w < n; ++w)
+				{
+					threads_.emplace_back([this, w] { work(w); });
+					ids_.push_back(threads_.back().get_id());
+				}
+			}
+			catch (...)
+			{
+				stop_and_join();
+				throw;
+			}
 		}
 		~Runner() { stop_and_join(); }
 		Runner(const Runner&) = delete;
@@ -142,24 +143,57 @@ namespace harness
 
 		void stop_and_join()
 		{
-			if (!thread_.joinable()) return;
 			loop_.stop();
-			thread_.join();
+			for (auto& t : threads_)
+			{
+				if (t.joinable()) t.join();
+			}
 		}
 
-		/// True when run() returned before `deadline`.
-		bool wait_finished(Clock::duration d) { return finished_.wait_for(1, d); }
+		/// True when every worker's run() returned within `d`.
+		bool wait_finished(Clock::duration d) { return finished_.wait_for(static_cast<int>(threads_.size()), d); }
 
-		std::thread::id id() const { return id_; }
-		/// Valid after run() returned.
-		const std::string& error() const { return error_; }
+		std::thread::id id(unsigned worker = 0) const { return ids_[worker]; }
+		/// The first error a worker's run() threw, or empty. Valid once that worker finished.
+		std::string error()
+		{
+			std::lock_guard lock(m_);
+			for (const auto& e : errors_)
+			{
+				if (!e.empty()) return e;
+			}
+			return {};
+		}
 
 	private:
+		void work(unsigned w)
+		{
+			std::string error;
+			try
+			{
+				loop_.run(w);
+			}
+			catch (const std::exception& e)
+			{
+				error = e.what();
+			}
+			catch (...)
+			{
+				error = "non-standard exception";
+			}
+			{
+				std::lock_guard lock(m_);
+				errors_[w] = std::move(error);
+			}
+			finished_.add();
+		}
+
 		Loop& loop_;
-		std::string error_;
+		std::mutex m_;
+		std::vector<std::string> errors_;  // guarded by m_
 		Latch finished_;
-		std::thread thread_;
-		std::thread::id id_ = thread_.get_id();
+		std::vector<std::thread> threads_;
+		std::vector<std::thread::id> ids_;
 	};
 
 }  // namespace harness

@@ -1,45 +1,27 @@
 #include "common.hpp"
 
-#include "wakeloop/loop.hpp"
-
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
 
-namespace wakeloop
+namespace wakeloop::detail
 {
 
-	const char* defect_name(Defect d) noexcept
+	void fatal(const char* what, long os_error) noexcept
 	{
-		switch (d)
-		{
-			case Defect::none: return "none";
-			case Defect::omit: return "omit";
-			case Defect::misdirect: return "misdirect";
-		}
-		return "?";
+		std::fprintf(stderr, "wakeloop: fatal: %s (os error %ld)\n", what, os_error);
+		std::fflush(stderr);
+		std::abort();
 	}
 
-	namespace detail
+	std::int64_t checked_bound(std::int64_t wait_us)
 	{
-
-		void fatal(const char* what, long os_error) noexcept
+		if (wait_us < 0)
 		{
-			std::fprintf(stderr, "wakeloop: fatal: %s (os error %ld)\n", what, os_error);
-			std::fflush(stderr);
-			std::abort();
+			throw std::invalid_argument("wakeloop: the wait bound must be >= 0 us, got " + std::to_string(wait_us));
 		}
+		return wait_us;
+	}
 
-		std::int64_t checked_bound(std::int64_t wait_us)
-		{
-			if (wait_us < 0)
-			{
-				throw std::invalid_argument("wakeloop: the wait bound must be >= 0 us, got " + std::to_string(wait_us));
-			}
-			return wait_us;
-		}
-
-	}  // namespace detail
-
-}  // namespace wakeloop
+}  // namespace wakeloop::detail
