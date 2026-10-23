@@ -154,12 +154,16 @@ The prediction is that TSan reports nothing on any variant. A development TSan r
 matrix on the desktop checks that the code is race-free; a citable TSan record is made on the
 laptop.
 
-## 9. Open decisions for Alex
+## 9. Decisions (Alex, 2026-10-23)
 
-1. The six definitions and the N/A cells above.
-2. Lazy-wake race in the campaign: the natural window only (honest power, likely near zero for
-   single posts), or also a widened plant with a stated delay in the window.
-3. Worker counts W in {1, 2, 4} and one poster, or another grid.
-4. H4's pairing: fixed against absent wake in poll mode, as above.
-5. Seventh rows: the condition-variable notify race; the frame-ownership race (no portable
-   plant found yet).
+The design is still a draft; these answers shape it before the freeze.
+
+1. The six definitions and the N/A cells above: accepted as drafted.
+2. Lazy-wake race in the campaign: both the natural window and a plant widened by a stated
+   delay, each reported. The widened plant is not built yet.
+3. Worker counts W in {1, 2, 4} with one poster.
+4. H4: the fixed loop against absent wake in poll mode, as in section 6.
+5. No seventh row for now.
+6. The historical case is Netty NioEventLoop 4.1.0.CR7 against 4.1.0.Final
+   (`historical/candidates-2026-10.md`), run both forced through the public `SelectStrategy`
+   hook, disclosed as forcing, and natural; both reported.
