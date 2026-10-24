@@ -238,18 +238,27 @@ namespace wakeloop
 	template <Defect D>
 	void UringBackend<D>::wait()
 	{
-		// Value-initialized, as the kernel reads them through a raw system call. Zero in poll mode.
-		__kernel_timespec ts{};
-		if (!poll_)
+		if (poll_)
 		{
-			ts.tv_sec = wait_us_ / 1000000;
-			ts.tv_nsec = (wait_us_ % 1000000) * 1000;
+			// Poll mode: run the deferred task work and return, waiting for nothing. A zero timeout
+			// with min_complete 1 instead takes the kernel's timeout path whenever no completion is
+			// ready, which costs more than a ready completion, so arms would differ in the wait.
+			int r = -1;
+			do
+			{
+				r = sys_enter(ring_.fd, 0, 0, IORING_ENTER_GETEVENTS, nullptr, 0);
+			} while (r < 0 && errno == EINTR);
+			if (r < 0) detail::throw_errno("io_uring_enter (poll)");
+			return;
 		}
-		const bool blocks = !poll_ && wait_us_ == 0;
+		// Value-initialized, as the kernel reads them through a raw system call.
+		__kernel_timespec ts{};
+		ts.tv_sec = wait_us_ / 1000000;
+		ts.tv_nsec = (wait_us_ % 1000000) * 1000;
 		io_uring_getevents_arg arg{};
 		arg.sigmask = 0;
 		arg.sigmask_sz = _NSIG / 8;
-		arg.ts = blocks ? 0 : reinterpret_cast<std::uintptr_t>(&ts);
+		arg.ts = wait_us_ == 0 ? 0 : reinterpret_cast<std::uintptr_t>(&ts);
 		const int r = sys_enter(ring_.fd, 0, 1, IORING_ENTER_GETEVENTS | IORING_ENTER_EXT_ARG, &arg, sizeof(arg));
 		if (r < 0 && errno != ETIME && errno != EINTR) detail::throw_errno("io_uring_enter (wait)");
 	}
