@@ -10,9 +10,11 @@ if(NOT ROOT)
     message(FATAL_ERROR "pass -DROOT=<repository root>")
 endif()
 
-set(_defects absent_wake unobserved_primitive lazy_wake_race wrong_worker no_retrigger undrained_edge)
-# <file>|<defect>|<sites>. A pair not listed expects no site.
+set(_defects plain_wake absent_wake unobserved_primitive lazy_wake_race wrong_worker no_retrigger undrained_edge)
+# <file>|<defect>|<sites>. A pair not listed expects no site. plain_wake is no defect but the
+# 2026-09 loop; its two sites (the post and the park) are counted the same way.
 set(_expect
+    "loop/include/wakeloop/loop.hpp|plain_wake|2"
     "loop/include/wakeloop/loop.hpp|absent_wake|1"
     "loop/include/wakeloop/loop.hpp|lazy_wake_race|1"
     "loop/include/wakeloop/loop.hpp|wrong_worker|1"

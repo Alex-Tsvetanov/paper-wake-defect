@@ -38,6 +38,7 @@ namespace wakeloop
 			switch (d)
 			{
 				case Defect::none: f.template operator()<Loop<Backend, Defect::none, Hooks>>(); return true;
+				case Defect::plain_wake: f.template operator()<Loop<Backend, Defect::plain_wake, Hooks>>(); return true;
 				case Defect::absent_wake: f.template operator()<Loop<Backend, Defect::absent_wake, Hooks>>(); return true;
 				case Defect::unobserved_primitive:
 					f.template operator()<Loop<Backend, Defect::unobserved_primitive, Hooks>>();

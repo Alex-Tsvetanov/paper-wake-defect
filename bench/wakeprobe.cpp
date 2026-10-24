@@ -199,6 +199,7 @@ namespace
 			case wakeloop::Defect::no_retrigger: return true;
 			case wakeloop::Defect::wrong_worker: return workers >= 2;
 			case wakeloop::Defect::none:
+			case wakeloop::Defect::plain_wake:
 			case wakeloop::Defect::lazy_wake_race:
 			case wakeloop::Defect::undrained_edge: return false;
 		}

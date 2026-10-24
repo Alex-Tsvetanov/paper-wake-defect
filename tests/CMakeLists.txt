@@ -16,18 +16,21 @@ set(WAKE_DETECTORS
 # The verdict of each variant on each detector, in the order of WAKE_DETECTORS: D detected,
 # P passes, A racy (run, but either verdict is accepted). Any other outcome fails the test.
 #                                    single burst prod self seq batch lazy  lat21 latbatch latlazy
+# A worker re-checks its stack before it parks, so a post made while it runs needs no wake: the
+# defects that lose wakes pass D9 and D10, whose posts land behind a running task. Starters are
+# posted before run(), when no worker sleeps, so they send no wake and no re-trigger's one-shot
+# is still unused when a detector starts.
 set(WAKE_EXPECT_none                 P      P     P    P    P   P     P     P     P        P)
-set(WAKE_EXPECT_absent_wake          D      D     D    D    D   D     D     D     D        D)
-set(WAKE_EXPECT_unobserved_primitive D      D     D    D    D   D     D     D     D        D)
+set(WAKE_EXPECT_plain_wake           P      P     P    P    P   P     P     P     P        P)
+set(WAKE_EXPECT_absent_wake          D      D     D    D    D   D     D     D     P        P)
+set(WAKE_EXPECT_unobserved_primitive D      D     D    D    D   D     D     D     P        P)
 set(WAKE_EXPECT_lazy_wake_race       P      A     A    P    P   P     D     P     P        D)
-set(WAKE_EXPECT_wrong_worker         D      D     D    D    D   D     D     D     D        D)
-# The starter tasks' wake (wake_tests.cpp, Starters) uses up no re-trigger's one-shot
-# registration before any detector posts, so every detector catches it.
-set(WAKE_EXPECT_no_retrigger         D      D     D    D    D   D     D     D     D        D)
+set(WAKE_EXPECT_wrong_worker         D      D     D    D    D   D     D     D     P        P)
+set(WAKE_EXPECT_no_retrigger         P      A     A    P    D   P     P     D     P        P)
 set(WAKE_EXPECT_undrained_edge       P      P     A    P    P   D     P     P     D        P)
 
 # The worker counts each variant runs at. Wrong worker exists only from W = 2.
-set(WAKE_VARIANTS none absent_wake unobserved_primitive lazy_wake_race wrong_worker no_retrigger undrained_edge)
+set(WAKE_VARIANTS none plain_wake absent_wake unobserved_primitive lazy_wake_race wrong_worker no_retrigger undrained_edge)
 foreach(_variant IN LISTS WAKE_VARIANTS)
     set(WAKE_WORKERS_${_variant} 1)
 endforeach()

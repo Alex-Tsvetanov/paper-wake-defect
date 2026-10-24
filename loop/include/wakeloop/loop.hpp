@@ -1,13 +1,15 @@
 // wakeloop: a minimal event loop with W workers, for measuring bounded-wait wake defects.
 //
 // Each worker owns a task stack and one backend object (backends.hpp) and waits with a bound of
-// B microseconds (B = 0 blocks). Any thread may post a task to a worker; a post whose push finds
-// that worker's stack empty wakes it (the wake rule of design/minimal-loop.md, section 2.3,
-// which holds per worker because each stack has one consumer). With W = 1 the fixed loop is
-// the 2026-09 loop.
+// B microseconds (B = 0 blocks). Any thread may post a task to a worker. A post whose push finds
+// that worker's stack empty wakes it only if the worker has announced that it parks; a worker
+// that is running re-checks its stack before it parks, so it finds the post itself. This is the
+// park handshake (design/v2-defects.md, section 1): a seq_cst push and load on the poster's side,
+// a seq_cst store and load on the worker's, so at least one side sees the other. The 2026-09
+// loop, which wakes on every push onto an empty stack, is the variant plain_wake.
 //
-// The defect D is a compile-time parameter. This header holds the core's four defect sites
-// (absent wake, lazy-wake race, wrong worker, undrained edge); the backends hold the others.
+// The defect D is a compile-time parameter. This header holds the core's sites (plain wake,
+// absent wake, lazy-wake race, wrong worker, undrained edge); the backends hold the others.
 // tests/defect_sites.cmake counts every site. See design/v2-defects.md.
 #pragma once
 
@@ -24,11 +26,11 @@
 namespace wakeloop
 {
 
-	/// The measured hooks: none. Tests substitute a type whose before_push() can stop a poster
-	/// between its look at the stack and its push (design/v2-defects.md, section 4).
+	/// The measured hooks: none. Tests substitute a type whose in_park() can stop a worker between
+	/// the two steps of its park handshake (design/v2-defects.md, section 4).
 	struct NoHooks
 	{
-		void before_push() noexcept {}
+		void in_park() noexcept {}
 	};
 
 	struct Config
@@ -111,7 +113,7 @@ namespace wakeloop
 			drain(w);
 			while (!stop_.load(std::memory_order_acquire))
 			{
-				w.backend.wait();
+				park_and_wait(w);
 				w.passes.fetch_add(1, std::memory_order_relaxed);
 				w.backend.after_wait();
 				if (stop_.load(std::memory_order_acquire)) return;
@@ -140,7 +142,8 @@ namespace wakeloop
 
 		unsigned workers() const noexcept { return static_cast<unsigned>(workers_.size()); }
 
-		/// Number of wait returns of a worker so far.
+		/// Number of passes of a worker's loop so far: wait returns, plus parks that found work
+		/// on the re-check and skipped the wait.
 		std::uint64_t passes(unsigned worker = 0) const noexcept
 		{
 			return workers_[worker]->passes.load(std::memory_order_relaxed);
@@ -163,40 +166,67 @@ namespace wakeloop
 			backend_type backend;
 			std::atomic<std::uint64_t> passes{0};
 			std::atomic<bool> ran{false};
-			Task* leftover = nullptr;  // undrained edge only; worker thread only
+			std::atomic<bool> sleeping{false};  // the worker has announced that it parks
+			Task* leftover = nullptr;           // undrained edge only; worker thread only
 		};
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
 
+		/// The poster's side of the handshake: a seq_cst push, then a seq_cst load of the flag.
 		void post_unchecked(unsigned index, Task& task) noexcept
 		{
 			Worker& w = *workers_[index];
-			bool was_empty = false;
-			if constexpr (D == Defect::lazy_wake_race)
-			{
-				const bool looked_empty = w.stack.empty();
-				hooks_.before_push();
-				w.stack.push(task);
-				was_empty = looked_empty;
-			}
-			else
-			{
-				hooks_.before_push();
-				was_empty = w.stack.push(task);
-			}
-			if (!was_empty) return;
+			if (!w.stack.push(task)) return;  // an earlier post's wake, or the worker's re-check, covers it
 			if constexpr (D == Defect::absent_wake)
 			{
 				return;
 			}
-			else if constexpr (D == Defect::wrong_worker)
+			else if constexpr (D == Defect::plain_wake)
 			{
-				workers_[(index + 1) % workers_.size()]->backend.wake();
+				w.backend.wake();
 			}
 			else
 			{
-				w.backend.wake();
+				if (!w.sleeping.load(std::memory_order_seq_cst)) return;  // running: its re-check finds the task
+				if constexpr (D == Defect::wrong_worker)
+				{
+					workers_[(index + 1) % workers_.size()]->backend.wake();
+				}
+				else
+				{
+					w.backend.wake();
+				}
+			}
+		}
+
+		/// The worker's side of the handshake: announce, then re-check, then wait; a non-empty
+		/// re-check skips the wait. Every pass runs it, also when the wait returns at once (poll
+		/// mode): the loop does not know that its wait will not block.
+		void park_and_wait(Worker& w)
+		{
+			if constexpr (D == Defect::plain_wake)
+			{
+				hooks_.in_park();
+				w.backend.wait();
+			}
+			else if constexpr (D == Defect::lazy_wake_race)
+			{
+				// The look comes before the announcement: a post in between finds no sleeper,
+				// skips its wake, and the worker then waits with the post queued.
+				const bool idle = w.stack.empty();
+				hooks_.in_park();
+				if (!idle) return;
+				w.sleeping.store(true, std::memory_order_seq_cst);
+				w.backend.wait();
+				w.sleeping.store(false, std::memory_order_relaxed);
+			}
+			else
+			{
+				w.sleeping.store(true, std::memory_order_seq_cst);
+				hooks_.in_park();
+				if (w.stack.empty()) w.backend.wait();
+				w.sleeping.store(false, std::memory_order_relaxed);
 			}
 		}
 

@@ -40,6 +40,7 @@ namespace wakeloop::detail
 /// the backend compile to the fixed code; variants.hpp never selects them.
 #define WAKELOOP_INSTANTIATE_ALL(Backend)              \
 	template class Backend<Defect::none>;                \
+	template class Backend<Defect::plain_wake>;          \
 	template class Backend<Defect::absent_wake>;         \
 	template class Backend<Defect::unobserved_primitive>; \
 	template class Backend<Defect::lazy_wake_race>;      \

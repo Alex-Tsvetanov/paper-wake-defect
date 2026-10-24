@@ -145,12 +145,12 @@ namespace
 		}
 	};
 
-	/// Test hooks: stops the first post after arm() just before its push (for the lazy-wake race,
-	/// between its look at the stack and its push) until release(), at most 10 s. arm() starts a
-	/// new round.
+	/// Test hooks: stops the worker's first park after arm() between the two steps of its
+	/// handshake (for the lazy-wake race, between its look at the stack and its announcement)
+	/// until release(), at most 10 s. arm() starts a new round.
 	struct ForceHooks
 	{
-		void before_push() noexcept
+		void in_park() noexcept
 		{
 			std::unique_lock lock(m_);
 			if (!armed_) return;
@@ -412,7 +412,7 @@ namespace
 		std::deque<Probe> probes;
 		Loop loop(cfg(0));
 		Runner r(loop);
-		if constexpr (Loop::defect == Defect::none)
+		if constexpr (Loop::defect == Defect::none || Loop::defect == Defect::plain_wake)
 		{
 			// A defect variant need not deliver with a blocking wait; the posts are for the fixed loop.
 			for (int i = 0; i < 10; ++i)
@@ -626,19 +626,33 @@ namespace
 		return {};
 	}
 
-	/// One forced lazy-wake interleaving. A gate holds the worker; task a is posted (its push
-	/// finds the stack empty); a second thread starts to post b and is stopped by the hook before
-	/// its push, after its look at the stack (which holds a); the gate opens and the worker drains
-	/// a; then b's post completes. The fixed loop decides on b's push, which finds the stack
-	/// empty, and wakes; the lazy-wake race decided on the look and does not.
+	/// A task that arms the hooks when it runs: the worker's next park is the one that stops.
+	struct ArmTask : Task
+	{
+		ArmTask(ForceHooks& h, Latch& l) : hooks(&h), latch(&l) { run = &ArmTask::on_run; }
+		static void on_run(Task& t) noexcept
+		{
+			auto& a = static_cast<ArmTask&>(t);
+			a.hooks->arm();
+			a.latch->add();
+		}
+		ForceHooks* hooks;
+		Latch* latch;
+	};
+
+	/// One forced park interleaving. Task a is posted and, when it runs, arms the hook; the worker
+	/// then parks and stops between the two steps of its handshake; b is posted; the hook lets the
+	/// worker go on. The fixed loop has announced that it parks, so b's post wakes it, and its
+	/// re-check finds b anyway. The lazy-wake race has looked first: b's post finds no sleeper,
+	/// and the worker announces and waits with b queued.
 	struct ForcedRound
 	{
-		Gate gate;
+		explicit ForcedRound(ForceHooks& h) : a(h, a_ran), b(b_ran) {}
 		Latch a_ran;
 		Latch b_ran;
-		Probe a{a_ran};
-		Probe b{b_ran};
-		Clock::time_point released_at{};  // when the hook let b's post go on
+		ArmTask a;
+		Probe b;
+		Clock::time_point released_at{};  // when the hook let the worker go on
 	};
 
 	/// Runs one round. Returns empty on success; otherwise the detection or failure text, with
@@ -646,29 +660,21 @@ namespace
 	template <class HookedLoop>
 	std::optional<std::string> forced_round(HookedLoop& loop, ForcedRound& round, Clock::duration deadline, bool& failed)
 	{
-		GateOpener opener{round.gate};
 		auto& hooks = loop.hooks();
-		loop.post(round.gate);
-		if (!round.gate.entered.wait_for(1, deadline)) return "the gate task was not delivered in time";
 		loop.post(round.a);
-		hooks.arm();
-		std::thread poster([&] { loop.post(round.b); });
-		if (!hooks.wait_reached(2s))
+		if (!round.a_ran.wait_for(1, deadline)) return "task a was not delivered in time";
+		if (!hooks.wait_reached(deadline))
 		{
 			hooks.release();
-			poster.join();
 			failed = true;
-			return "the poster never reached the hook";
+			return "the worker never reached its park hook";
 		}
-		round.gate.release.add();
-		const bool a_delivered = round.a_ran.wait_for(1, deadline);
+		loop.post(round.b);
 		round.released_at = Clock::now();
 		hooks.release();
-		poster.join();
-		if (!a_delivered) return "task a was not delivered in time";
 		if (!round.b_ran.wait_for(1, deadline))
 		{
-			return "a post whose wake was decided before the worker drained the stack was not delivered in time";
+			return "a post made while the worker was parking was not delivered in time";
 		}
 		return std::nullopt;
 	}
@@ -678,9 +684,9 @@ namespace
 	Outcome detect_lazy_forced()
 	{
 		using Hooked = typename Loop::template with_hooks<ForceHooks>;
-		ForcedRound round;
 		Starters starters;
 		Hooked loop(cfg(0));
+		ForcedRound round(loop.hooks());
 		starters.post(loop);
 		Runner r(loop);
 		CHECK(starters.settle(loop, true), "the workers did not start and settle within 5 s");
@@ -802,7 +808,7 @@ namespace
 		std::vector<Clock::duration> delays;
 		for (int k = 0; k < kRounds; ++k)
 		{
-			auto& round = rounds.emplace_back();
+			auto& round = rounds.emplace_back(loop.hooks());
 			bool failed = false;
 			if (auto why = forced_round(loop, round, 5 * kBound, failed))
 			{

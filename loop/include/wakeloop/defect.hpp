@@ -11,18 +11,19 @@ namespace wakeloop
 
 	enum class Defect
 	{
-		none,                  // the fixed loop
+		none,                  // the fixed loop: a post wakes its worker only while it is parked
+		plain_wake,            // not a defect: the 2026-09 fixed loop, every post on an empty stack wakes
 		absent_wake,           // the post does not signal
 		unobserved_primitive,  // the post signals an object the wait does not watch
-		lazy_wake_race,        // the wake decision comes from a look at the stack made before the push
+		lazy_wake_race,        // the worker looks at its stack before it announces that it parks
 		wrong_worker,          // the push goes to worker i, the wake to worker (i + 1) mod W
 		no_retrigger,          // the wake registration is one-shot and never re-armed
 		undrained_edge,        // the worker runs at most kUndrainedBudget tasks per pass, then parks
 	};
 
-	inline constexpr std::array<Defect, 7> kAllVariants{
-		Defect::none,         Defect::absent_wake,  Defect::unobserved_primitive, Defect::lazy_wake_race,
-		Defect::wrong_worker, Defect::no_retrigger, Defect::undrained_edge,
+	inline constexpr std::array<Defect, 8> kAllVariants{
+		Defect::none,           Defect::plain_wake,   Defect::absent_wake,  Defect::unobserved_primitive,
+		Defect::lazy_wake_race, Defect::wrong_worker, Defect::no_retrigger, Defect::undrained_edge,
 	};
 
 	/// Tasks an undrained-edge worker runs per pass.
@@ -33,6 +34,7 @@ namespace wakeloop
 		switch (d)
 		{
 			case Defect::none: return "none";
+			case Defect::plain_wake: return "plain_wake";
 			case Defect::absent_wake: return "absent_wake";
 			case Defect::unobserved_primitive: return "unobserved_primitive";
 			case Defect::lazy_wake_race: return "lazy_wake_race";

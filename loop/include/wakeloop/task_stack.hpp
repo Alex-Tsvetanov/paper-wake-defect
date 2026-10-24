@@ -2,8 +2,8 @@
 //
 // Posters push with one compare-and-swap. The worker takes the whole stack with one exchange
 // and reverses it, so tasks from one poster run in the order they were posted. A push reports
-// whether it found the stack empty: only that push needs to wake the worker (see
-// design/minimal-loop.md, section 2.3, for why this loses no wake).
+// whether it found the stack empty: only that push may need to wake the worker (see
+// design/minimal-loop.md, section 2.3, and design/v2-defects.md, section 1).
 #pragma once
 
 #include <atomic>
@@ -26,15 +26,17 @@ namespace wakeloop
 		class TaskStack
 		{
 		public:
-			/// Pushes `task`. True when the stack was empty before the push. Release order on
-			/// success publishes the task's contents to the worker's acquire in take_all().
+			/// Pushes `task`. True when the stack was empty before the push. A successful push is
+			/// seq_cst: it publishes the task's contents to the worker's acquire in take_all(),
+			/// and it takes part in the park handshake with empty() (loop.hpp, park_and_wait):
+			/// of a push and a worker's re-check, at least one sees the other.
 			bool push(Task& task) noexcept
 			{
 				Task* head = head_.load(std::memory_order_relaxed);
 				do
 				{
 					task.next = head;
-				} while (!head_.compare_exchange_weak(head, &task, std::memory_order_release, std::memory_order_relaxed));
+				} while (!head_.compare_exchange_weak(head, &task, std::memory_order_seq_cst, std::memory_order_relaxed));
 				return head == nullptr;
 			}
 
@@ -53,9 +55,8 @@ namespace wakeloop
 				return oldest_first;
 			}
 
-			/// A look at the stack, separate from any push. Only the lazy-wake-race variant
-			/// decides on it; every other variant decides on push()'s own result.
-			bool empty() const noexcept { return head_.load(std::memory_order_acquire) == nullptr; }
+			/// The worker's look at its stack before it parks. seq_cst, for the park handshake.
+			bool empty() const noexcept { return head_.load(std::memory_order_seq_cst) == nullptr; }
 
 		private:
 			std::atomic<Task*> head_{nullptr};
