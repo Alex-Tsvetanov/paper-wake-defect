@@ -201,8 +201,10 @@ namespace wakeloop
 		}
 
 		/// The worker's side of the handshake: announce, then re-check, then wait; a non-empty
-		/// re-check skips the wait. Every pass runs it, also when the wait returns at once (poll
-		/// mode): the loop does not know that its wait will not block.
+		/// re-check skips a wait that could block. Every pass runs it, also when the wait returns
+		/// at once (poll mode): the loop does not know that its wait will not block. In poll mode
+		/// the wait itself still runs every pass, as a busy loop collects its other completions
+		/// every pass, so every variant makes the same wait calls and differs only in its wakes.
 		void park_and_wait(Worker& w)
 		{
 			if constexpr (D == Defect::plain_wake)
@@ -216,7 +218,11 @@ namespace wakeloop
 				// skips its wake, and the worker then waits with the post queued.
 				const bool idle = w.stack.empty();
 				hooks_.in_park();
-				if (!idle) return;
+				if (!idle)
+				{
+					if (w.backend.polls()) w.backend.wait();
+					return;
+				}
 				w.sleeping.store(true, std::memory_order_seq_cst);
 				w.backend.wait();
 				w.sleeping.store(false, std::memory_order_relaxed);
@@ -225,7 +231,7 @@ namespace wakeloop
 			{
 				w.sleeping.store(true, std::memory_order_seq_cst);
 				hooks_.in_park();
-				if (w.stack.empty()) w.backend.wait();
+				if (w.stack.empty() || w.backend.polls()) w.backend.wait();
 				w.sleeping.store(false, std::memory_order_relaxed);
 			}
 		}

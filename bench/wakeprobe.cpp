@@ -181,7 +181,7 @@ namespace
 		wakeloop::Defect defect = wakeloop::Defect::none;
 		bool delaying = false;  // the variant delays a single post (delays_single_posts)
 		std::string wait_method;
-		std::uint64_t loop_passes = 0;  // wait returns, summed over the workers
+		std::uint64_t loop_passes = 0;  // loop passes (wait returns and skipped waits), summed over the workers
 		std::vector<std::uint64_t> worker_passes;
 		std::string error;
 	};

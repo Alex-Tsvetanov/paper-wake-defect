@@ -142,11 +142,17 @@ bound, every defect is a delay and never a loss.
 - v1's H4 (deferred) reads "the fix costs no measurable throughput when the worker is busy".
   In v1 "the fix" is the wake compiled in. In v2 (D2, Alex 2026-10-24) "the fix" is the wake
   with the park handshake: arm A is the fixed loop, arm B is absent wake (Alex, 2026-10-23).
-  The reference comparison, plain wake against absent wake, reports what the 2026-09 fix costs.
 - "Busy" means the worker's wait returns at once because other completions are ready. The
   harness models that with the poll wait mode in both arms; posted work rides on those returns
-  and absent wake loses nothing. The fixed arm still runs its handshake on every pass and pays
-  a wake for any post that lands while its flag is set. With a bounded or blocking wait the
+  and absent wake loses nothing. In poll mode every variant calls its wait on every pass, as a
+  busy loop collects its other completions every pass, and every variant but plain wake runs
+  the handshake on every pass. So arm A and arm B differ only in the wake decision: arm A loads
+  the flag after a push onto an empty stack and wakes when the flag is set (a post that lands
+  while the worker is in its poll); arm B does neither. Absent wake is still "the fixed loop
+  without its wake", a one-site change as Alex chose; since D2 that loop includes the handshake.
+  The reference comparison is descriptive, not a hypothesis: plain wake against absent wake
+  differs by plain wake's wake on every push onto an empty stack and by absent wake's
+  handshake (one seq_cst store and load per pass). With a bounded or blocking wait the
   absent-wake arm would stall, which measures the defect, not the fix.
 - The engineering probe of 2026-10-23 and 24 (laptop, not citable) was read before the freeze to
   decide D2; `hypotheses-v2.md` discloses it. H4 keeps the 2026-09 criterion (the 95% interval

@@ -10,10 +10,11 @@
 // Every backend has the same members, which the core (loop.hpp) calls:
 //   start()       on the worker thread, once, before its first drain
 //   wait()        one wait: bounded by B, blocking for B = 0, or returning at once in poll mode
-//   after_wait()  on the worker thread, after each return of wait()
+//   after_wait()  on the worker thread, after each pass's park (whether or not it waited)
 //   before_drain() on the worker thread, after the core's stop check and before its drain
 //   wake()        any thread; ends the worker's current or next wait
 //   stop()        any thread, more than once; every later wait returns at once
+//   polls()       true in poll mode, where every wait returns at once
 #pragma once
 
 #include "wakeloop/defect.hpp"
@@ -52,6 +53,7 @@ namespace wakeloop
 		void wait();
 		void after_wait() {}
 		void before_drain() {}
+		bool polls() const noexcept { return poll_; }
 		void wake() noexcept;
 		void stop() noexcept;
 		/// "epoll_pwait2", or "epoll_wait" where the kernel lacks it.
@@ -87,6 +89,7 @@ namespace wakeloop
 		void after_wait();
 		/// Re-arms the wake poll if the kernel ended it.
 		void before_drain();
+		bool polls() const noexcept { return poll_; }
 		void wake() noexcept;
 		void stop() noexcept;
 		const char* wait_method() const noexcept;
@@ -144,6 +147,7 @@ namespace wakeloop
 		void wait();
 		void after_wait() {}
 		void before_drain() {}
+		bool polls() const noexcept { return wait_ms_ == 0; }
 		void wake() noexcept;
 		void stop() noexcept;
 		const char* wait_method() const noexcept;
@@ -171,6 +175,7 @@ namespace wakeloop
 		void wait();
 		void after_wait() {}
 		void before_drain() {}
+		bool polls() const noexcept { return poll_; }
 		void wake() noexcept;
 		void stop() noexcept;
 		const char* wait_method() const noexcept;

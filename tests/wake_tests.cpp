@@ -145,24 +145,26 @@ namespace
 		}
 	};
 
-	/// Test hooks: stops the worker's first park after arm() between the two steps of its
-	/// handshake (for the lazy-wake race, between its look at the stack and its announcement)
-	/// until release(), at most 10 s. arm() starts a new round.
+	/// Test hooks: stops the first park after arm() of the worker that called arm(), between the
+	/// two steps of its handshake (for the lazy-wake race, between its look at the stack and its
+	/// announcement) until release(), at most 10 s. Other workers pass. arm() starts a new round.
 	struct ForceHooks
 	{
 		void in_park() noexcept
 		{
 			std::unique_lock lock(m_);
-			if (!armed_) return;
+			if (!armed_ || std::this_thread::get_id() != armed_by_) return;
 			armed_ = false;
 			reached_ = true;
 			cv_.notify_all();
 			cv_.wait_for(lock, 10s, [this] { return released_; });
 		}
+		/// Call it on the worker whose next park should stop.
 		void arm()
 		{
 			std::lock_guard lock(m_);
 			armed_ = true;
+			armed_by_ = std::this_thread::get_id();
 			reached_ = false;
 			released_ = false;
 		}
@@ -184,6 +186,7 @@ namespace
 		std::mutex m_;
 		std::condition_variable cv_;
 		bool armed_ = false;
+		std::thread::id armed_by_{};
 		bool reached_ = false;
 		bool released_ = false;
 	};
