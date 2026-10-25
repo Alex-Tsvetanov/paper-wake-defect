@@ -154,10 +154,18 @@ bound, every defect is a delay and never a loss.
   differs by plain wake's wake on every push onto an empty stack and by absent wake's
   handshake (one seq_cst store and load per pass). With a bounded or blocking wait the
   absent-wake arm would stall, which measures the defect, not the fix.
-- The engineering probe of 2026-10-23 and 24 (laptop, not citable) was read before the freeze to
-  decide D2; `hypotheses-v2.md` discloses it. H4 keeps the 2026-09 criterion (the 95% interval
-  of the throughput ratio within [0.98, 1.02]), fixed before any data, so the probe cannot have
-  tuned it.
+- The engineering probes of 2026-10-23 and 24 and of 2026-10-25 (laptop, not citable) were read
+  before the freeze, the first to decide D2; `hypotheses-v2.md` discloses both. H4 keeps the
+  2026-09 criterion (the 95% interval of the throughput ratio within [0.98, 1.02]), fixed before
+  any data. Its workload (task work, producers, tasks in flight) was not fixed in 2026-09, so it
+  must be fixed before any further throughput comparison, on a basis independent of the probes.
+- **H4's workload (Alex, 2026-10-25):** the decade grid of per-task CPU work, N in {0, 1, 10,
+  100} us (`abpair --work-ns`), with W = 1, P = 1, K = 64, 8 pairs of 10 s windows per cell, and
+  the whole curve reported, not one chosen point. The grid is set before any further throughput
+  data and does not depend on the probes' ratios; the decision to vary task work came after them,
+  and the paper says so. Under empty tasks a batch runs in about the time of one poll call, so the
+  worker's flag is set for much of every pass and most posts pay a wake; task work shrinks that
+  share.
 - `bench/abpair.cpp`: P producers keep K tasks each in flight on W workers; each window runs
   one arm; pairs are ordered ABBA (or by a seeded shuffle); one process holds both arms. The
   output is one record per window with the arm, the tasks completed and each worker's passes.
@@ -199,3 +207,4 @@ The design is still a draft; these answers shape it before the freeze.
    hook, disclosed as forcing, and natural; both reported.
 7. (2026-10-24) D2: the fixed loop takes the park handshake; the 2026-09 loop stays as the
    variant plain wake, H4's reference arm; the lazy-wake race moves into the handshake.
+8. (2026-10-25) H4's workload is the decade grid of per-task work in section 6.

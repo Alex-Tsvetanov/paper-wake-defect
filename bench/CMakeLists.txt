@@ -54,4 +54,7 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
     add_test(NAME abpair_check.${_backend} COMMAND abpair --backend ${_backend} --check)
     # Serial: its poll-mode workers spin, which would slow the wake tests' threads beside it.
     set_tests_properties(abpair_check.${_backend} PROPERTIES TIMEOUT 120 LABELS "${_backend};abpair" RUN_SERIAL TRUE)
+    # With task work: the tasks read the clock to spin, but nothing measured is printed.
+    add_test(NAME abpair_check_work.${_backend} COMMAND abpair --backend ${_backend} --check --work-ns 1000)
+    set_tests_properties(abpair_check_work.${_backend} PROPERTIES TIMEOUT 120 LABELS "${_backend};abpair" RUN_SERIAL TRUE)
 endforeach()

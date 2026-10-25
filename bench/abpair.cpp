@@ -23,8 +23,13 @@
 // moment the last producer has seen its last task run. Building the loop and starting and
 // joining the threads are outside it.
 //
-// --check is the self-test for a machine that times nothing: count mode with small numbers, no
-// clock reading, and no time in the output. It exits 0 only if every window ran exactly N tasks,
+// Task work (--work-ns N, default 0): each task spins for N ns of CPU on its worker before it
+// counts as run. H4's workload is the decade grid N in {0, 1000, 10000, 100000} with W = 1,
+// P = 1, K = 64, reported in full (Alex, 2026-10-25; design/v2-defects.md, section 6).
+//
+// --check is the self-test for a machine that times nothing: count mode with small numbers and
+// no time in the output. It reads no clock, except that with --work-ns each task reads it to
+// spin; nothing it measures is printed. It exits 0 only if every window ran exactly N tasks,
 // every producer completed what it posted, each side ran R windows, and the windows ran in the
 // requested order.
 
@@ -84,6 +89,7 @@ namespace
 	constexpr unsigned kCheckInflight = 16;
 	constexpr unsigned kCheckPairs = 2;
 	constexpr std::uint64_t kCheckTasks = 2000;
+	constexpr std::int64_t kMaxWorkNs = 1'000'000'000;  // one second of work per task
 
 	struct Options
 	{
@@ -101,6 +107,7 @@ namespace
 		std::uint64_t seed = 0;
 		std::int64_t window_ms = 0;
 		std::uint64_t window_tasks = 0;
+		std::int64_t work_ns = 0;  // per-task CPU work; 0 is none
 		std::string out;
 		bool check = false;
 
@@ -117,6 +124,8 @@ namespace
 		          << "       VARIANT is one of " << benchutil::variant_list() << "\n"
 		          << "       [--workers W] (default 1) [--producers P] (default 1) [--inflight K] (default 64)\n"
 		          << "       [--pairs R] (default 8) [--order abba|shuffle] (default abba) [--seed N]\n"
+		          << "       [--work-ns N] (default 0) each task spins for N ns of CPU on its worker (at most "
+		          << kMaxWorkNs << ")\n"
 		          << "  --check  self-test: count windows of small numbers, no time anywhere in the output;\n"
 		          << "           takes no --window-ms, needs no --out, and fills W, P, K, R and N with\n"
 		          << "           " << kCheckWorkers << ", " << kCheckProducers << ", " << kCheckInflight << ", " << kCheckPairs << " and "
@@ -144,6 +153,18 @@ namespace
 		const auto* end = text.data() + text.size();
 		const auto [ptr, ec] = std::from_chars(text.data(), end, value);
 		if (ec != std::errc{} || ptr != end) usage("--seed expects a whole number, got '" + std::string(text) + "'");
+		return value;
+	}
+
+	std::int64_t parse_work(std::string_view text)
+	{
+		std::int64_t value = 0;
+		const auto* end = text.data() + text.size();
+		const auto [ptr, ec] = std::from_chars(text.data(), end, value);
+		if (ec != std::errc{} || ptr != end || value < 0 || value > kMaxWorkNs)
+		{
+			usage("--work-ns expects a whole number from 0 to " + std::to_string(kMaxWorkNs) + ", got '" + std::string(text) + "'");
+		}
 		return value;
 	}
 
@@ -198,6 +219,7 @@ namespace
 			else if (flag == "--seed") o.seed = parse_seed(value);
 			else if (flag == "--window-ms") o.window_ms = parse_positive<std::int64_t>(flag, value);
 			else if (flag == "--window-tasks") o.window_tasks = parse_positive<std::uint64_t>(flag, value);
+			else if (flag == "--work-ns") o.work_ns = parse_work(value);
 			else if (flag == "--out") o.out = value;
 			else usage("unknown flag " + std::string(flag));
 		}
@@ -239,10 +261,19 @@ namespace
 		static void on_run(wakeloop::Task& t) noexcept
 		{
 			auto& s = static_cast<Slot&>(t);
+			if (s.work_ns > 0)
+			{
+				// The task's work: a busy spin on the worker, not a sleep.
+				const auto until = Clock::now() + std::chrono::nanoseconds(s.work_ns);
+				while (Clock::now() < until)
+				{
+				}
+			}
 			++s.completed;
 			s.busy.store(false, std::memory_order_release);
 		}
 		std::atomic<bool> busy{false};
+		std::int64_t work_ns = 0;     // set before the window starts
 		std::uint64_t completed = 0;  // written by the running worker, read after the joins
 	};
 #if defined(_MSC_VER)
@@ -251,7 +282,10 @@ namespace
 
 	struct Producer
 	{
-		Producer(std::size_t k, std::uint64_t tasks) : slots(k), quota(tasks) {}
+		Producer(std::size_t k, std::uint64_t tasks, std::int64_t work_ns) : slots(k), quota(tasks)
+		{
+			for (auto& s : slots) s.work_ns = work_ns;
+		}
 		std::vector<Slot> slots;
 		std::uint64_t quota;  // count mode: how many tasks this producer posts
 		std::uint64_t posted = 0;  // producer thread only; read after the join
@@ -398,7 +432,7 @@ namespace
 		// The task storage comes first: the tasks must outlive the loop.
 		std::vector<Producer> producers;
 		producers.reserve(opt.producers);
-		for (unsigned p = 0; p < opt.producers; ++p) producers.emplace_back(opt.inflight, quota_of(opt, p));
+		for (unsigned p = 0; p < opt.producers; ++p) producers.emplace_back(opt.inflight, quota_of(opt, p), opt.work_ns);
 		Shared shared;
 		std::vector<std::string> errors(opt.workers);
 
@@ -526,7 +560,7 @@ namespace
 		  << (o.shuffle ? std::to_string(o.seed) : std::string("null")) << ",\"mode\":\"" << (o.timed() ? "timed" : "count")
 		  << "\",\"window_ms\":" << (o.timed() ? std::to_string(o.window_ms) : std::string("null"))
 		  << ",\"window_tasks\":" << (o.timed() ? std::string("null") : std::to_string(o.window_tasks))
-		  << ",\"wait\":\"poll\",\"windows\":" << done.size() << ",\"sequence\":" << sequence_json(done)
+		  << ",\"work_ns\":" << o.work_ns << ",\"wait\":\"poll\",\"windows\":" << done.size() << ",\"sequence\":" << sequence_json(done)
 		  << ",\"wait_method\":\"" << json_escape(wait_method) << "\",\"check_passed\":"
 		  << (o.check ? (failures.empty() && error.empty() ? "true" : "false") : "null") << ",\"compiler\":\""
 		  << json_escape(wakeprobe::compiler_name()) << "\",\"build_type\":\"" << ABPAIR_BUILD_TYPE << "\",\"bench_commit\":\""
