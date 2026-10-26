@@ -26,7 +26,21 @@
 // before each post from a seeded uniform distribution over a range of multiples of B
 // (--gap-frac-range), so that the phases of successive posts are spread over the wake period.
 //
-// Output: one JSON object per post, then one summary object (also printed to stdout).
+// Two protocols (--protocol). "single", the default, is the one described above: protocol S.
+// "batch" is protocol Bt (W = 1, a bound): one measured unit is a round. A gate task holds the
+// worker, kBatchTasks tasks (3 x the undrained-edge budget) are posted behind it, and the gate is
+// released; the round's delay is the latest run time of those tasks minus the release time. Posts
+// made behind a running task need no wake, so Bt is blind to a missing wake and sees a worker that
+// leaves a batch undrained (tests/wake_tests.cpp, detect_latency_batch, is its model). The gap
+// options apply as for posts, counted from the round's last run. --posts and --warmup count
+// rounds. Batch runs no calibration.
+//
+// Output: one JSON object per post (per round in batch), then one summary object (also printed
+// to stdout).
+//
+// --check is a self-test for a machine that times nothing: a few units of the chosen protocol,
+// then a check that every unit was delivered within its timeout and every task ran exactly once.
+// It prints counts and PASS or FAIL, no delay, time or rate, and writes no record file.
 
 #include "wakeloop/variants.hpp"
 
@@ -34,9 +48,11 @@
 #include "probe_platform.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <charconv>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -46,6 +62,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -85,6 +102,23 @@ namespace
 	// The largest worker count the programs accept; the wake tests stop at the same number.
 	constexpr unsigned kMaxWorkers = 64;
 
+	/// Tasks in one batch round: three undrained-edge passes (the wake tests' kBatch).
+	constexpr int kBatchTasks = 3 * static_cast<int>(wakeloop::kUndrainedBudget);
+
+	// What --check uses where the command line gives nothing.
+	constexpr std::int64_t kCheckWaitUs = 10'000;
+	constexpr std::int64_t kCheckGapUs = 2'000;
+	constexpr int kCheckPosts = 5;
+	constexpr int kCheckRounds = 3;
+
+	enum class Protocol
+	{
+		single,  // S: one post at a time
+		batch    // Bt: rounds of kBatchTasks tasks behind a held worker
+	};
+
+	constexpr const char* protocol_name(Protocol p) noexcept { return p == Protocol::batch ? "batch" : "single"; }
+
 	struct Options
 	{
 		std::string backend;
@@ -107,8 +141,11 @@ namespace
 		double gap_hi_frac = -1;
 		std::uint64_t gap_seed = 0;
 		int pm_qos_us = -1;  // >= 0: hold a /dev/cpu_dma_latency request of this many us
+		Protocol protocol = Protocol::single;
+		bool check = false;  // the no-timing self-test
 
 		bool random_gap() const { return gap_lo_frac > 0; }
+		bool batch() const { return protocol == Protocol::batch; }
 	};
 
 	enum class Kind
@@ -144,9 +181,16 @@ namespace
 		std::optional<std::int64_t> residual_ns;
 		std::optional<std::int64_t> gap_drawn_ns;  // random gap slept before this post
 
+		// Batch rounds only. post_ns is then the gate's post, exec_ns the latest run of the round's
+		// tasks, and the delay counts from the release.
+		int tasks = 0;  // > 0: a round of this many tasks
+		int ran = 0;  // tasks of the round that ran
+		std::optional<std::int64_t> release_ns;
+
 		std::optional<std::int64_t> delay_ns() const
 		{
-			return exec_ns ? std::optional<std::int64_t>(*exec_ns - post_ns) : std::nullopt;
+			if (!exec_ns) return std::nullopt;
+			return *exec_ns - (release_ns ? *release_ns : post_ns);
 		}
 	};
 
@@ -213,7 +257,11 @@ namespace
 		          << "usage: wakeprobe --backend " << benchutil::backend_list() << " --wait-us N --gap-us G --out FILE\n"
 		          << "       [--variant " << benchutil::variant_list() << "] (default none)\n"
 		          << "       [--workers W] (1 to " << kMaxWorkers << ", default 1; wrong_worker needs 2)\n"
+		          << "       [--protocol single|batch] (default single; batch needs --workers 1 and --wait-us > 0)\n"
 		          << "       [--posts N] [--warmup K] [--calibrate C] [--label TEXT] [--design NAME]\n"
+		          << "       [--check]             self-test: a few units, counts and PASS or FAIL only, no time printed, no\n"
+		          << "                             --out (--wait-us defaults to " << kCheckWaitUs << ", --gap-us to " << kCheckGapUs
+		          << ")\n"
 		          << "       --wait-us is the bound B in us; 0 blocks\n"
 		          << "       [--timerslack-ns N]   Linux: set before any thread starts; 0 = leave default (default 1)\n"
 		          << "       [--timer-period-ms N] Windows: timeBeginPeriod(N); 0 = leave default (default 0)\n"
@@ -225,7 +273,10 @@ namespace
 		          << "                             under sudo the run then drops back to the invoking user\n"
 		          << "  --posts measured posts (default 51); --warmup posts before them (default 5);\n"
 		          << "  --calibrate posts to worker 0, B/10 after each delivery, that measure B_eff for a variant that\n"
-		          << "              delays single posts (default 11, 0 = none)\n";
+		          << "              delays single posts (default 11, 0 = none; batch takes none)\n"
+		          << "  with --protocol batch, --posts and --warmup count rounds of " << kBatchTasks << " tasks\n"
+		          << "  with --check the defaults are " << kCheckPosts << " posts or " << kCheckRounds
+		          << " rounds, one warm-up per worker (at least 1) and no calibration\n";
 		std::exit(2);
 	}
 
@@ -260,19 +311,33 @@ namespace
 		Options o;
 		bool have_wait = false;
 		bool have_gap = false;
+		bool have_posts = false;
+		bool have_warmup = false;
+		bool have_calibrate = false;
 		for (int i = 1; i < argc; ++i)
 		{
 			const std::string_view flag = argv[i];
+			if (flag == "--check")  // the one flag without a value
+			{
+				o.check = true;
+				continue;
+			}
 			if (i + 1 >= argc) usage("missing value for " + std::string(flag));
 			const std::string_view value = argv[++i];
 			if (flag == "--backend") o.backend = value;
 			else if (flag == "--variant") o.variant = value;
 			else if (flag == "--workers") o.workers = parse_int<unsigned>(flag, value);
+			else if (flag == "--protocol")
+			{
+				if (value == "single") o.protocol = Protocol::single;
+				else if (value == "batch") o.protocol = Protocol::batch;
+				else usage("--protocol must be single or batch");
+			}
 			else if (flag == "--wait-us") { o.wait_us = parse_int<std::int64_t>(flag, value); have_wait = true; }
 			else if (flag == "--gap-us") { o.gap_us = parse_int<std::int64_t>(flag, value); have_gap = true; }
-			else if (flag == "--posts") o.posts = parse_int<int>(flag, value);
-			else if (flag == "--warmup") o.warmup = parse_int<int>(flag, value);
-			else if (flag == "--calibrate") o.calibrate = parse_int<int>(flag, value);
+			else if (flag == "--posts") { o.posts = parse_int<int>(flag, value); have_posts = true; }
+			else if (flag == "--warmup") { o.warmup = parse_int<int>(flag, value); have_warmup = true; }
+			else if (flag == "--calibrate") { o.calibrate = parse_int<int>(flag, value); have_calibrate = true; }
 			else if (flag == "--out") o.out = value;
 			else if (flag == "--label") o.label = value;
 			else if (flag == "--design") o.design = value;
@@ -304,6 +369,11 @@ namespace
 			}
 			else usage("unknown flag " + std::string(flag));
 		}
+		if (o.check && !have_gap && !(o.phase_frac > 0) && !o.random_gap())
+		{
+			o.gap_us = kCheckGapUs;
+			have_gap = true;
+		}
 		if (static_cast<int>(have_gap) + static_cast<int>(o.phase_frac > 0) + static_cast<int>(o.random_gap()) != 1)
 		{
 			usage("give exactly one of --gap-us, --phase-frac and --gap-frac-range");
@@ -324,9 +394,33 @@ namespace
 		{
 			usage("the variant " + o.variant + " needs --workers >= " + std::to_string(wakeloop::min_workers(o.defect)));
 		}
-		if (!have_wait || o.out.empty()) usage("--backend, --wait-us and --out are required");
+		if (o.check)
+		{
+			if (!o.out.empty()) usage("--check writes no record file; leave --out out");
+			if (o.phase_frac > 0) usage("--check takes no --phase-frac, which needs a measured B_eff");
+			if (!have_wait)
+			{
+				o.wait_us = kCheckWaitUs;
+				have_wait = true;
+			}
+			if (o.wait_us <= 0) usage("--check needs a bound (--wait-us > 0)");
+			// One warm-up and a few units per worker, and no calibration: nothing here is timed.
+			const int workers = static_cast<int>(o.workers);  // already within 1 to kMaxWorkers
+			if (!have_posts) o.posts = o.batch() ? kCheckRounds : std::max(kCheckPosts, workers);
+			if (!have_warmup) o.warmup = o.batch() ? 1 : std::max(1, workers);
+			if (!have_calibrate) o.calibrate = 0;
+		}
+		if (!have_wait || (!o.check && o.out.empty())) usage("--backend, --wait-us and --out are required");
 		if (o.wait_us < 0) usage("--wait-us must be >= 0 (0 blocks)");
 		if (o.random_gap() && o.wait_us <= 0) usage("--gap-frac-range needs a bound (--wait-us > 0)");
+		if (o.batch())
+		{
+			if (o.workers != 1) usage("--protocol batch needs --workers 1");
+			if (o.wait_us <= 0) usage("--protocol batch needs a bound (--wait-us > 0)");
+			if (o.phase_frac > 0) usage("--protocol batch takes no --phase-frac");
+			if (have_calibrate && o.calibrate > 0) usage("--protocol batch takes no calibration posts; leave --calibrate out or give 0");
+			o.calibrate = 0;  // the default of 11 does not apply to rounds
+		}
 		if (o.posts < 1 || o.warmup < 0 || o.calibrate < 0 || o.gap_us < 0 || o.timerslack_ns < 0)
 		{
 			usage("need posts >= 1 and warmup, calibrate, gap, timerslack >= 0");
@@ -363,10 +457,111 @@ namespace
 			auto& n = static_cast<PostNode&>(t);
 			const auto now = Clock::now();
 			if (n.slack_out != nullptr) n.slack_out->store(wakeprobe::read_timer_slack());
-			n.done.set_value(now);
+			// A second run is counted (--check fails on it) and does not touch the promise.
+			if (n.runs.fetch_add(1, std::memory_order_acq_rel) == 0) n.done.set_value(now);
 		}
 		std::promise<Clock::time_point> done;
 		std::atomic<long long>* slack_out = nullptr;  // the probe post reads the worker's timer slack
+		std::atomic<int> runs{0};
+	};
+
+	/// A counter with a timed wait: the batch protocol's gate signals and a round's latch.
+	class Latch
+	{
+	public:
+		void add()
+		{
+			{
+				const std::lock_guard lock(m_);
+				++count_;
+			}
+			cv_.notify_all();
+		}
+
+		/// True when the count reached n by the deadline.
+		bool wait_until(int n, Clock::time_point deadline)
+		{
+			std::unique_lock lock(m_);
+			return cv_.wait_until(lock, deadline, [&] { return count_ >= n; });
+		}
+
+	private:
+		std::mutex m_;
+		std::condition_variable cv_;
+		int count_ = 0;
+	};
+
+	/// A task that holds its worker until opened, for at most kHardLimit so that a broken run
+	/// still ends. It counts its runs; only the first one holds.
+	struct Gate : wakeloop::Task
+	{
+		Gate() { run = &Gate::on_run; }
+		static void on_run(wakeloop::Task& t) noexcept
+		{
+			auto& g = static_cast<Gate&>(t);
+			if (g.runs.fetch_add(1, std::memory_order_acq_rel) != 0) return;
+			g.entered.add();
+			g.release.wait_until(1, Clock::now() + kHardLimit);
+		}
+		void open() { release.add(); }
+
+		Latch entered;
+		Latch release;
+		std::atomic<int> runs{0};
+	};
+
+	/// Opens a gate when it leaves scope, so that an early return or a throw never leaves the
+	/// worker held when the runner joins it.
+	struct GateOpener
+	{
+		Gate& gate;
+		~GateOpener() { gate.open(); }
+	};
+
+	/// What a round's tasks share: how many have run, and a latch that the last one opens.
+	struct RoundSync
+	{
+		std::atomic<int> ran{0};
+		Latch all_ran;
+	};
+
+	/// One of a round's tasks: when it ran, and how often. Only the task that runs last takes
+	/// the latch's lock, so that the instrument adds as little as it can to the round's delay.
+	struct BatchNode : wakeloop::Task
+	{
+		BatchNode() { run = &BatchNode::on_run; }
+		static void on_run(wakeloop::Task& t) noexcept
+		{
+			auto& n = static_cast<BatchNode&>(t);
+			const auto now = Clock::now();
+			if (n.runs.fetch_add(1, std::memory_order_acq_rel) != 0) return;
+			n.ran_at = now;
+			if (n.sync->ran.fetch_add(1, std::memory_order_acq_rel) + 1 == kBatchTasks) n.sync->all_ran.add();
+		}
+		RoundSync* sync = nullptr;
+		Clock::time_point ran_at{};
+		std::atomic<int> runs{0};
+	};
+
+	/// A round's tasks: the gate, what the others share, and the others.
+	struct BatchRound
+	{
+		BatchRound()
+		{
+			for (BatchNode& t : tasks) t.sync = &sync;
+		}
+		Gate gate;
+		RoundSync sync;
+		std::array<BatchNode, static_cast<std::size_t>(kBatchTasks)> tasks;
+		int posted = 0;  // tasks posted so far, the gate included; the main thread only
+	};
+
+	/// Every task of a run. Declared before the loop, so that it outlives the workers: a unit that
+	/// is never delivered stays valid while it is still queued.
+	struct Storage
+	{
+		std::deque<PostNode> nodes;
+		std::deque<BatchRound> rounds;
 	};
 
 	// Runs worker w of the loop on a thread of its own, for every w; stops and joins them on scope
@@ -455,6 +650,61 @@ namespace
 			}
 		}
 		r.exec_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(ran.get() - epoch).count();
+		return r;
+	}
+
+	std::int64_t since(Clock::time_point epoch, Clock::time_point t)
+	{
+		return std::chrono::duration_cast<std::chrono::nanoseconds>(t - epoch).count();
+	}
+
+	// One round of protocol Bt on worker 0: post a gate and wait until the worker is inside it,
+	// post kBatchTasks tasks behind it, take the release time, open the gate, and wait for the
+	// tasks. The round's delay is the latest run time of the tasks minus the release time. Each
+	// wait has the per-post timeout; a round that misses one is timed out, and one that is still
+	// short at the hard limit is lost (exec_ns stays empty).
+	template <class Loop>
+	Record measure_round(Loop& loop, std::deque<BatchRound>& rounds, Kind kind, int index, Clock::time_point epoch,
+	                     std::chrono::microseconds timeout)
+	{
+		BatchRound& round = rounds.emplace_back();
+		const GateOpener opener{round.gate};
+
+		Record r;
+		r.index = index;
+		r.kind = kind;
+		r.worker = 0;
+		r.tasks = kBatchTasks;
+		const auto posted = Clock::now();
+		loop.post_to(0, round.gate);
+		round.posted = 1;
+		r.post_ns = since(epoch, posted);
+		if (!round.gate.entered.wait_until(1, posted + timeout))
+		{
+			r.timed_out = true;
+			if (!round.gate.entered.wait_until(1, posted + kHardLimit)) return r;  // lost
+		}
+
+		for (BatchNode& t : round.tasks) loop.post_to(0, t);
+		round.posted += kBatchTasks;
+		const auto released = Clock::now();
+		r.release_ns = since(epoch, released);
+		round.gate.open();
+
+		if (!round.sync.all_ran.wait_until(1, released + timeout))
+		{
+			r.timed_out = true;
+			if (!round.sync.all_ran.wait_until(1, released + kHardLimit))
+			{
+				r.ran = round.sync.ran.load(std::memory_order_acquire);
+				return r;  // lost
+			}
+		}
+		// The counter reached kBatchTasks, and its acquire and release chain publishes every run time.
+		Clock::time_point last{};
+		for (const BatchNode& t : round.tasks) last = std::max(last, t.ran_at);
+		r.ran = kBatchTasks;
+		r.exec_ns = since(epoch, last);
 		return r;
 	}
 
@@ -550,10 +800,11 @@ namespace
 
 	// The post sequence: probe, calibration (a delaying variant only), warmup, measured. The probe
 	// and the calibration posts go to worker 0; warmup and measured posts go round robin over
-	// the workers. Records are appended as they are taken, so a throw leaves everything before
-	// it in place.
+	// the workers. Under protocol Bt the warmup and measured units are rounds, all on worker 0,
+	// and there is no calibration. Records are appended as they are taken, so a throw leaves
+	// everything before it in place.
 	template <class Loop>
-	void run_protocol(Loop& loop, std::deque<PostNode>& nodes, const Options& opt, RunInfo& info, bool delaying,
+	void run_protocol(Loop& loop, Storage& store, const Options& opt, RunInfo& info, bool delaying,
 	                  wakeprobe::GapSleeper& gap, std::vector<Record>& records)
 	{
 		std::this_thread::sleep_for(kSettle);
@@ -561,7 +812,8 @@ namespace
 		int index = 0;
 
 		// The probe reads the worker's timer slack, which shows whether it was inherited.
-		records.push_back(measure_one(loop, nodes, Kind::Probe, index++, 0, epoch, timeout_for(opt.wait_us), &info.slack_worker));
+		records.push_back(
+			measure_one(loop, store.nodes, Kind::Probe, index++, 0, epoch, timeout_for(opt.wait_us), &info.slack_worker));
 		if (!records.back().exec_ns) return;
 
 		if (delaying)
@@ -571,13 +823,16 @@ namespace
 				// B/10 first, so the worker has re-parked: a post that lands while it is still
 				// draining would run in the same pass. Still far inside one period.
 				if (opt.wait_us > 0) gap.sleep(std::chrono::microseconds(opt.wait_us / 10));
-				records.push_back(measure_one(loop, nodes, Kind::Calib, index++, 0, epoch, timeout_for(opt.wait_us)));
+				records.push_back(measure_one(loop, store.nodes, Kind::Calib, index++, 0, epoch, timeout_for(opt.wait_us)));
 				if (!records.back().exec_ns) return;
 			}
 			info.calib = calibrate(records, opt.wait_us);
 		}
 		const std::int64_t b_eff_us = info.calib.b_eff_ns ? *info.calib.b_eff_ns / 1000 : 0;
-		info.timeout_us = timeout_for(std::max<std::int64_t>(opt.wait_us, b_eff_us)).count();
+		// Batch calibrates nothing, so it has no B_eff; its floor is the coarsest timer resolution,
+		// the longest a timed return can take with a short bound (a whole default tick on Windows).
+		const std::int64_t floor_us = opt.batch() ? static_cast<std::int64_t>(wakeprobe::coarsest_timer_us()) : 0;
+		info.timeout_us = timeout_for(std::max({opt.wait_us, b_eff_us, floor_us})).count();
 
 		std::optional<std::chrono::nanoseconds> phase_target;
 		if (opt.phase_frac > 0)
@@ -600,13 +855,20 @@ namespace
 		{
 			const Kind kind = i < opt.warmup ? Kind::Warmup : Kind::Measured;
 			const unsigned worker = static_cast<unsigned>(i) % opt.workers;
-			records.push_back(
-				measure_one(loop, nodes, kind, index++, worker, epoch, std::chrono::microseconds(info.timeout_us)));
+			const std::chrono::microseconds timeout(info.timeout_us);
+			if (opt.batch())
+			{
+				records.push_back(measure_round(loop, store.rounds, kind, index++, epoch, timeout));
+			}
+			else
+			{
+				records.push_back(measure_one(loop, store.nodes, kind, index++, worker, epoch, timeout));
+			}
 			records.back().gap_drawn_ns = drawn_ns;
 			if (!records.back().exec_ns) return;
 			if (i + 1 == total) break;
 			// A fixed or random gap after the delivery was seen, or a target phase after the
-			// delivery itself.
+			// delivery itself. In batch every gap counts from the round's last run.
 			auto g = std::chrono::microseconds(opt.gap_us);
 			if (phase_target)
 			{
@@ -617,6 +879,13 @@ namespace
 			{
 				g = draw->next();
 				drawn_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(g).count();
+			}
+			if (opt.batch())
+			{
+				// Counted from the round's last run, not from when this thread noticed it.
+				const auto due = epoch + std::chrono::nanoseconds(*records.back().exec_ns) + g;
+				g = std::max(std::chrono::microseconds::zero(),
+				             std::chrono::duration_cast<std::chrono::microseconds>(due - Clock::now()));
 			}
 			if (kind == Kind::Warmup && wakeprobe::kHaveTimerPeriod && g.count() > 1)
 			{
@@ -652,17 +921,38 @@ namespace
 	}
 	std::string gap_seed_json(const Options& o) { return o.random_gap() ? std::to_string(o.gap_seed) : "null"; }
 
+	// The fields that open a post line and a round line.
+	void line_head(std::ostringstream& s, const Options& o, const std::string& backend)
+	{
+		s << "{\"design\":\"" << json_escape(o.design) << "\",\"label\":\"" << json_escape(o.label)
+		  << "\",\"backend\":\"" << backend << "\",\"wait_us\":" << o.wait_us << ",\"gap_us\":" << gap_json(o)
+		  << ",\"phase_frac\":" << frac_json(o);
+	}
+
 	std::string post_line(const Options& o, const std::string& backend, const Record& r)
 	{
 		std::ostringstream s;
-		s << "{\"design\":\"" << json_escape(o.design) << "\",\"label\":\"" << json_escape(o.label)
-		  << "\",\"backend\":\"" << backend << "\",\"wait_us\":" << o.wait_us << ",\"gap_us\":" << gap_json(o)
-		  << ",\"phase_frac\":" << frac_json(o) << ",\"index\":" << r.index << ",\"worker\":" << r.worker
+		line_head(s, o, backend);
+		s << ",\"index\":" << r.index << ",\"worker\":" << r.worker
 		  << ",\"kind\":\"" << kind_name(r.kind)
 		  << "\",\"warmup\":" << (r.kind != Kind::Measured ? "true" : "false") << ",\"delay_ns\":" << num(r.delay_ns())
 		  << ",\"post_ns\":" << r.post_ns << ",\"exec_ns\":" << num(r.exec_ns)
 		  << ",\"timed_out\":" << (r.timed_out ? "true" : "false") << ",\"phase_ns\":" << num(r.phase_ns)
 		  << ",\"predicted_ns\":" << num(r.predicted_ns) << ",\"residual_ns\":" << num(r.residual_ns)
+		  << ",\"gap_drawn_ns\":" << num(r.gap_drawn_ns) << "}";
+		return s.str();
+	}
+
+	// A batch round. post_ns is the gate's post, release_ns the moment the gate opened and exec_ns
+	// the latest run of the round's tasks; delay_ns is exec_ns minus release_ns.
+	std::string round_line(const Options& o, const std::string& backend, const Record& r)
+	{
+		std::ostringstream s;
+		line_head(s, o, backend);
+		s << ",\"index\":" << r.index << ",\"worker\":" << r.worker << ",\"kind\":\"round\",\"warmup\":"
+		  << (r.kind != Kind::Measured ? "true" : "false") << ",\"tasks\":" << r.tasks << ",\"ran\":" << r.ran
+		  << ",\"delay_ns\":" << num(r.delay_ns()) << ",\"post_ns\":" << r.post_ns << ",\"release_ns\":" << num(r.release_ns)
+		  << ",\"exec_ns\":" << num(r.exec_ns) << ",\"timed_out\":" << (r.timed_out ? "true" : "false")
 		  << ",\"gap_drawn_ns\":" << num(r.gap_drawn_ns) << "}";
 		return s.str();
 	}
@@ -721,6 +1011,8 @@ namespace
 		  << "\",\"backend\":\"" << info.backend << "\",\"backend_requested\":\"" << json_escape(o.backend)
 		  << "\",\"wait_us\":" << o.wait_us << ",\"gap_us\":" << gap_json(o) << ",\"phase_frac\":" << frac_json(o)
 		  << ",\"gap_frac_range\":" << gap_range_json(o) << ",\"gap_seed\":" << gap_seed_json(o)
+		  << ",\"protocol\":\"" << protocol_name(o.protocol) << "\",\"batch_tasks\":"
+		  << (o.batch() ? std::to_string(kBatchTasks) : std::string("null"))
 		  << ",\"posts\":" << o.posts
 		  << ",\"warmup\":" << o.warmup << ",\"calibrate\":" << o.calibrate << ",\"count\":" << st.delays.size()
 		  << ",\"median_ns\":" << pct(st.delays, 50) << ",\"p10_ns\":" << pct(st.delays, 10)
@@ -803,11 +1095,101 @@ namespace
 		return s.str();
 	}
 
+	// ----------------------------------------------------------------------------------------
+	// The self-test (--check): counts only, nothing measured
+	// ----------------------------------------------------------------------------------------
+
+	struct CheckTally
+	{
+		int units = 0;
+		int probes = 0;
+		int calibrations = 0;
+		int warmups = 0;
+		int measured = 0;
+		int delivered = 0;
+		int timed_out = 0;
+		int lost = 0;
+		long long posted = 0;  // tasks posted: every post, and each round's gate and tasks
+		long long once = 0;  // tasks that ran exactly once
+		long long repeated = 0;  // tasks that ran more than once
+	};
+
+	// Read after the workers have been joined, so that every count is final.
+	CheckTally tally(const std::vector<Record>& records, const Storage& store)
+	{
+		CheckTally t;
+		t.units = static_cast<int>(records.size());
+		for (const Record& r : records)
+		{
+			switch (r.kind)
+			{
+				case Kind::Probe: ++t.probes; break;
+				case Kind::Calib: ++t.calibrations; break;
+				case Kind::Warmup: ++t.warmups; break;
+				case Kind::Measured: ++t.measured; break;
+			}
+			++(r.exec_ns ? t.delivered : t.lost);
+			if (r.timed_out) ++t.timed_out;
+		}
+		const auto note = [&t](int runs) {
+			if (runs == 1) ++t.once;
+			else if (runs > 1) ++t.repeated;
+		};
+		t.posted += static_cast<long long>(store.nodes.size());
+		for (const PostNode& n : store.nodes) note(n.runs.load(std::memory_order_acquire));
+		for (const BatchRound& round : store.rounds)
+		{
+			t.posted += round.posted;
+			note(round.gate.runs.load(std::memory_order_acquire));
+			if (round.posted <= 1) continue;  // the tasks were never posted
+			for (const BatchNode& n : round.tasks) note(n.runs.load(std::memory_order_acquire));
+		}
+		return t;
+	}
+
+	/// What is wrong with a finished --check run, one line each; empty when it is sound.
+	std::vector<std::string> check_faults(const CheckTally& t, int expected_units, const std::string& error)
+	{
+		std::vector<std::string> bad;
+		if (!error.empty()) bad.push_back(error);
+		if (t.units != expected_units)
+		{
+			bad.push_back("took " + std::to_string(t.units) + " units, expected " + std::to_string(expected_units));
+		}
+		if (t.lost > 0) bad.push_back(std::to_string(t.lost) + " units were never delivered");
+		if (t.timed_out > 0) bad.push_back(std::to_string(t.timed_out) + " units missed their timeout");
+		if (t.repeated > 0) bad.push_back(std::to_string(t.repeated) + " tasks ran more than once");
+		if (t.once != t.posted)
+		{
+			bad.push_back("only " + std::to_string(t.once) + " of " + std::to_string(t.posted) + " posted tasks ran exactly once");
+		}
+		return bad;
+	}
+
+	/// Prints the counts and the verdict; 0 for PASS, 1 for FAIL. No delay, time or rate.
+	int report_check(const Options& opt, const CheckTally& t, const std::vector<std::string>& faults)
+	{
+		const std::string what = std::string(" --check ") + opt.backend + " " + protocol_name(opt.protocol) + " " + opt.variant;
+		std::cout << "wakeprobe" << what << ", workers " << opt.workers << "\n"
+		          << "units " << t.units << " (" << t.probes << " probe, " << t.calibrations << " calibration, " << t.warmups
+		          << " warm-up, " << t.measured << " measured), delivered " << t.delivered << ", timed out " << t.timed_out
+		          << ", lost " << t.lost << "\n"
+		          << "tasks posted " << t.posted << ", ran exactly once " << t.once << ", ran more than once " << t.repeated << "\n";
+		if (!faults.empty())
+		{
+			for (const std::string& f : faults) std::cerr << "FAIL: wakeprobe" << what << ": " << f << "\n";
+			return 1;
+		}
+		std::cout << "PASS: wakeprobe" << what << ": " << (opt.batch() ? "rounds" : "posts") << " delivered within the timeout, "
+		          << "every task ran exactly once\n";
+		return 0;
+	}
+
 	// Everything from the loop's creation to the output, for one backend class.
 	template <class Loop>
 	int run_with(const Options& opt, RunInfo& info, const wakeprobe::TimerPeriod& period)
 	{
-		std::deque<PostNode> nodes;  // outlives the loop, which may still hold some of them
+		Storage store;  // outlives the loop, which may still hold some of the tasks
 		std::unique_ptr<Loop> loop;
 		try
 		{
@@ -833,11 +1215,15 @@ namespace
 			return 2;
 		}
 
-		std::ofstream out(opt.out, std::ios::trunc);
-		if (!out)
+		std::ofstream out;
+		if (!opt.check)
 		{
-			std::cerr << "wakeprobe: cannot write " << opt.out << "\n";
-			return 5;
+			out.open(opt.out, std::ios::trunc);
+			if (!out)
+			{
+				std::cerr << "wakeprobe: cannot write " << opt.out << "\n";
+				return 5;
+			}
 		}
 
 		std::vector<Record> records;
@@ -846,7 +1232,7 @@ namespace
 			LoopRunner<Loop> runner(*loop);
 			try
 			{
-				run_protocol(*loop, nodes, opt, info, delaying, gap, records);
+				run_protocol(*loop, store, opt, info, delaying, gap, records);
 			}
 			catch (const std::exception& e)
 			{
@@ -870,8 +1256,18 @@ namespace
 		info.gap_set_failures = gap.set_failures();
 		info.gap_wait_failures = gap.wait_failures();
 
-		annotate(records, info.calib.b_eff_ns, Loop::defect, opt.workers);
-		for (const auto& r : records) out << post_line(opt, info.backend, r) << "\n";
+		if (opt.check)
+		{
+			const CheckTally counts = tally(records, store);
+			const int expected = 1 + (delaying ? opt.calibrate : 0) + opt.warmup + opt.posts;
+			return report_check(opt, counts, check_faults(counts, expected, info.error));
+		}
+
+		if (!opt.batch()) annotate(records, info.calib.b_eff_ns, Loop::defect, opt.workers);
+		for (const auto& r : records)
+		{
+			out << (r.tasks > 0 ? round_line(opt, info.backend, r) : post_line(opt, info.backend, r)) << "\n";
+		}
 		const std::string summary = summary_line(opt, info, records, period);
 		out << summary << "\n";
 		out.flush();
@@ -893,7 +1289,7 @@ int main(int argc, char** argv)
 	const Options opt = parse_args(argc, argv);
 
 	RunInfo info;
-	info.started_utc = wakeprobe::utc_now();
+	if (!opt.check) info.started_utc = wakeprobe::utc_now();  // --check reads no wall clock
 
 	// Root-only setup first, then back to the invoking user. The request lives as long as
 	// this object, which is the whole run.

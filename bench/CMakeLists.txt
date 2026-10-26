@@ -1,5 +1,5 @@
 # The measurement programs, built from the root project:
-#   wakeprobe  post-to-execution delay on an idle wakeloop (single-post latency protocol)
+#   wakeprobe  post-to-execution delay on an idle wakeloop (single-post protocol S, batch protocol Bt)
 #   abpair     the paired A/B throughput harness of H4 (design/v2-defects.md, section 6)
 
 # Provenance, captured at configure time; the run scripts configure every time they build.
@@ -57,4 +57,20 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
     # With task work: the tasks read the clock to spin, but nothing measured is printed.
     add_test(NAME abpair_check_work.${_backend} COMMAND abpair --backend ${_backend} --check --work-ns 1000)
     set_tests_properties(abpair_check_work.${_backend} PROPERTIES TIMEOUT 120 LABELS "${_backend};abpair" RUN_SERIAL TRUE)
+endforeach()
+
+# wakeprobe's self-test: a few units of each protocol, no timing in the output, no record file.
+# It checks that every unit is delivered within the timeout and every task runs exactly once. The
+# only run of wakeprobe on a development machine. Names: wakeprobe_check.<backend>.<protocol>.<variant>.
+foreach(_backend IN LISTS WAKELOOP_BACKENDS)
+    foreach(_protocol IN ITEMS single batch)
+        foreach(_variant IN ITEMS none absent_wake undrained_edge)
+            add_test(NAME wakeprobe_check.${_backend}.${_protocol}.${_variant}
+                     COMMAND wakeprobe --backend ${_backend} --protocol ${_protocol} --variant ${_variant}
+                             --workers 1 --wait-us 10000 --gap-us 2000 --check)
+            # Serial: its posts are timed against the bound, which a busy machine would stretch.
+            set_tests_properties(wakeprobe_check.${_backend}.${_protocol}.${_variant}
+                                 PROPERTIES TIMEOUT 120 LABELS "wakeprobe" RUN_SERIAL TRUE)
+        endforeach()
+    endforeach()
 endforeach()

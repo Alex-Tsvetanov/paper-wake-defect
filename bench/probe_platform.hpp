@@ -171,6 +171,24 @@ namespace wakeprobe
 #endif
 	}
 
+	/// The coarsest system timer resolution in microseconds (NtQueryTimerResolution), or 0 where
+	/// there is none to query (Linux). A process that asked for no finer resolution can be served
+	/// at this one, so a timed return can wait this long even with a shorter bound.
+	inline long long coarsest_timer_us() noexcept
+	{
+#ifdef _WIN32
+		using QueryFn = LONG(WINAPI*)(PULONG, PULONG, PULONG);
+		HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+		if (ntdll == nullptr) return 0;
+		auto query = reinterpret_cast<QueryFn>(reinterpret_cast<void*>(GetProcAddress(ntdll, "NtQueryTimerResolution")));
+		ULONG coarsest = 0, finest = 0, current = 0;
+		if (query == nullptr || query(&coarsest, &finest, &current) != 0) return 0;
+		return (static_cast<long long>(coarsest) + 9) / 10;
+#else
+		return 0;
+#endif
+	}
+
 	/// timeBeginPeriod(ms) for the life of the object; 0 leaves the system default.
 	class TimerPeriod
 	{
