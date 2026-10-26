@@ -67,6 +67,7 @@ it. Section numbers "v1 2.3" and so on refer to that note.
 | absent wake | core, `post_to` | the wake call is omitted | v1 omit | new | v1 omit | new |
 | unobserved primitive | backend, `wake` | the post signals an object the wait does not watch | a second eventfd outside the epoll set | v1 misdirect: eventfd written, poll never armed | a packet to a second port | a second condition variable and predicate |
 | lazy-wake race | core, park | the worker looks at its stack before it announces that it parks, not after | yes | yes | yes | yes |
+| lazy-wake race, widened | core, park; backend, wait | as the lazy-wake race, with one non-blocking poll of the wait object between the look and the announcement (`hypotheses-v2.md`, section 6); on epoll and IOCP an event or packet that poll takes makes the next wait return at once | yes | yes | yes | yes |
 | wrong worker | core, `post_to` | the push goes to worker i, the wake to worker (i + 1) mod W | W >= 2 | W >= 2 | W >= 2 | W >= 2 |
 | no re-trigger | backend, registration | the wake registration is one-shot and never re-armed | `EPOLLONESHOT` | single-shot poll, re-arm skipped | N/A | N/A |
 | undrained edge | core, drain | the worker runs at most K = 64 tasks per pass, keeps the rest and parks with the full bound | yes | yes | yes | yes |
@@ -92,8 +93,9 @@ it. Section numbers "v1 2.3" and so on refer to that note.
 
 `tests/defect_sites.cmake` (X1 v2) counts the `if constexpr` lines that name each defect in
 each source and fails on any count other than this table: `loop.hpp` 2 for plain wake (post and
-park) and 1 each for absent wake, lazy-wake race, wrong worker and undrained edge; `epoll.cpp`
-2 unobserved (create, signal) and
+park), 2 for the widened lazy-wake race, and 1 each for absent wake, lazy-wake race, wrong
+worker and undrained edge; `epoll.cpp` and `iocp.cpp` 1 each for the widened plant (the wait
+after a poll that took an event); `epoll.cpp` 2 unobserved (create, signal) and
 1 no re-trigger; `uring.cpp` 1 unobserved and 2 no re-trigger (single-shot arm, skipped re-arm);
 `iocp.cpp` 2 unobserved; `condvar.cpp` 1 unobserved. No other loop source names a defect.
 
@@ -121,6 +123,7 @@ at W = 1.
 | absent wake | D | D | D | D | D | D | D | D | P | P |
 | unobserved primitive | D | D | D | D | D | D | D | D | P | P |
 | lazy-wake race | P | A | A | P | P | P | D | P | P | D |
+| lazy-wake race, widened | P | A | A | P | P | P | D | P | P | D |
 | wrong worker (W = 2) | D | D | D | D | D | D | D | D | P | P |
 | no re-trigger | P | A | A | P | D | P | P | D | P | P |
 | undrained edge | P | P | A | P | P | D | P | P | D | P |

@@ -15,6 +15,8 @@
 //   wake()        any thread; ends the worker's current or next wait
 //   stop()        any thread, more than once; every later wait returns at once
 //   polls()       true in poll mode, where every wait returns at once
+//   poll_nowait() on the worker thread: one non-blocking poll of the wait object; only the
+//                 widened lazy-wake plant calls it, inside its window
 #pragma once
 
 #include "wakeloop/defect.hpp"
@@ -54,6 +56,7 @@ namespace wakeloop
 		void after_wait() {}
 		void before_drain() {}
 		bool polls() const noexcept { return poll_; }
+		void poll_nowait();
 		void wake() noexcept;
 		void stop() noexcept;
 		/// "epoll_pwait2", or "epoll_wait" where the kernel lacks it.
@@ -69,6 +72,7 @@ namespace wakeloop
 		int wake_fd_ = -1;
 		int stop_fd_ = -1;
 		int spare_fd_ = -1;  // unobserved primitive only: an eventfd outside the epoll set
+		bool polled_ = false;  // lazy_wake_wide only: poll_nowait took an event; worker only
 	};
 
 	template <Defect D>
@@ -90,6 +94,7 @@ namespace wakeloop
 		/// Re-arms the wake poll if the kernel ended it.
 		void before_drain();
 		bool polls() const noexcept { return poll_; }
+		void poll_nowait();
 		void wake() noexcept;
 		void stop() noexcept;
 		const char* wait_method() const noexcept;
@@ -148,6 +153,7 @@ namespace wakeloop
 		void after_wait() {}
 		void before_drain() {}
 		bool polls() const noexcept { return wait_ms_ == 0; }
+		void poll_nowait();
 		void wake() noexcept;
 		void stop() noexcept;
 		const char* wait_method() const noexcept;
@@ -158,6 +164,7 @@ namespace wakeloop
 		unsigned long wait_ms_;    // DWORD; INFINITE for B = 0, 0 in poll mode
 		void* port_ = nullptr;     // HANDLE
 		void* spare_ = nullptr;    // unobserved primitive only: a second port nobody waits on
+		bool polled_ = false;      // lazy_wake_wide only: poll_nowait took a packet; worker only
 	};
 
 #endif
@@ -176,6 +183,7 @@ namespace wakeloop
 		void after_wait() {}
 		void before_drain() {}
 		bool polls() const noexcept { return poll_; }
+		void poll_nowait();
 		void wake() noexcept;
 		void stop() noexcept;
 		const char* wait_method() const noexcept;

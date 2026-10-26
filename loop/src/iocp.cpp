@@ -118,9 +118,35 @@ namespace wakeloop
 	/// One wait. A packet's key is not needed: the core checks its stop flag and takes posted
 	/// work after every return. A stop packet is consumed by one wait, but the core returns on
 	/// the flag that stop() set before posting it.
+	/// One non-blocking poll (the widened lazy-wake plant's window). A packet it dequeues is gone
+	/// from the port, so the next wait then returns at once instead (a stop packet included).
+	template <Defect D>
+	void IocpBackend<D>::poll_nowait()
+	{
+		DWORD bytes = 0;
+		ULONG_PTR key = 0;
+		OVERLAPPED* overlapped = nullptr;
+		if (GetQueuedCompletionStatus(static_cast<HANDLE>(port_), &bytes, &key, &overlapped, 0))
+		{
+			polled_ = true;
+			return;
+		}
+		const DWORD error = GetLastError();
+		if (overlapped == nullptr && error == WAIT_TIMEOUT) return;
+		throw std::system_error(static_cast<int>(error), std::system_category(), "GetQueuedCompletionStatus (poll)");
+	}
+
 	template <Defect D>
 	void IocpBackend<D>::wait()
 	{
+		if constexpr (D == Defect::lazy_wake_wide)
+		{
+			if (polled_)
+			{
+				polled_ = false;
+				return;
+			}
+		}
 		DWORD bytes = 0;
 		ULONG_PTR key = 0;
 		OVERLAPPED* overlapped = nullptr;

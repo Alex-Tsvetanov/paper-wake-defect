@@ -235,6 +235,19 @@ namespace wakeloop
 		if (static_cast<unsigned>(submitted) != n) throw std::runtime_error("io_uring: the kernel took fewer submissions than given");
 	}
 
+	/// One non-blocking poll (the widened lazy-wake plant's window): runs the deferred task work.
+	/// Completions stay in the ring until reaped, so the next wait still sees them.
+	template <Defect D>
+	void UringBackend<D>::poll_nowait()
+	{
+		int r = -1;
+		do
+		{
+			r = sys_enter(ring_.fd, 0, 0, IORING_ENTER_GETEVENTS, nullptr, 0);
+		} while (r < 0 && errno == EINTR);
+		if (r < 0) detail::throw_errno("io_uring_enter (poll)");
+	}
+
 	template <Defect D>
 	void UringBackend<D>::wait()
 	{

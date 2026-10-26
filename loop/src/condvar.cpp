@@ -45,6 +45,15 @@ namespace wakeloop
 		pending_ = false;
 	}
 
+	/// One non-blocking poll (the widened lazy-wake plant's window): reads the predicate under the
+	/// mutex and leaves it set, so the next wait still sees it.
+	template <Defect D>
+	void CondvarBackend<D>::poll_nowait()
+	{
+		std::lock_guard lock(m_);
+		[[maybe_unused]] const volatile bool seen = pending_ || stopped_;
+	}
+
 	template <Defect D>
 	void CondvarBackend<D>::wake() noexcept
 	{

@@ -25,12 +25,13 @@ set(WAKE_EXPECT_plain_wake           P      P     P    P    P   P     P     P   
 set(WAKE_EXPECT_absent_wake          D      D     D    D    D   D     D     D     P        P)
 set(WAKE_EXPECT_unobserved_primitive D      D     D    D    D   D     D     D     P        P)
 set(WAKE_EXPECT_lazy_wake_race       P      A     A    P    P   P     D     P     P        D)
+set(WAKE_EXPECT_lazy_wake_wide       P      A     A    P    P   P     D     P     P        D)
 set(WAKE_EXPECT_wrong_worker         D      D     D    D    D   D     D     D     P        P)
 set(WAKE_EXPECT_no_retrigger         P      A     A    P    D   P     P     D     P        P)
 set(WAKE_EXPECT_undrained_edge       P      P     A    P    P   D     P     P     D        P)
 
 # The worker counts each variant runs at. Wrong worker exists only from W = 2.
-set(WAKE_VARIANTS none plain_wake absent_wake unobserved_primitive lazy_wake_race wrong_worker no_retrigger undrained_edge)
+set(WAKE_VARIANTS none plain_wake absent_wake unobserved_primitive lazy_wake_race lazy_wake_wide wrong_worker no_retrigger undrained_edge)
 foreach(_variant IN LISTS WAKE_VARIANTS)
     set(WAKE_WORKERS_${_variant} 1)
 endforeach()

@@ -44,6 +44,7 @@ namespace wakeloop::detail
 	template class Backend<Defect::absent_wake>;         \
 	template class Backend<Defect::unobserved_primitive>; \
 	template class Backend<Defect::lazy_wake_race>;      \
+	template class Backend<Defect::lazy_wake_wide>;      \
 	template class Backend<Defect::wrong_worker>;        \
 	template class Backend<Defect::no_retrigger>;        \
 	template class Backend<Defect::undrained_edge>;

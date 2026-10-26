@@ -201,6 +201,7 @@ namespace
 			case wakeloop::Defect::none:
 			case wakeloop::Defect::plain_wake:
 			case wakeloop::Defect::lazy_wake_race:
+			case wakeloop::Defect::lazy_wake_wide:
 			case wakeloop::Defect::undrained_edge: return false;
 		}
 		return false;

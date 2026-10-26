@@ -94,11 +94,30 @@ namespace wakeloop
 		return use_pwait2_.load(std::memory_order_relaxed) ? "epoll_pwait2" : "epoll_wait";
 	}
 
+	/// One non-blocking poll (the widened lazy-wake plant's window). An edge-triggered event it
+	/// takes is not reported again, so the next wait then returns at once instead.
+	template <Defect D>
+	void EpollBackend<D>::poll_nowait()
+	{
+		std::array<epoll_event, 4> events{};
+		const int n = ::epoll_wait(epoll_fd_, events.data(), static_cast<int>(events.size()), 0);
+		if (n < 0 && errno != EINTR) detail::throw_errno("epoll_wait (poll)");
+		if (n > 0) polled_ = true;
+	}
+
 	/// One wait. The events themselves are not needed: the core checks its stop flag and takes
 	/// posted work after every return.
 	template <Defect D>
 	void EpollBackend<D>::wait()
 	{
+		if constexpr (D == Defect::lazy_wake_wide)
+		{
+			if (polled_)
+			{
+				polled_ = false;
+				return;
+			}
+		}
 		std::array<epoll_event, 4> events{};
 		const int max_events = static_cast<int>(events.size());
 		int n = -1;

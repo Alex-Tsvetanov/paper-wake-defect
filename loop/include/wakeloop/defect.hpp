@@ -16,14 +16,16 @@ namespace wakeloop
 		absent_wake,           // the post does not signal
 		unobserved_primitive,  // the post signals an object the wait does not watch
 		lazy_wake_race,        // the worker looks at its stack before it announces that it parks
+		lazy_wake_wide,        // lazy_wake_race with one non-blocking poll of the wait object in its window
 		wrong_worker,          // the push goes to worker i, the wake to worker (i + 1) mod W
 		no_retrigger,          // the wake registration is one-shot and never re-armed
 		undrained_edge,        // the worker runs at most kUndrainedBudget tasks per pass, then parks
 	};
 
-	inline constexpr std::array<Defect, 8> kAllVariants{
-		Defect::none,           Defect::plain_wake,   Defect::absent_wake,  Defect::unobserved_primitive,
-		Defect::lazy_wake_race, Defect::wrong_worker, Defect::no_retrigger, Defect::undrained_edge,
+	inline constexpr std::array<Defect, 9> kAllVariants{
+		Defect::none,           Defect::plain_wake,     Defect::absent_wake,  Defect::unobserved_primitive,
+		Defect::lazy_wake_race, Defect::lazy_wake_wide, Defect::wrong_worker, Defect::no_retrigger,
+		Defect::undrained_edge,
 	};
 
 	/// Tasks an undrained-edge worker runs per pass.
@@ -38,6 +40,7 @@ namespace wakeloop
 			case Defect::absent_wake: return "absent_wake";
 			case Defect::unobserved_primitive: return "unobserved_primitive";
 			case Defect::lazy_wake_race: return "lazy_wake_race";
+			case Defect::lazy_wake_wide: return "lazy_wake_wide";
 			case Defect::wrong_worker: return "wrong_worker";
 			case Defect::no_retrigger: return "no_retrigger";
 			case Defect::undrained_edge: return "undrained_edge";

@@ -44,6 +44,7 @@ namespace wakeloop
 					f.template operator()<Loop<Backend, Defect::unobserved_primitive, Hooks>>();
 					return true;
 				case Defect::lazy_wake_race: f.template operator()<Loop<Backend, Defect::lazy_wake_race, Hooks>>(); return true;
+				case Defect::lazy_wake_wide: f.template operator()<Loop<Backend, Defect::lazy_wake_wide, Hooks>>(); return true;
 				case Defect::wrong_worker: f.template operator()<Loop<Backend, Defect::wrong_worker, Hooks>>(); return true;
 				case Defect::no_retrigger: f.template operator()<Loop<Backend, Defect::no_retrigger, Hooks>>(); return true;
 				case Defect::undrained_edge: f.template operator()<Loop<Backend, Defect::undrained_edge, Hooks>>(); return true;

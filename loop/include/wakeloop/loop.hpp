@@ -212,11 +212,14 @@ namespace wakeloop
 				hooks_.in_park();
 				w.backend.wait();
 			}
-			else if constexpr (D == Defect::lazy_wake_race)
+			else if constexpr (D == Defect::lazy_wake_race || D == Defect::lazy_wake_wide)
 			{
 				// The look comes before the announcement: a post in between finds no sleeper,
 				// skips its wake, and the worker then waits with the post queued.
 				const bool idle = w.stack.empty();
+				// The widened plant: one real operation in the window, as a loop that checks for
+				// I/O between its queue check and its park (hypotheses-v2.md, section 6).
+				if constexpr (D == Defect::lazy_wake_wide) w.backend.poll_nowait();
 				hooks_.in_park();
 				if (!idle)
 				{
