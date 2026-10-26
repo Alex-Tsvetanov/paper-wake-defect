@@ -39,8 +39,9 @@ it. Section numbers "v1 2.3" and so on refer to that note.
   path runs in the fixed instantiation, so an A/B between variants compares exactly the sites.
   The fixed instantiation still carries a few defect-only members that it never uses: the
   spare descriptor or port handle (left empty), the condition variable backend's spare mutex,
-  condition variable and predicate, and the undrained-edge leftover pointer. Both arms of an
-  A/B carry the same members.
+  condition variable and predicate, the epoll and IOCP backends' `polled_` flag (widened
+  lazy-wake race only) and the undrained-edge leftover pointer. Both arms of an A/B carry the
+  same members.
 - One binary instantiates every variant on every backend of the platform. `variants.hpp`
   dispatches by backend name and variant name at run time. That removes the build-layout noise
   of separate builds (memory: iteration grids need same-arm builds).
@@ -81,8 +82,11 @@ it. Section numbers "v1 2.3" and so on refer to that note.
   shape of the Netty case (`historical/candidates-2026-10.md`: the queue check before the flag
   reset). The natural window is a few instructions wide. The tests force it with the hook (the
   worker stops between its look and its announcement while the test posts). The measured
-  instantiation has no hook. The campaign measures the natural window and a plant widened by a
-  stated delay (section 9); the widened plant is not built yet.
+  instantiation has no hook. The campaign measures the natural window and a widened plant
+  (built in 0cb37ee): between its look and its announcement the worker makes one call of its
+  backend's own wait with a zero timeout (epoll_wait, io_uring_enter, GetQueuedCompletionStatus,
+  or the condition variable's wait_for). Decision 2 below named a stated delay; the one-call
+  plant replaces it, and that departure goes to Alex with the freeze package.
 - **Undrained edge.** Edge-triggered sources must be drained until empty; reading part of the
   data and then parking leaves no new edge for the rest. Here the "edge" is the wake rule's
   empty to non-empty transition, and the leftover runs only at the next return of the wait.
@@ -185,8 +189,10 @@ bound, every defect is a delay and never a loss.
 ## 7. wakeprobe
 
 wakeprobe selects the backend, the variant and W at run time. The single-post latency protocol
-is blind to the lazy-wake race (unforced) and to undrained edge by construction; the campaign
-needs the batch and forced protocols of D9 and D10 in wakeprobe as well. That is open work.
+is blind to the lazy-wake race (unforced) and to undrained edge by construction, so wakeprobe
+also has protocol Bt (batch rounds, the shape of D9; 5e0fc7e). The forced protocol of D10 needs
+the test hook, which the measured binary does not have; it stays a white-box functional test
+and is not part of the campaign.
 
 ## 8. Comparison with ThreadSanitizer
 
@@ -201,7 +207,8 @@ The design is still a draft; these answers shape it before the freeze.
 
 1. The six definitions and the N/A cells above: accepted as drafted.
 2. Lazy-wake race in the campaign: both the natural window and a plant widened by a stated
-   delay, each reported. The widened plant is not built yet.
+   delay, each reported. (Built in 0cb37ee as one zero-timeout call of the backend's wait,
+   not a delay; see section 4. The departure goes to Alex with the freeze package.)
 3. Worker counts W in {1, 2, 4} with one poster.
 4. H4: the fixed loop against absent wake in poll mode, as in section 6.
 5. No seventh row for now.

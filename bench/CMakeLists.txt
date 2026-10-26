@@ -64,7 +64,7 @@ endforeach()
 # only run of wakeprobe on a development machine. Names: wakeprobe_check.<backend>.<protocol>.<variant>.
 foreach(_backend IN LISTS WAKELOOP_BACKENDS)
     foreach(_protocol IN ITEMS single batch)
-        foreach(_variant IN ITEMS none absent_wake undrained_edge)
+        foreach(_variant IN ITEMS none absent_wake undrained_edge lazy_wake_race lazy_wake_wide)
             add_test(NAME wakeprobe_check.${_backend}.${_protocol}.${_variant}
                      COMMAND wakeprobe --backend ${_backend} --protocol ${_protocol} --variant ${_variant}
                              --workers 1 --wait-us 10000 --gap-us 2000 --check)
@@ -72,5 +72,14 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
             set_tests_properties(wakeprobe_check.${_backend}.${_protocol}.${_variant}
                                  PROPERTIES TIMEOUT 120 LABELS "wakeprobe" RUN_SERIAL TRUE)
         endforeach()
+    endforeach()
+    # The campaign's short bound with no calibration: every timeout must cover a whole timer tick
+    # (Windows rounds a 1 ms wait up to its resolution), and the timer gap unit must parse.
+    foreach(_protocol IN ITEMS single batch)
+        add_test(NAME wakeprobe_check.${_backend}.${_protocol}.absent_wake.b1ms
+                 COMMAND wakeprobe --backend ${_backend} --protocol ${_protocol} --variant absent_wake
+                         --workers 1 --wait-us 1000 --gap-frac-range 0.1:3.0 --gap-unit timer --check)
+        set_tests_properties(wakeprobe_check.${_backend}.${_protocol}.absent_wake.b1ms
+                             PROPERTIES TIMEOUT 120 LABELS "wakeprobe" RUN_SERIAL TRUE)
     endforeach()
 endforeach()

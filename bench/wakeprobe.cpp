@@ -136,10 +136,11 @@ namespace
 		long long timerslack_ns = wakeprobe::kHaveTimerSlack ? 1 : 0;
 		unsigned timer_period_ms = 0;
 		double phase_frac = -1;  // > 0: post at this fraction of B_eff after each delivery
-		// > 0: each gap drawn uniformly from [gap_lo_frac x B, gap_hi_frac x B] with gap_seed
+		// > 0: each gap drawn uniformly from [gap_lo_frac x unit, gap_hi_frac x unit] with gap_seed
 		double gap_lo_frac = -1;
 		double gap_hi_frac = -1;
 		std::uint64_t gap_seed = 0;
+		bool gap_unit_timer = false;  // the range's unit: B, or the larger of B and the coarsest timer resolution
 		int pm_qos_us = -1;  // >= 0: hold a /dev/cpu_dma_latency request of this many us
 		Protocol protocol = Protocol::single;
 		bool check = false;  // the no-timing self-test
@@ -175,7 +176,8 @@ namespace
 		unsigned worker = 0;  // the worker the post went to
 		std::int64_t post_ns = 0;  // since the run epoch
 		std::optional<std::int64_t> exec_ns;
-		bool timed_out = false;
+		bool timed_out = false;  // the post missed its timeout; a round: its tasks did, after the release
+		bool gate_timed_out = false;  // a round only: its gate missed the timeout
 		std::optional<std::int64_t> phase_ns;
 		std::optional<std::int64_t> predicted_ns;
 		std::optional<std::int64_t> residual_ns;
@@ -208,6 +210,7 @@ namespace
 		std::string backend;
 		std::string started_utc;
 		std::int64_t timeout_us = 0;
+		std::int64_t gap_unit_us = 0;  // the unit of --gap-frac-range in this run (0 without it)
 		Calibration calib;
 		std::optional<int> slack_set_rc;  // Linux timer slack
 		long long slack_main = -1;
@@ -268,7 +271,9 @@ namespace
 		          << "       [--phase-frac F]      instead of --gap-us: post F x B_eff after each delivery (a variant that\n"
 		          << "                             delays single posts, W = 1)\n"
 		          << "       [--gap-frac-range LO:HI] instead of --gap-us: each gap drawn uniformly from\n"
-		          << "                             [LO x B, HI x B] (needs B > 0); [--gap-seed N] seeds it (default 0)\n"
+		          << "                             [LO x B, HI x B] (needs B > 0); [--gap-seed N] seeds it (default 0);\n"
+		          << "                             [--gap-unit timer] uses the larger of B and the coarsest timer\n"
+		          << "                             resolution (Windows) as the unit instead of B (default bound)\n"
 		          << "       [--pm-qos-us N]       Linux, needs root: hold a CPU latency request of N us for the run;\n"
 		          << "                             under sudo the run then drops back to the invoking user\n"
 		          << "  --posts measured posts (default 51); --warmup posts before them (default 5);\n"
@@ -361,6 +366,11 @@ namespace
 				if (!(o.gap_lo_frac < o.gap_hi_frac)) usage("--gap-frac-range needs LO < HI");
 			}
 			else if (flag == "--gap-seed") o.gap_seed = parse_int<std::uint64_t>(flag, value);
+			else if (flag == "--gap-unit")
+			{
+				if (value == "timer") o.gap_unit_timer = true;
+				else if (value != "bound") usage("--gap-unit expects bound or timer");
+			}
 			else if (flag == "--pm-qos-us")
 			{
 				if (!wakeprobe::kHaveTimerSlack) usage("--pm-qos-us exists only on Linux");
@@ -413,6 +423,7 @@ namespace
 		if (!have_wait || (!o.check && o.out.empty())) usage("--backend, --wait-us and --out are required");
 		if (o.wait_us < 0) usage("--wait-us must be >= 0 (0 blocks)");
 		if (o.random_gap() && o.wait_us <= 0) usage("--gap-frac-range needs a bound (--wait-us > 0)");
+		if (o.gap_unit_timer && !o.random_gap()) usage("--gap-unit timer needs --gap-frac-range");
 		if (o.batch())
 		{
 			if (o.workers != 1) usage("--protocol batch needs --workers 1");
@@ -681,7 +692,7 @@ namespace
 		r.post_ns = since(epoch, posted);
 		if (!round.gate.entered.wait_until(1, posted + timeout))
 		{
-			r.timed_out = true;
+			r.gate_timed_out = true;
 			if (!round.gate.entered.wait_until(1, posted + kHardLimit)) return r;  // lost
 		}
 
@@ -811,9 +822,17 @@ namespace
 		const auto epoch = Clock::now();
 		int index = 0;
 
+		// Until B_eff is measured, a timed return can take the coarsest timer resolution with a
+		// short bound (a whole default tick on Windows), so every timeout counts from the larger of
+		// B and that floor. B = 0 keeps the unbounded timeout.
+		const std::int64_t floor_us = static_cast<std::int64_t>(wakeprobe::coarsest_timer_us());
+		const auto bounded_timeout = [&opt, floor_us](std::int64_t b_eff_us) {
+			return opt.wait_us > 0 ? timeout_for(std::max({opt.wait_us, b_eff_us, floor_us})) : timeout_for(0);
+		};
+
 		// The probe reads the worker's timer slack, which shows whether it was inherited.
 		records.push_back(
-			measure_one(loop, store.nodes, Kind::Probe, index++, 0, epoch, timeout_for(opt.wait_us), &info.slack_worker));
+			measure_one(loop, store.nodes, Kind::Probe, index++, 0, epoch, bounded_timeout(0), &info.slack_worker));
 		if (!records.back().exec_ns) return;
 
 		if (delaying)
@@ -823,16 +842,13 @@ namespace
 				// B/10 first, so the worker has re-parked: a post that lands while it is still
 				// draining would run in the same pass. Still far inside one period.
 				if (opt.wait_us > 0) gap.sleep(std::chrono::microseconds(opt.wait_us / 10));
-				records.push_back(measure_one(loop, store.nodes, Kind::Calib, index++, 0, epoch, timeout_for(opt.wait_us)));
+				records.push_back(measure_one(loop, store.nodes, Kind::Calib, index++, 0, epoch, bounded_timeout(0)));
 				if (!records.back().exec_ns) return;
 			}
 			info.calib = calibrate(records, opt.wait_us);
 		}
-		const std::int64_t b_eff_us = info.calib.b_eff_ns ? *info.calib.b_eff_ns / 1000 : 0;
-		// Batch calibrates nothing, so it has no B_eff; its floor is the coarsest timer resolution,
-		// the longest a timed return can take with a short bound (a whole default tick on Windows).
-		const std::int64_t floor_us = opt.batch() ? static_cast<std::int64_t>(wakeprobe::coarsest_timer_us()) : 0;
-		info.timeout_us = timeout_for(std::max({opt.wait_us, b_eff_us, floor_us})).count();
+		// Batch, the fixed loop and --check calibrate nothing; they keep the floor.
+		info.timeout_us = bounded_timeout(info.calib.b_eff_ns ? *info.calib.b_eff_ns / 1000 : 0).count();
 
 		std::optional<std::chrono::nanoseconds> phase_target;
 		if (opt.phase_frac > 0)
@@ -845,8 +861,11 @@ namespace
 		std::optional<GapDraw> draw;
 		if (opt.random_gap())
 		{
-			draw.emplace(opt.gap_lo_frac * static_cast<double>(opt.wait_us), opt.gap_hi_frac * static_cast<double>(opt.wait_us),
-			             opt.gap_seed);
+			// With --gap-unit timer the range spans the same share of the wake period whether or not
+			// the system rounds B up to its timer resolution.
+			info.gap_unit_us = opt.gap_unit_timer ? std::max(opt.wait_us, floor_us) : opt.wait_us;
+			const auto unit = static_cast<double>(info.gap_unit_us);
+			draw.emplace(opt.gap_lo_frac * unit, opt.gap_hi_frac * unit, opt.gap_seed);
 		}
 		std::optional<std::int64_t> drawn_ns;  // the random gap slept before the next post
 
@@ -943,17 +962,20 @@ namespace
 		return s.str();
 	}
 
-	// A batch round. post_ns is the gate's post, release_ns the moment the gate opened and exec_ns
-	// the latest run of the round's tasks; delay_ns is exec_ns minus release_ns.
+	// A batch round ("unit":"round", "kind" warmup or measured). post_ns is the gate's post,
+	// release_ns the moment the gate opened and exec_ns the latest run of the round's tasks;
+	// delay_ns is exec_ns minus release_ns. gate_timed_out: the gate missed the timeout;
+	// timed_out: the tasks missed it after the release.
 	std::string round_line(const Options& o, const std::string& backend, const Record& r)
 	{
 		std::ostringstream s;
 		line_head(s, o, backend);
-		s << ",\"index\":" << r.index << ",\"worker\":" << r.worker << ",\"kind\":\"round\",\"warmup\":"
-		  << (r.kind != Kind::Measured ? "true" : "false") << ",\"tasks\":" << r.tasks << ",\"ran\":" << r.ran
+		s << ",\"index\":" << r.index << ",\"worker\":" << r.worker << ",\"unit\":\"round\",\"kind\":\""
+		  << kind_name(r.kind) << "\",\"warmup\":" << (r.kind != Kind::Measured ? "true" : "false")
+		  << ",\"tasks\":" << r.tasks << ",\"ran\":" << r.ran
 		  << ",\"delay_ns\":" << num(r.delay_ns()) << ",\"post_ns\":" << r.post_ns << ",\"release_ns\":" << num(r.release_ns)
-		  << ",\"exec_ns\":" << num(r.exec_ns) << ",\"timed_out\":" << (r.timed_out ? "true" : "false")
-		  << ",\"gap_drawn_ns\":" << num(r.gap_drawn_ns) << "}";
+		  << ",\"exec_ns\":" << num(r.exec_ns) << ",\"gate_timed_out\":" << (r.gate_timed_out ? "true" : "false")
+		  << ",\"timed_out\":" << (r.timed_out ? "true" : "false") << ",\"gap_drawn_ns\":" << num(r.gap_drawn_ns) << "}";
 		return s.str();
 	}
 
@@ -966,7 +988,7 @@ namespace
 		int timeouts = 0;
 		int lost = 0;
 		int jumps = 0;  // |residual| > B_eff / 2
-		int over_half_b = 0;  // delay > B / 2, the bound's own half (0 when B = 0)
+		int over_half_b = 0;  // delay > B / 2 with the nominal B (0 when B = 0); the analysis uses B_eff
 	};
 
 	Stats measured_stats(const std::vector<Record>& records, const std::optional<std::int64_t>& b_eff, std::int64_t bound_us)
@@ -975,7 +997,7 @@ namespace
 		for (const auto& r : records)
 		{
 			if (r.kind != Kind::Measured) continue;
-			if (r.timed_out) ++s.timeouts;
+			if (r.timed_out || r.gate_timed_out) ++s.timeouts;
 			const auto d = r.delay_ns();
 			if (!d)
 			{
@@ -1011,6 +1033,8 @@ namespace
 		  << "\",\"backend\":\"" << info.backend << "\",\"backend_requested\":\"" << json_escape(o.backend)
 		  << "\",\"wait_us\":" << o.wait_us << ",\"gap_us\":" << gap_json(o) << ",\"phase_frac\":" << frac_json(o)
 		  << ",\"gap_frac_range\":" << gap_range_json(o) << ",\"gap_seed\":" << gap_seed_json(o)
+		  << ",\"gap_unit\":" << (o.random_gap() ? (o.gap_unit_timer ? "\"timer\"" : "\"bound\"") : "null")
+		  << ",\"gap_unit_us\":" << (o.random_gap() ? std::to_string(info.gap_unit_us) : std::string("null"))
 		  << ",\"protocol\":\"" << protocol_name(o.protocol) << "\",\"batch_tasks\":"
 		  << (o.batch() ? std::to_string(kBatchTasks) : std::string("null"))
 		  << ",\"posts\":" << o.posts
@@ -1036,7 +1060,7 @@ namespace
 		{
 			s << ",\"median_residual_over_beff\":null,\"median_abs_residual_over_beff\":null";
 		}
-		s << ",\"residual_jumps\":" << st.jumps << ",\"count_over_half_b\":" << st.over_half_b
+		s << ",\"residual_jumps\":" << st.jumps << ",\"count_over_half_b_nominal\":" << st.over_half_b
 		  << ",\"percentile_method\":\"nearest-rank\"";
 
 		if (wakeprobe::kHaveTimerSlack)
@@ -1129,7 +1153,7 @@ namespace
 				case Kind::Measured: ++t.measured; break;
 			}
 			++(r.exec_ns ? t.delivered : t.lost);
-			if (r.timed_out) ++t.timed_out;
+			if (r.timed_out || r.gate_timed_out) ++t.timed_out;
 		}
 		const auto note = [&t](int runs) {
 			if (runs == 1) ++t.once;

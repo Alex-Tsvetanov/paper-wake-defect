@@ -236,7 +236,9 @@ namespace wakeloop
 	}
 
 	/// One non-blocking poll (the widened lazy-wake plant's window): runs the deferred task work.
-	/// Completions stay in the ring until reaped, so the next wait still sees them.
+	/// Completions stay in the ring until after_wait reaps them: on the idle path the next wait
+	/// returns at once if one is there; on the busy path the core skips the wait and after_wait
+	/// reaps it.
 	template <Defect D>
 	void UringBackend<D>::poll_nowait()
 	{

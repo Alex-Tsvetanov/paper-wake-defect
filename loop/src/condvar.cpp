@@ -45,13 +45,17 @@ namespace wakeloop
 		pending_ = false;
 	}
 
-	/// One non-blocking poll (the widened lazy-wake plant's window): reads the predicate under the
-	/// mutex and leaves it set, so the next wait still sees it.
+	/// One non-blocking poll (the widened lazy-wake plant's window): one call of the backend's own
+	/// wait with a zero timeout and no predicate, as epoll_wait, io_uring_enter and
+	/// GetQueuedCompletionStatus are called with zero. Whether it enters the kernel is the
+	/// library's business. It releases the mutex while it waits, so a wake can land in it and its
+	/// notify can be absorbed here; that loses nothing, because the predicate stays set and the
+	/// next wait reads it before it sleeps.
 	template <Defect D>
 	void CondvarBackend<D>::poll_nowait()
 	{
-		std::lock_guard lock(m_);
-		[[maybe_unused]] const volatile bool seen = pending_ || stopped_;
+		std::unique_lock lock(m_);
+		[[maybe_unused]] const auto status = cv_.wait_for(lock, std::chrono::microseconds(0));
 	}
 
 	template <Defect D>
