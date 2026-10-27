@@ -108,6 +108,8 @@ namespace
 		std::int64_t window_ms = 0;
 		std::uint64_t window_tasks = 0;
 		std::int64_t work_ns = 0;  // per-task CPU work; 0 is none
+		std::vector<unsigned> worker_cpus;  // empty: unpinned; else one CPU per worker
+		std::vector<unsigned> producer_cpus;  // empty: unpinned; else one CPU per producer
 		std::string out;
 		bool check = false;
 
@@ -126,6 +128,8 @@ namespace
 		          << "       [--pairs R] (default 8) [--order abba|shuffle] (default abba) [--seed N]\n"
 		          << "       [--work-ns N] (default 0) each task spins for N ns of CPU on its worker (at most "
 		          << kMaxWorkNs << ")\n"
+		          << "       [--worker-cpus LIST] [--producer-cpus LIST] pin each worker (producer) thread to the\n"
+		          << "       next CPU of a comma-separated list, one per thread\n"
 		          << "  --check  self-test: count windows of small numbers, no time anywhere in the output;\n"
 		          << "           takes no --window-ms, needs no --out, and fills W, P, K, R and N with\n"
 		          << "           " << kCheckWorkers << ", " << kCheckProducers << ", " << kCheckInflight << ", " << kCheckPairs << " and "
@@ -220,6 +224,12 @@ namespace
 			else if (flag == "--window-ms") o.window_ms = parse_positive<std::int64_t>(flag, value);
 			else if (flag == "--window-tasks") o.window_tasks = parse_positive<std::uint64_t>(flag, value);
 			else if (flag == "--work-ns") o.work_ns = parse_work(value);
+			else if (flag == "--worker-cpus" || flag == "--producer-cpus")
+			{
+				auto& cpus = flag == "--worker-cpus" ? o.worker_cpus : o.producer_cpus;
+				cpus = benchutil::parse_cpu_list(value);
+				if (cpus.empty()) usage(std::string(flag) + " expects a comma-separated list of CPU numbers");
+			}
 			else if (flag == "--out") o.out = value;
 			else usage("unknown flag " + std::string(flag));
 		}
@@ -230,6 +240,11 @@ namespace
 		if (o.workers > kMaxWorkers) usage("--workers is at most " + std::to_string(kMaxWorkers));
 		if (o.producers > kMaxProducers) usage("--producers is at most " + std::to_string(kMaxProducers));
 		if (o.inflight > kMaxInflight) usage("--inflight is at most " + std::to_string(kMaxInflight));
+		if (!o.worker_cpus.empty() && o.worker_cpus.size() != o.workers) usage("--worker-cpus needs one CPU per worker");
+		if (!o.producer_cpus.empty() && o.producer_cpus.size() != o.producers)
+		{
+			usage("--producer-cpus needs one CPU per producer");
+		}
 		o.defect_a = parse_arm("--arm-a", o.arm_a, o);
 		o.defect_b = parse_arm("--arm-b", o.arm_b, o);
 		if (o.check)
@@ -395,24 +410,41 @@ namespace
 		}
 	}
 
+	/// Pins the calling thread to cpus[i] when CPUs were given. A failure ends the window: its
+	/// result would come from a thread off its CPU.
+	void pin_thread(const std::vector<unsigned>& cpus, unsigned i, Shared& shared, std::string& error, const char* role)
+	{
+		if (cpus.empty()) return;
+		const int rc = wakeprobe::pin_current_thread(cpus[i]);
+		if (rc == 0) return;
+		error = std::string("cannot pin ") + role + " " + std::to_string(i) + " to CPU " + std::to_string(cpus[i]) +
+		        ": error " + std::to_string(rc);
+		shared.failed.store(true, std::memory_order_release);
+	}
+
 	/// Starts the threads of a window. A thread that cannot start sets `failed` and stops the
-	/// rest of the starts.
+	/// rest of the starts. Each thread pins itself first (pin_errors: workers, then producers).
 	template <class Loop>
 	void start_threads(Loop& loop, Shared& shared, const Options& opt, std::vector<Producer>& producers,
-	                   std::vector<std::string>& errors, std::vector<std::thread>& worker_threads,
-	                   std::vector<std::thread>& producer_threads, std::string& error)
+	                   std::vector<std::string>& errors, std::vector<std::string>& pin_errors,
+	                   std::vector<std::thread>& worker_threads, std::vector<std::thread>& producer_threads, std::string& error)
 	{
 		const bool timed = opt.timed();
 		try
 		{
 			for (unsigned w = 0; w < opt.workers; ++w)
 			{
-				worker_threads.emplace_back([&loop, &shared, &errors, w] { work(loop, shared, w, errors[w]); });
+				worker_threads.emplace_back([&loop, &shared, &opt, &errors, &pin_errors, w] {
+					pin_thread(opt.worker_cpus, w, shared, pin_errors[w], "worker");
+					work(loop, shared, w, errors[w]);
+				});
 			}
 			for (unsigned p = 0; p < opt.producers; ++p)
 			{
-				producer_threads.emplace_back(
-					[&loop, &shared, &producers, p, timed, first = p % opt.workers] { produce(loop, shared, producers[p], first, timed); });
+				producer_threads.emplace_back([&loop, &shared, &opt, &producers, &pin_errors, p, timed, first = p % opt.workers] {
+					pin_thread(opt.producer_cpus, p, shared, pin_errors[opt.workers + p], "producer");
+					produce(loop, shared, producers[p], first, timed);
+				});
 			}
 		}
 		catch (const std::exception& e)
@@ -435,6 +467,7 @@ namespace
 		for (unsigned p = 0; p < opt.producers; ++p) producers.emplace_back(opt.inflight, quota_of(opt, p), opt.work_ns);
 		Shared shared;
 		std::vector<std::string> errors(opt.workers);
+		std::vector<std::string> pin_errors(opt.workers + opt.producers);
 
 		std::unique_ptr<Loop> loop;
 		try
@@ -451,7 +484,7 @@ namespace
 		std::vector<std::thread> producer_threads;
 		worker_threads.reserve(opt.workers);
 		producer_threads.reserve(opt.producers);
-		start_threads(*loop, shared, opt, producers, errors, worker_threads, producer_threads, res.error);
+		start_threads(*loop, shared, opt, producers, errors, pin_errors, worker_threads, producer_threads, res.error);
 		wait_until_up(*loop, shared, opt.producers);
 
 		Clock::time_point start{};
@@ -470,6 +503,10 @@ namespace
 		for (const auto& e : errors)
 		{
 			if (!e.empty()) res.error += (res.error.empty() ? "" : "; ") + std::string("a worker threw: ") + e;
+		}
+		for (const auto& e : pin_errors)
+		{
+			if (!e.empty()) res.error += (res.error.empty() ? "" : "; ") + e;
 		}
 		Clock::time_point last = start;
 		for (const Producer& p : producers)
@@ -560,7 +597,8 @@ namespace
 		  << (o.shuffle ? std::to_string(o.seed) : std::string("null")) << ",\"mode\":\"" << (o.timed() ? "timed" : "count")
 		  << "\",\"window_ms\":" << (o.timed() ? std::to_string(o.window_ms) : std::string("null"))
 		  << ",\"window_tasks\":" << (o.timed() ? std::string("null") : std::to_string(o.window_tasks))
-		  << ",\"work_ns\":" << o.work_ns << ",\"wait\":\"poll\",\"windows\":" << done.size() << ",\"sequence\":" << sequence_json(done)
+		  << ",\"work_ns\":" << o.work_ns << ",\"worker_cpus\":" << benchutil::cpu_list_json(o.worker_cpus)
+		  << ",\"producer_cpus\":" << benchutil::cpu_list_json(o.producer_cpus) << ",\"wait\":\"poll\",\"windows\":" << done.size() << ",\"sequence\":" << sequence_json(done)
 		  << ",\"wait_method\":\"" << json_escape(wait_method) << "\",\"check_passed\":"
 		  << (o.check ? (failures.empty() && error.empty() ? "true" : "false") : "null") << ",\"compiler\":\""
 		  << json_escape(wakeprobe::compiler_name()) << "\",\"build_type\":\"" << ABPAIR_BUILD_TYPE << "\",\"bench_commit\":\""

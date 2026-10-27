@@ -121,15 +121,17 @@ for the condition variable on Windows (too noisy to read in the probe).
 **H5 (same hardware, two systems; exploratory).** On this laptop, the 2026-09 delay-model fit
 and bound-independence check are measured again with their frozen criteria and the 2026-09
 designs (gap sweep, bound sweep, matrix) and all their factors: B in {1, 10, 100} ms and
-blocking; on Windows the timer period {default, 1 ms}; on Linux the timer slack {1 ns,
-default}. H5 is exempt from section 1's settings. The 2026-09 runners (`bench/run_matrix.*`)
-build v1's compile-time defect and do not run on v2; a v2 runner of the same designs is a
-prerequisite (section 11). Backends: those of 2026-09 (epoll, io_uring, IOCP). Arms: the 2026-09
+blocking; on Windows every design at the timer period {default, 1 ms}; on Linux the timer
+slack {1 ns, default} where 2026-09 varied it (the matrix at B = 1 ms). H5 is exempt from
+section 1's settings. The 2026-09 runners (`bench/run_matrix.*`) build v1's compile-time defect
+and do not run on v2; `bench/run_h5.sh` and `run_h5.ps1` run the same designs with the v2
+binary: 140 cells on Linux (2026-09's 148 less its 8 PM QoS cells) and 136 on Windows. Backends: those of 2026-09 (epoll, io_uring, IOCP). Arms: the 2026-09
 fixed loop is `plain_wake`; the 2026-09 defect is `absent_wake` on epoll and IOCP (2026-09
 omitted the wake) and `unobserved_primitive` on io_uring (the 2026-09 misdirect: an eventfd
-written, never watched). Differences from 2026-09: one binary holds both arms, and v2's defect
+written, never watched). Differences from 2026-09: one binary holds both arms; v2's defect
 variants sit on the park handshake, which changes nothing for a post that lands while the
-worker is parked (every post of these designs). Each run uses its own calibrated B_eff, as in
+worker is parked (every post of these designs); and the worker and poster threads are pinned
+(CPU 14 and CPU 2, section 8), where in 2026-09 they were placed by the system. Each run uses its own calibrated B_eff, as in
 2026-09. Only the two criteria are scored; the matrix design's 21-post test and the 2026-09 PM
 QoS experiment are not. Reading, three outcomes: (a) the 2026-09 split recurs on this one
 machine (the delay model fails on Windows with the 1 ms timer at B = 1 ms; bound independence
@@ -235,10 +237,12 @@ detection data, and it replaces "a stated delay" of Alex's decision 2 (section 1
   rounds each), each with its own settle, probe post, calibration (delaying variants) and 5
   warm-up units. Process i (0 to 9) of every cell draws its gaps with seed 2026102700 + i, so
   the cells share their gap sequences; no seed of the 2026-09 study (20260926) is reused.
-- **Order.** All processes of one system's campaign (S, Bt, the sweep, H4, H5) run in one order,
-  shuffled with seed 20261026. The plan generator is part of ANALYSIS_COMMIT; it reads each H4
-  cell's R from the revision log, so the plan itself is generated after the pilot and
-  committed before the first window.
+- **Order.** All processes of one system's confirmatory campaign (S, Bt, the sweep, H4) run in
+  one order, shuffled with seed 20261026. The plan generator is part of ANALYSIS_COMMIT; it reads
+  each H4 cell's R from the revision log, so the plan itself is generated after the pilot and
+  committed before the first window. H5, exploratory, runs as its own block after the campaign,
+  in its runner's order (`bench/run_h5.*`, shuffled with the same seed), with the same rules for
+  lost units.
 - **Placement** (`lab/laptop/README.md`): core 0 for the system and the runner; the workers on
   CPU 14 (W = 1), CPUs 12 and 14 (W = 2), or CPUs 8, 10, 12 and 14 (W = 4), their siblings
   idle; the poster on CPU 2; H4 and the pilot as W = 1. Workers and poster are threads of one
@@ -259,7 +263,9 @@ detection data, and it replaces "a stated delay" of Alex's decision 2 (section 1
 Measured bases: the laptop's 100-trial S cells (STATE.md: Arch fixed 3.3 / 33.7 s and delaying
 4.7 / 44.3 s at B = 1 / 10 ms; Windows 5 / 34 s and 34.5 / 51 s), times 3 for n = 300; abpair
 processes took their windows plus at most 1 s; the 2026-09 publication designs on this laptop's
-Linux took 1 min 44 s (`results/README.md`). Windows gap sleeps overran by about 0.8 ms per post
+Linux took 1 min 44 s (`results/README.md`); request 7 ran protocol Bt with the fixed loop, 211
+rounds per process, in 0.4 / 3.4 s on Arch and 1 / 4 s on Windows (1 s resolution) at B = 1 /
+10 ms, process start included (2026-10-26 and 27). Windows gap sleeps overran by about 0.8 ms per post
 (the fixed cells above against their drawn gaps). Everything else is arithmetic with B_eff = B
 on Linux and 15.625 ms on Windows.
 
@@ -267,16 +273,16 @@ on Linux and 15.625 ms on Windows.
 |---|---|---|---|
 | S: 150 cells (Arch), 92 (Windows), n = 300 | 9,729 s, 2.70 h | 8,451 s, 2.35 h | measured cells; the widened plant counted as delaying (upper bound) |
 | S and Bt split into 10 processes | 258 s | 246 s | 9 extra processes per cell, each 50 ms settle + one B_eff probe + 5 warm-up units of 1.55 B (+ B_eff if delaying) + for delaying cells 11 calibration posts of 0.1 B + B_eff; process starts not counted, no measured basis |
-| Bt: 46 cells (Arch), 28 (Windows), n = 300 | at most 3,995 s, 1.11 h | at most 4,007 s, 1.11 h | 6,300 rounds of 1.55 B (Windows + 0.8 ms), + 2 B_eff per round for delaying cells; the fixed rate is replaced by request 7's when it lands |
+| Bt: 46 cells (Arch), 28 (Windows), n = 300 | at most 4,134 s, 1.15 h | at most 4,453 s, 1.24 h | 6,300 rounds at request 7's measured fixed rate, + 2 B_eff per round for delaying cells |
 | H3 phase sweep | 68 s | 119 s | 30 steps x (24 posts of 2 B_eff + 11 calibration posts of 1.1 B_eff + 50 ms) |
 | H4, R = 14 (cap 24), 2 comparisons x 4 levels | 6,888 s, 1.91 h (11,808 s, 3.28 h) | 4,592 s, 1.28 h (7,872 s, 2.19 h) | 2R windows of 10 s + R/2 processes of at most 1 s |
 | A/A pilot, 4 levels x 8 pairs | 1,968 s | 1,312 s | 16 windows of 10 s + 4 processes of at most 1 s |
 | H5: the 2026-09 designs | at most 104 s | about 131 s, plus 136 process starts | Arch measured (2026-09); Windows arithmetic |
 | D5 sanitizer records | no measured basis | no measured basis | |
-| **Total, R = 14** | **23,010 s, 6.39 h** | **18,858 s, 5.24 h** | |
-| Total, R = 24 in every H4 cell | 27,930 s, 7.76 h | 22,138 s, 6.15 h | |
+| **Total, R = 14** | **23,149 s, 6.43 h** | **19,304 s, 5.36 h** | |
+| Total, R = 24 in every H4 cell | 28,069 s, 7.80 h | 22,584 s, 6.27 h | |
 
-Together 11.63 h at R = 14 (13.91 h at the cap): 0.59 calendar days (0.71) at the queue plan's
+Together 11.79 h at R = 14 (14.07 h at the cap): 0.60 calendar days (0.71) at the queue plan's
 19.68 measuring hours a day, plus builds, ctest, OS switches and the D5 records.
 
 S cells per bound: epoll and io_uring 26 each (8 variants x 3 W + wrong worker x 2), condvar 23
@@ -297,7 +303,10 @@ the seen cells and H3 criteria as disclosed replications (section 1); H4 confirm
 section 7, cap 24; H3 on the phase sweep at the default settings; the widened plant of section
 6; protocol Bt at W = 1; the procedure of section 8; H5 exploratory; H6 deferred to an addendum.
 
-Departures from Alex's recorded decisions and from the plan, each needing his yes:
+**Alex's answers, 2026-10-27:** every proposed value above and every departure below accepted
+(STATE.md, decisions 11 to 18). The file freezes after section 11 item 3 and a last freeze check.
+
+Departures from Alex's recorded decisions and from the plan, accepted on 2026-10-27:
 - Decision 2 named a plant widened by "a stated delay"; section 6 uses one zero-timeout call of
   the backend's own wait instead (no chosen number of microseconds).
 - Decision 10 kept the 2026-09 criterion (a 95% interval inside [0.98, 1.02]) and sized H4 at 8
@@ -314,10 +323,10 @@ Departures from Alex's recorded decisions and from the plan, each needing his ye
 
 1. Done: the widened plant and protocol Bt (0cb37ee, 5e0fc7e); the review's fixes (281f90d);
    the four-core placement in `lab/laptop/README.md`.
-2. The Bt timing probe, fixed loop only (request 7), so Bt's hours rest on a measured rate.
+2. Done: the Bt timing probe, fixed loop only (request 7, 2026-10-26 and 27).
 3. Code: per-thread CPU pinning in wakeprobe and abpair, recorded in their summaries;
-   `coarsest_timer_us` in wakeprobe's summary; a v2 runner of the 2026-09 designs for H5;
-   desktop functional tests and a fresh review.
+   `coarsest_timer_us` in wakeprobe's summary; the v2 runner of the 2026-09 designs for H5
+   (`bench/run_h5.*`); desktop functional tests and a fresh review.
 4. A last freeze check of this draft; then Alex freezes it.
 5. Analysis code fixed and committed (ANALYSIS_COMMIT), with its own tests on synthetic data:
    the B_eff rule, both test statistics, Holm, the clustered intervals and the overdispersion

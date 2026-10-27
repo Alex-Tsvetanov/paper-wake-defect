@@ -82,4 +82,44 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
         set_tests_properties(wakeprobe_check.${_backend}.${_protocol}.absent_wake.b1ms
                              PROPERTIES TIMEOUT 120 LABELS "wakeprobe" RUN_SERIAL TRUE)
     endforeach()
+    # Pinned threads. CPUs 0 to 3 must be in the process's allowed set, and CPU 63 must not exist
+    # (true of the desktop, the laptop and the development container). A pinned run must pass; a
+    # pin that the system refuses must stop the run with its message, before any unit is measured.
+    add_test(NAME wakeprobe_check.${_backend}.pinned
+             COMMAND wakeprobe --backend ${_backend} --variant none --workers 2 --worker-cpus 0,1 --poster-cpu 2
+                     --wait-us 10000 --gap-us 2000 --check)
+    add_test(NAME abpair_check.${_backend}.pinned
+             COMMAND abpair --backend ${_backend} --check --worker-cpus 0,1 --producer-cpus 2,3)
+    set_tests_properties(wakeprobe_check.${_backend}.pinned abpair_check.${_backend}.pinned
+                         PROPERTIES TIMEOUT 120 LABELS "pinning" RUN_SERIAL TRUE)
+    add_test(NAME wakeprobe_check.${_backend}.pin_refused.worker
+             COMMAND wakeprobe --backend ${_backend} --variant none --workers 1 --worker-cpus 63
+                     --wait-us 10000 --gap-us 2000 --check)
+    add_test(NAME wakeprobe_check.${_backend}.pin_refused.poster
+             COMMAND wakeprobe --backend ${_backend} --variant none --workers 1 --worker-cpus 0 --poster-cpu 63
+                     --wait-us 10000 --gap-us 2000 --check)
+    add_test(NAME abpair_check.${_backend}.pin_refused
+             COMMAND abpair --backend ${_backend} --check --worker-cpus 63,0 --producer-cpus 2,3)
+    set_tests_properties(wakeprobe_check.${_backend}.pin_refused.worker PROPERTIES
+                         PASS_REGULAR_EXPRESSION "FAIL: .*cannot pin worker 0 to CPU 63")
+    set_tests_properties(wakeprobe_check.${_backend}.pin_refused.poster PROPERTIES
+                         PASS_REGULAR_EXPRESSION "FAIL: .*cannot pin the poster to CPU 63")
+    set_tests_properties(abpair_check.${_backend}.pin_refused PROPERTIES
+                         PASS_REGULAR_EXPRESSION "cannot pin worker 0 to CPU 63")
+    set_tests_properties(wakeprobe_check.${_backend}.pin_refused.worker wakeprobe_check.${_backend}.pin_refused.poster
+                         abpair_check.${_backend}.pin_refused PROPERTIES TIMEOUT 120 LABELS "pinning" RUN_SERIAL TRUE)
 endforeach()
+
+# The H5 runner's dry run: it writes its plan, prints every wakeprobe command line and runs nothing.
+# The script exits non-zero unless the plan has the expected cells: the 2026-09 designs, less the PM QoS
+# and random-gap designs (136 on Windows, 140 on Linux). Name: run_h5_dry_run.
+if(WIN32)
+    add_test(NAME run_h5_dry_run
+             COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/run_h5.ps1"
+                     -BuildDir "${PROJECT_BINARY_DIR}" -OutDir "${PROJECT_BINARY_DIR}/h5-dry-run" -DryRun -ExpectCells 136)
+else()
+    add_test(NAME run_h5_dry_run
+             COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_h5.sh"
+                     --build-dir "${PROJECT_BINARY_DIR}" --out-dir "${PROJECT_BINARY_DIR}/h5-dry-run" --dry-run --expect-cells 140)
+endif()
+set_tests_properties(run_h5_dry_run PROPERTIES TIMEOUT 120 LABELS "h5")

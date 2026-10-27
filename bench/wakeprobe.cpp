@@ -144,6 +144,8 @@ namespace
 		int pm_qos_us = -1;  // >= 0: hold a /dev/cpu_dma_latency request of this many us
 		Protocol protocol = Protocol::single;
 		bool check = false;  // the no-timing self-test
+		std::vector<unsigned> worker_cpus;  // empty: unpinned; else one CPU per worker
+		int poster_cpu = -1;  // < 0: unpinned
 
 		bool random_gap() const { return gap_lo_frac > 0; }
 		bool batch() const { return protocol == Protocol::batch; }
@@ -230,6 +232,8 @@ namespace
 		std::string wait_method;
 		std::uint64_t loop_passes = 0;  // loop passes (wait returns and skipped waits), summed over the workers
 		std::vector<std::uint64_t> worker_passes;
+		std::vector<int> worker_cpus_seen;  // the CPU each worker was on when its loop returned
+		int poster_cpu_seen = -1;  // the CPU the poster was on after the last unit
 		std::string error;
 	};
 
@@ -274,6 +278,8 @@ namespace
 		          << "                             [LO x B, HI x B] (needs B > 0); [--gap-seed N] seeds it (default 0);\n"
 		          << "                             [--gap-unit timer] uses the larger of B and the coarsest timer\n"
 		          << "                             resolution (Windows) as the unit instead of B (default bound)\n"
+		          << "       [--worker-cpus LIST]  pin worker i to the i-th CPU of a comma-separated list (one per worker)\n"
+		          << "       [--poster-cpu N]      pin the posting thread to CPU N\n"
 		          << "       [--pm-qos-us N]       Linux, needs root: hold a CPU latency request of N us for the run;\n"
 		          << "                             under sudo the run then drops back to the invoking user\n"
 		          << "  --posts measured posts (default 51); --warmup posts before them (default 5);\n"
@@ -332,6 +338,12 @@ namespace
 			if (flag == "--backend") o.backend = value;
 			else if (flag == "--variant") o.variant = value;
 			else if (flag == "--workers") o.workers = parse_int<unsigned>(flag, value);
+			else if (flag == "--worker-cpus")
+			{
+				o.worker_cpus = benchutil::parse_cpu_list(value);
+				if (o.worker_cpus.empty()) usage("--worker-cpus expects a comma-separated list of CPU numbers");
+			}
+			else if (flag == "--poster-cpu") o.poster_cpu = static_cast<int>(parse_int<std::uint16_t>(flag, value));
 			else if (flag == "--protocol")
 			{
 				if (value == "single") o.protocol = Protocol::single;
@@ -399,6 +411,13 @@ namespace
 		if (o.workers < 1 || o.workers > kMaxWorkers)
 		{
 			usage("--workers must be a whole number from 1 to " + std::to_string(kMaxWorkers));
+		}
+		if (!o.worker_cpus.empty() && o.worker_cpus.size() != o.workers) usage("--worker-cpus needs one CPU per worker");
+		{
+			std::vector<unsigned> cpus = o.worker_cpus;
+			if (o.poster_cpu >= 0) cpus.push_back(static_cast<unsigned>(o.poster_cpu));
+			std::sort(cpus.begin(), cpus.end());
+			if (std::adjacent_find(cpus.begin(), cpus.end()) != cpus.end()) usage("--worker-cpus and --poster-cpu need distinct CPUs");
 		}
 		if (o.workers < wakeloop::min_workers(o.defect))
 		{
@@ -577,12 +596,13 @@ namespace
 
 	// Runs worker w of the loop on a thread of its own, for every w; stops and joins them on scope
 	// exit, so an exception in the measurement cannot reach std::thread's destructor and lose the
-	// records collected so far.
+	// records collected so far. With CPUs given, each worker pins itself before its loop starts.
 	template <class Loop>
 	class LoopRunner
 	{
 	public:
-		explicit LoopRunner(Loop& loop) : loop_(loop), errors_(loop.workers())
+		LoopRunner(Loop& loop, const std::vector<unsigned>& cpus)
+			: loop_(loop), cpus_(cpus), errors_(loop.workers()), pin_rc_(loop.workers(), 0), cpu_seen_(loop.workers(), -1)
 		{
 			threads_.reserve(loop.workers());
 			try
@@ -616,10 +636,37 @@ namespace
 			}
 			return false;
 		}
+		/// Waits until every worker has tried its pin; false if that takes longer than `limit`.
+		bool wait_pinned(std::chrono::milliseconds limit) const
+		{
+			const auto end = Clock::now() + limit;
+			while (pinned_.load(std::memory_order_acquire) < loop_.workers())
+			{
+				if (Clock::now() > end) return false;
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+			return true;
+		}
+		/// After wait_pinned(): the pins that failed, as text; empty when none did.
+		std::string pin_failures() const
+		{
+			std::string s;
+			for (std::size_t w = 0; w < pin_rc_.size(); ++w)
+			{
+				if (pin_rc_[w] == 0) continue;
+				s += (s.empty() ? "" : "; ") + std::string("worker ") + std::to_string(w) + " to CPU " +
+				     std::to_string(cpus_[w]) + ": error " + std::to_string(pin_rc_[w]);
+			}
+			return s;
+		}
+		// Valid after stop_and_join(): the CPU each worker was on when its loop returned.
+		const std::vector<int>& cpus_seen() const { return cpu_seen_; }
 
 	private:
 		void work(unsigned w)
 		{
+			if (!cpus_.empty()) pin_rc_[w] = wakeprobe::pin_current_thread(cpus_[w]);
+			pinned_.fetch_add(1, std::memory_order_release);  // publishes pin_rc_[w]
 			try
 			{
 				loop_.run(w);
@@ -628,12 +675,56 @@ namespace
 			{
 				errors_[w] = std::current_exception();  // each worker writes its own element
 			}
+			cpu_seen_[w] = wakeprobe::current_cpu();
 		}
 
 		Loop& loop_;
+		std::vector<unsigned> cpus_;
 		std::vector<std::exception_ptr> errors_;
+		std::vector<int> pin_rc_;  // each worker writes its own element, before pinned_ counts it
+		std::vector<int> cpu_seen_;  // each worker writes its own element, before it exits
+		std::atomic<unsigned> pinned_{0};
 		std::vector<std::thread> threads_;
 	};
+
+	// A pinned thread seen on another CPU at the end of the run: its pin did not hold. Empty when
+	// every pinned thread ended where it was pinned.
+	std::string placement_errors(const Options& opt, const RunInfo& info)
+	{
+		std::string s;
+		const auto add = [&s](const std::string& who, int seen, unsigned want) {
+			s += (s.empty() ? "" : "; ") + who + " ended on CPU " + std::to_string(seen) + ", not on CPU " + std::to_string(want);
+		};
+		for (std::size_t w = 0; w < opt.worker_cpus.size() && w < info.worker_cpus_seen.size(); ++w)
+		{
+			if (info.worker_cpus_seen[w] != static_cast<int>(opt.worker_cpus[w]))
+			{
+				add("worker " + std::to_string(w), info.worker_cpus_seen[w], opt.worker_cpus[w]);
+			}
+		}
+		// -1: the measurement threw before the poster's last unit; that error is reported already.
+		if (opt.poster_cpu >= 0 && info.poster_cpu_seen != -1 && info.poster_cpu_seen != opt.poster_cpu)
+		{
+			add("the poster", info.poster_cpu_seen, static_cast<unsigned>(opt.poster_cpu));
+		}
+		return s;
+	}
+
+	// Checks the workers' pins and pins the calling thread, the poster. Throws on any failure, so
+	// that no unit is measured with a thread off its CPU.
+	template <class Runner>
+	void place_threads(const Runner& runner, const Options& opt)
+	{
+		if (!runner.wait_pinned(std::chrono::seconds(1))) throw std::runtime_error("the workers did not start within 1 s");
+		if (const std::string f = runner.pin_failures(); !f.empty()) throw std::runtime_error("cannot pin " + f);
+		if (opt.poster_cpu < 0) return;
+		const int rc = wakeprobe::pin_current_thread(static_cast<unsigned>(opt.poster_cpu));
+		if (rc != 0)
+		{
+			throw std::runtime_error("cannot pin the poster to CPU " + std::to_string(opt.poster_cpu) + ": error " +
+			                         std::to_string(rc));
+		}
+	}
 
 	// One post to `worker`: returns when the task ran or the hard limit passed.
 	template <class Loop>
@@ -1109,7 +1200,13 @@ namespace
 		  << ",\"wait_method\":\"" << json_escape(info.wait_method) << "\""
 		  << ",\"loop_passes\":" << info.loop_passes << ",\"worker_passes\":[";
 		for (std::size_t i = 0; i < info.worker_passes.size(); ++i) s << (i ? "," : "") << info.worker_passes[i];
-		s << "],\"compiler\":\""
+		s << "],\"worker_cpus\":" << benchutil::cpu_list_json(o.worker_cpus)
+		  << ",\"worker_cpus_seen\":" << benchutil::cpu_list_json(info.worker_cpus_seen)
+		  << ",\"poster_cpu\":" << (o.poster_cpu >= 0 ? std::to_string(o.poster_cpu) : std::string("null"))
+		  << ",\"poster_cpu_seen\":" << (info.poster_cpu_seen >= 0 ? std::to_string(info.poster_cpu_seen) : std::string("null"))
+		  << ",\"coarsest_timer_us\":"
+		  << (wakeprobe::coarsest_timer_us() > 0 ? std::to_string(wakeprobe::coarsest_timer_us()) : std::string("null"));
+		s << ",\"compiler\":\""
 		  << json_escape(wakeprobe::compiler_name()) << "\",\"build_type\":\"" << WAKEPROBE_BUILD_TYPE
 		  << "\",\"bench_commit\":\"" << WAKEPROBE_BENCH_COMMIT << "\",\"bench_dirty\":"
 		  << (WAKEPROBE_BENCH_DIRTY ? "true" : "false") << ",\"bench_code_commit\":\"" << WAKEPROBE_BENCH_CODE_COMMIT << "\""
@@ -1253,10 +1350,12 @@ namespace
 		std::vector<Record> records;
 		wakeprobe::GapSleeper gap;
 		{
-			LoopRunner<Loop> runner(*loop);
+			LoopRunner<Loop> runner(*loop, opt.worker_cpus);
 			try
 			{
+				place_threads(runner, opt);
 				run_protocol(*loop, store, opt, info, delaying, gap, records);
+				info.poster_cpu_seen = wakeprobe::current_cpu();
 			}
 			catch (const std::exception& e)
 			{
@@ -1268,6 +1367,11 @@ namespace
 			}
 			runner.stop_and_join();
 			if (runner.failed()) info.error += (info.error.empty() ? "" : "; ") + std::string("the event loop threw");
+			info.worker_cpus_seen = runner.cpus_seen();
+			if (const std::string p = placement_errors(opt, info); !p.empty())
+			{
+				info.error += (info.error.empty() ? "" : "; ") + p;
+			}
 		}
 		info.wait_method = loop->wait_method();
 		for (unsigned w = 0; w < opt.workers; ++w)

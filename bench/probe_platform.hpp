@@ -22,12 +22,50 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <grp.h>
+#include <pthread.h>
+#include <sched.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
 #endif
 
 namespace wakeprobe
 {
+
+	// ---------------------------------------------------------------------------
+	// Thread placement
+	// ---------------------------------------------------------------------------
+
+	/// Pins the calling thread to one logical CPU (on Windows, of the thread's current processor
+	/// group; the laptop has one). Returns 0, or the system's error code.
+	inline int pin_current_thread(unsigned cpu) noexcept
+	{
+#ifdef _WIN32
+		if (cpu >= 8 * sizeof(DWORD_PTR)) return ERROR_INVALID_PARAMETER;
+		if (SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << cpu) != 0) return 0;
+		return static_cast<int>(GetLastError());
+#elif defined(__linux__)
+		if (cpu >= CPU_SETSIZE) return EINVAL;
+		cpu_set_t set;
+		CPU_ZERO(&set);
+		CPU_SET(cpu, &set);
+		return ::pthread_setaffinity_np(::pthread_self(), sizeof(set), &set);
+#else
+		(void)cpu;
+		return -1;
+#endif
+	}
+
+	/// The logical CPU the calling thread is on now, or -1 where that is unknown.
+	inline int current_cpu() noexcept
+	{
+#ifdef _WIN32
+		return static_cast<int>(GetCurrentProcessorNumber());
+#elif defined(__linux__)
+		return ::sched_getcpu();
+#else
+		return -1;
+#endif
+	}
 
 	// ---------------------------------------------------------------------------
 	// Linux timer slack
