@@ -1,10 +1,11 @@
-# Hypotheses v2 (DRAFT 4, not frozen)
+# Hypotheses v2 (FROZEN 2026-10-27)
 
-Status: **draft 4**, written 2026-10-27 on the desktop after three freeze checks (of drafts 1, 2
-and 3). Not frozen. Alex accepted draft 3 on 2026-10-27; the changes since are listed in section
-10 for his confirmation, after which the file is frozen, before the first confirmatory window.
-`hypotheses.md` (the 2026-09 study) is frozen and is not edited; this file is new. Design:
-`design/v2-defects.md`. Values marked **(proposed)** are those Alex accepted.
+Status: **frozen on 2026-10-27**, before any confirmatory window, after three freeze checks
+(of drafts 1, 2 and 3) and Alex's yes (decisions 11 to 21 in P1's STATE.md, section 10 here).
+This file is never edited again; every later change, and every value the frozen rules produce
+(each H4 cell's R, the run plan's commit), goes into `revision-log-v2.md`. `hypotheses.md` (the
+2026-09 study) is frozen too and is not edited. Design: `design/v2-defects.md`, frozen with this
+file. Values marked **(proposed)** are those Alex accepted.
 
 ## 1. Setup
 
@@ -57,7 +58,7 @@ expectation, on new code (the handshake) and new gap seeds (section 8):
 - **R, results seen.** The 2026-09 random-gap run is protocol S at W = 1 on Linux; its defect
   arms are v2's absent wake on epoll and unobserved primitive on io_uring, its correct arm v2's
   plain wake. That is 8 cells at B = 1 and 10 ms: 4 in F1 and 4 in F2.
-- **Rd, seen through durations only (proposed, to confirm).** Request 1 (2026-10-23 and 24) ran
+- **Rd, seen through durations only (Alex, decision 19).** Request 1 (2026-10-23 and 24) ran
   protocol S at W = 1 with plain wake and absent wake on every backend at B = 1 and 10 ms, and
   its durations were read: absent wake took longer in every cell, and plain wake took about its
   gaps. Request 7 ran the fixed loop under protocol Bt and its durations were read. That marks 8
@@ -195,7 +196,7 @@ such.
 | F1 | H1: S delaying cells, Arch 30 per bound x 2 = 60, Windows 16 x 2 = 32; Bt undrained edge, Arch 6, Windows 4 | 102 |
 | F2 | H2: S fixed and plain, Arch 36, Windows 24; Bt fixed and plain, Arch 12, Windows 8 | 80 |
 | F4 | H4: 5 backend-system pairs x 3 work levels (1, 10, 100 us) | 15 |
-| F4c | H4's cost claim, the same 15 cells (section 7; proposed, to confirm) | 15 |
+| F4c | H4's cost claim, the same 15 cells (section 7; Alex, decision 20) | 15 |
 
 alpha 0.025 one-sided per family **(proposed)**; in F4, per side of each test. An incomplete
 cell stays in its family's m and counts as not rejected. Outside the
@@ -235,7 +236,7 @@ detection data, and it replaces "a stated delay" of Alex's decision 2 (section 1
   interval of the median pair ratio, at the cell's Holm level, lies inside the margins. The
   estimand is the median pair ratio, where 2026-09 named no estimator (a departure, section 10).
 - **Reading a non-rejection.** In a cell with enough power (below), a non-rejection reads
-  "equivalence not shown", not "a cost". **Cost claim (family F4c; proposed, to confirm).** A
+  "equivalence not shown", not "a cost". **Cost claim (family F4c; Alex, decision 20).** A
   cost is claimed for a cell only when the exact one-sided sign test of "the median ratio is at
   least 0.98" (the number of pairs below 0.98 against Binomial(R, 1/2)) rejects under Holm over
   the 15 cells at alpha 0.025. The 95% interval (percentile bootstrap of the mean per-pair
@@ -341,7 +342,7 @@ section 7, cap 24; H3 on the phase sweep at the default settings; the widened pl
 **Alex's answers, 2026-10-27:** every proposed value above and every departure below, as
 drafted in draft 3 (e0252b9), accepted (STATE.md, decisions 11 to 18).
 
-**Changes since his yes, for his confirmation:** H5's threads are pinned, its slack factor is
+**Changes since his yes, confirmed by Alex on 2026-10-27 (decisions 19 to 21):** H5's threads are pinned, its slack factor is
 where 2026-09 varied it, it runs as its own block after the campaign, and its Windows compiler
 differs from 2026-09's; the Bt hours rest on request 7's measured rate (totals 6.43 h on Arch
 and 5.59 h on Windows at R = 14); the Rd replication label (section 1); family F4c for H4's cost
@@ -372,8 +373,8 @@ Departures from Alex's recorded decisions and from the plan, accepted on 2026-10
 3. Done: per-thread CPU pinning in wakeprobe and abpair; `coarsest_timer_us` in wakeprobe's
    summary; the v2 runner of the 2026-09 designs for H5 (`bench/run_h5.*`); desktop functional
    tests and a fresh review (0e6c2c1).
-4. Done: freeze checks of drafts 1, 2 and 3. Then Alex confirms the changes of section 10 and
-   the file is frozen.
+4. Done: freeze checks of drafts 1, 2 and 3; Alex confirmed the changes of section 10; this
+   file and the design note frozen on 2026-10-27.
 5. The campaign runner: it runs the plan of S, Bt, sweep and H4 processes with each process's
    pins, reruns a failed process once (section 8) and keeps every output; desktop dry runs and
    a review.

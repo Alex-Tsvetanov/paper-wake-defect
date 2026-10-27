@@ -1,7 +1,10 @@
 # P1 v2: six defects, a condition-variable backend, worker counts and H4
 
-Status: **draft, not frozen**. Written 2026-10-23 on the desktop (development only). It becomes
-frozen only after Alex approves it together with `hypotheses-v2.md` and the laptop hours.
+Status: **frozen 2026-10-27**, together with `hypotheses-v2.md` (Alex, decisions 11 to 21 in
+P1's STATE.md). Written 2026-10-23 on the desktop (development only). Where this note and
+`hypotheses-v2.md` differ, `hypotheses-v2.md` holds: H4's decision rule and pair count (its
+section 7), N = 0 outside the confirmatory family, and the widened plant (its section 6). Later
+changes go into `revision-log-v2.md`.
 `design/minimal-loop.md` (the 2026-09 design) stays frozen and is not edited; this note extends
 it. Section numbers "v1 2.3" and so on refer to that note.
 
@@ -167,7 +170,8 @@ bound, every defect is a delay and never a loss.
   any data. Its workload (task work, producers, tasks in flight) was not fixed in 2026-09, so it
   must be fixed before any further throughput comparison, on a basis independent of the probes.
 - **H4's workload (Alex, 2026-10-25):** the decade grid of per-task CPU work, N in {0, 1, 10,
-  100} us (`abpair --work-ns`), with W = 1, P = 1, K = 64, 8 pairs of 10 s windows per cell, and
+  100} us (`abpair --work-ns`), with W = 1, P = 1, K = 64, 8 pairs of 10 s windows per cell (the
+  pair count since set by `hypotheses-v2.md` section 7: 14 to 24), and
   the whole curve reported, not one chosen point. The grid is set before any further throughput
   data and does not depend on the probes' ratios; the decision to vary task work came after them,
   and the paper says so. Under empty tasks a batch runs in about the time of one poll call, so the
@@ -203,7 +207,8 @@ laptop.
 
 ## 9. Decisions (Alex, 2026-10-23)
 
-The design is still a draft; these answers shape it before the freeze.
+Decisions recorded while the note was a draft. The later ones (9 to 21) are in P1's STATE.md and
+in `hypotheses-v2.md` section 10.
 
 1. The six definitions and the N/A cells above: accepted as drafted.
 2. Lazy-wake race in the campaign: both the natural window and a plant widened by a stated
