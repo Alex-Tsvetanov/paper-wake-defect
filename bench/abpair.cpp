@@ -48,6 +48,20 @@
 // windows ran in the requested order. --check-fault (only with --check) breaks one thing on
 // purpose, to test the failure checks: lost_task (one task never frees its slot), stuck_task (one
 // task never returns) or stuck_start (one worker never starts its loop).
+//
+// --validate-args checks the command line of a measuring run and measures nothing. It runs
+// parse_args, which holds every refusal that depends on the arguments alone (a run makes no other
+// before its first window), then prints "valid" and exits 0, or prints the message the run would
+// print and exits 2. It creates no loop, starts no thread, pins nothing, reads no clock and opens no
+// file. --out may be given and is not opened; it may be left out too, because the campaign runner
+// appends it. --check is another mode and is refused together with it.
+// What it cannot check, because a run learns it only from the system or from its own windows:
+//   - that a window's loop can be created and its threads start (exit 3);
+//   - that each CPU of --worker-cpus and --producer-cpus exists, is allowed and takes the pin (3);
+//   - that --out can be opened (5);
+//   - that a count window finishes within the hard limit (the run fails with exit 4).
+// The refusal "no loop for backend and variant" in run_all cannot fire after parse_args: it asks
+// known_backend and has_site, as with_loop does.
 
 #include "wakeloop/variants.hpp"
 
@@ -144,6 +158,7 @@ namespace
 		std::vector<unsigned> producer_cpus;  // empty: unpinned; else one CPU per producer
 		std::string out;
 		bool check = false;
+		bool validate_args = false;  // check the arguments as a run would and stop; see the header
 		Fault fault = Fault::none;
 
 		bool timed() const { return window_ms > 0; }
@@ -164,6 +179,9 @@ namespace
 		          << kMaxWorkNs << ")\n"
 		          << "       [--worker-cpus LIST] [--producer-cpus LIST] pin each worker (producer) thread to the\n"
 		          << "       next CPU of a comma-separated list, one per thread\n"
+		          << "       [--validate-args] check the arguments as a run does and measure nothing: prints valid and exits 0,\n"
+		          << "       or refuses with exit 2; no loop, thread, pin, clock or file (--out is not opened, and may be left\n"
+		          << "       out); not with --check\n"
 		          << "  --check  self-test: count windows of small numbers, no time anywhere in the output;\n"
 		          << "           takes no --window-ms, needs no --out, and fills W, P, K, R and N with\n"
 		          << "           " << kCheckWorkers << ", " << kCheckProducers << ", " << kCheckInflight << ", " << kCheckPairs << " and "
@@ -254,6 +272,11 @@ namespace
 				o.check = true;
 				continue;
 			}
+			if (flag == "--validate-args")
+			{
+				o.validate_args = true;
+				continue;
+			}
 			if (i + 1 >= argc) usage("missing value for " + std::string(flag));
 			const std::string_view value = argv[++i];
 			if (flag == "--backend") o.backend = value;
@@ -278,6 +301,8 @@ namespace
 			else if (flag == "--out") o.out = value;
 			else usage("unknown flag " + std::string(flag));
 		}
+		// A self-test has defaults of its own; a validation is of a measuring run's arguments.
+		if (o.validate_args && o.check) usage("--validate-args and --check are separate modes; give one of them");
 		if (order != "abba" && order != "shuffle") usage("--order must be abba or shuffle");
 		o.shuffle = order == "shuffle";
 		if (!wakeloop::known_backend(o.backend)) usage("--backend must be one of " + benchutil::backend_list());
@@ -299,7 +324,8 @@ namespace
 		else
 		{
 			if ((o.window_ms > 0) == (o.window_tasks > 0)) usage("give exactly one of --window-ms and --window-tasks");
-			if (o.out.empty()) usage("--out is required");
+			// --validate-args opens nothing, and the campaign runner appends --out to the plan's arguments.
+			if (o.out.empty() && !o.validate_args) usage("--out is required");
 			if (o.fault != Fault::none) usage("--check-fault needs --check");
 		}
 		return o;
@@ -1009,5 +1035,13 @@ namespace
 
 int main(int argc, char** argv)
 {
-	return run_all(parse_args(argc, argv));
+	const Options opt = parse_args(argc, argv);
+	// parse_args holds every refusal that needs the arguments alone, and a run asks the same function,
+	// so this stops before the first loop, thread, pin, clock reading or file.
+	if (opt.validate_args)
+	{
+		std::cout << "valid\n";
+		return 0;
+	}
+	return run_all(opt);
 }

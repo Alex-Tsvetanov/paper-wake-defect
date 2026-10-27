@@ -41,6 +41,20 @@
 // --check is a self-test for a machine that times nothing: a few units of the chosen protocol,
 // then a check that every unit was delivered within its timeout and every task ran exactly once.
 // It prints counts and PASS or FAIL, no delay, time or rate, and writes no record file.
+//
+// --validate-args checks the command line of a measuring run and measures nothing. It parses every
+// argument as a run does, applies the refusals a run makes before its first unit (parse_args, then
+// plan_refusal; main calls both for a run and for --validate-args, so the two cannot drift), prints
+// "valid" and exits 0, or prints the message the run would print and exits 2. It creates no loop,
+// starts no thread, pins nothing, reads no clock, sets neither the timer slack nor the timer period
+// and opens no file. --out may be given and is not opened; it may be left out too, because the
+// campaign runner appends it. --check is another mode and is refused together with it.
+// What it cannot check, because a run learns it only from the system or from its own units:
+//   - that the backend's loop can be created (a run exits 3), that the PM QoS request and the drop
+//     back to the sudo user succeed (3), and that --out can be opened (5);
+//   - that each CPU of --worker-cpus and --poster-cpu exists, is allowed and takes the pin, and
+//     that the workers start within 1 s (place_threads throws before the first unit; exit 4);
+//   - that the calibration yields the B_eff that --phase-frac needs (run_protocol throws; exit 4).
 
 #include "wakeloop/variants.hpp"
 
@@ -107,6 +121,11 @@ namespace
 
 	// What --check uses where the command line gives nothing.
 	constexpr std::int64_t kCheckWaitUs = 10'000;
+	/// The largest bound the loop accepts (one day): the number in loop/src/common.cpp, detail::checked_bound, which
+	/// a run meets only when it creates the loop, after clock readings and timer settings. plan_refusal asks for it
+	/// first, so that --validate-args refuses what a run refuses. The CTest validate_args.limit_is_the_loops compares
+	/// the two numbers in the sources.
+	constexpr std::int64_t kMaxWaitUs = 86'400'000'000;
 	constexpr std::int64_t kCheckGapUs = 2'000;
 	constexpr int kCheckPosts = 5;
 	constexpr int kCheckRounds = 3;
@@ -144,6 +163,7 @@ namespace
 		int pm_qos_us = -1;  // >= 0: hold a /dev/cpu_dma_latency request of this many us
 		Protocol protocol = Protocol::single;
 		bool check = false;  // the no-timing self-test
+		bool validate_args = false;  // check the arguments as a run would and stop; see the header
 		std::vector<unsigned> worker_cpus;  // empty: unpinned; else one CPU per worker
 		int poster_cpu = -1;  // < 0: unpinned
 
@@ -269,6 +289,9 @@ namespace
 		          << "       [--check]             self-test: a few units, counts and PASS or FAIL only, no time printed, no\n"
 		          << "                             --out (--wait-us defaults to " << kCheckWaitUs << ", --gap-us to " << kCheckGapUs
 		          << ")\n"
+		          << "       [--validate-args]     check the arguments as a run does and measure nothing: prints valid and exits 0,\n"
+		          << "                             or refuses with exit 2; no loop, thread, pin, clock or file (--out is not\n"
+		          << "                             opened, and may be left out); not with --check\n"
 		          << "       --wait-us is the bound B in us; 0 blocks\n"
 		          << "       [--timerslack-ns N]   Linux: set before any thread starts; 0 = leave default (default 1)\n"
 		          << "       [--timer-period-ms N] Windows: timeBeginPeriod(N); 0 = leave default (default 0)\n"
@@ -328,9 +351,14 @@ namespace
 		for (int i = 1; i < argc; ++i)
 		{
 			const std::string_view flag = argv[i];
-			if (flag == "--check")  // the one flag without a value
+			if (flag == "--check")  // a flag without a value
 			{
 				o.check = true;
+				continue;
+			}
+			if (flag == "--validate-args")  // the other
+			{
+				o.validate_args = true;
 				continue;
 			}
 			if (i + 1 >= argc) usage("missing value for " + std::string(flag));
@@ -391,6 +419,8 @@ namespace
 			}
 			else usage("unknown flag " + std::string(flag));
 		}
+		// A self-test has defaults and refuses --out; a validation is of a measuring run's arguments.
+		if (o.validate_args && o.check) usage("--validate-args and --check are separate modes; give one of them");
 		if (o.check && !have_gap && !(o.phase_frac > 0) && !o.random_gap())
 		{
 			o.gap_us = kCheckGapUs;
@@ -439,7 +469,11 @@ namespace
 			if (!have_warmup) o.warmup = o.batch() ? 1 : std::max(1, workers);
 			if (!have_calibrate) o.calibrate = 0;
 		}
-		if (!have_wait || (!o.check && o.out.empty())) usage("--backend, --wait-us and --out are required");
+		// --validate-args opens nothing, and the campaign runner appends --out to the plan's arguments.
+		if (!have_wait || (!o.check && !o.validate_args && o.out.empty()))
+		{
+			usage("--backend, --wait-us and --out are required");
+		}
 		if (o.wait_us < 0) usage("--wait-us must be >= 0 (0 blocks)");
 		if (o.random_gap() && o.wait_us <= 0) usage("--gap-frac-range needs a bound (--wait-us > 0)");
 		if (o.gap_unit_timer && !o.random_gap()) usage("--gap-unit timer needs --gap-frac-range");
@@ -466,6 +500,29 @@ namespace
 			      "before the measured posts");
 		}
 		return o;
+	}
+
+	/// The refusals that a run makes after its arguments parse and before it creates anything, and
+	/// that depend on the arguments alone: the text of the first one, empty when there is none. A
+	/// run and --validate-args both ask here, from main, so the two cannot drift. run_with names
+	/// the variant by its loop type, Loop::defect; that is opt.defect, since the dispatch is on it.
+	std::string plan_refusal(const Options& opt)
+	{
+		if (opt.wait_us > kMaxWaitUs)
+		{
+			return "--wait-us must be from 0 to " + std::to_string(kMaxWaitUs) + " (the loop's limit), got " +
+			       std::to_string(opt.wait_us);
+		}
+		const bool delaying = delays_single_posts(opt.defect, opt.workers);
+		if (opt.wait_us == 0 && delaying)
+		{
+			return "a variant that delays single posts, with a blocking wait, never delivers a post";
+		}
+		if (opt.phase_frac > 0 && (!delaying || opt.calibrate < 1))
+		{
+			return "--phase-frac needs a variant that delays single posts and calibration posts";
+		}
+		return {};
 	}
 
 	// Nearest-rank percentile of a sorted, non-empty vector (p in 1..100).
@@ -1325,16 +1382,6 @@ namespace
 		info.defect = Loop::defect;
 		const bool delaying = delays_single_posts(Loop::defect, opt.workers);
 		info.delaying = delaying;
-		if (opt.wait_us == 0 && delaying)
-		{
-			std::cerr << "wakeprobe: a variant that delays single posts, with a blocking wait, never delivers a post\n";
-			return 2;
-		}
-		if (opt.phase_frac > 0 && (!delaying || opt.calibrate < 1))
-		{
-			std::cerr << "wakeprobe: --phase-frac needs a variant that delays single posts and calibration posts\n";
-			return 2;
-		}
 
 		std::ofstream out;
 		if (!opt.check)
@@ -1415,6 +1462,20 @@ namespace
 int main(int argc, char** argv)
 {
 	const Options opt = parse_args(argc, argv);
+
+	// First, before any side effect, so that a refused run did nothing and --validate-args, which
+	// stops here, did nothing either: no wall clock, no PM QoS request, no timer slack or period,
+	// no thread, no loop and no file.
+	if (const std::string why = plan_refusal(opt); !why.empty())
+	{
+		std::cerr << "wakeprobe: " << why << "\n";
+		return 2;
+	}
+	if (opt.validate_args)
+	{
+		std::cout << "valid\n";
+		return 0;
+	}
 
 	RunInfo info;
 	if (!opt.check) info.started_utc = wakeprobe::utc_now();  // --check reads no wall clock
