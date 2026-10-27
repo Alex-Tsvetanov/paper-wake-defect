@@ -92,6 +92,23 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
              COMMAND abpair --backend ${_backend} --check --worker-cpus 0,1 --producer-cpus 2,3)
     set_tests_properties(wakeprobe_check.${_backend}.pinned abpair_check.${_backend}.pinned
                          PROPERTIES TIMEOUT 120 LABELS "pinning" RUN_SERIAL TRUE)
+    # Where abpair's pinned threads ended: the summary lists the CPUs in the order of the CPU lists, and a
+    # role that is not pinned has null. The expression is the test (ctest then ignores the exit code), so
+    # it also asks for check_passed and a null error.
+    add_test(NAME abpair_check.${_backend}.cpus_seen.pinned
+             COMMAND abpair --backend ${_backend} --check --worker-cpus 0,1 --producer-cpus 2,3)
+    set_tests_properties(abpair_check.${_backend}.cpus_seen.pinned PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"worker_cpus_seen\":\\[0,1\\],\"producer_cpus_seen\":\\[2,3\\].*\"check_passed\":true.*\"error\":null"
+                         TIMEOUT 120 LABELS "pinning" RUN_SERIAL TRUE)
+    add_test(NAME abpair_check.${_backend}.cpus_seen.workers_only
+             COMMAND abpair --backend ${_backend} --check --worker-cpus 0,1)
+    set_tests_properties(abpair_check.${_backend}.cpus_seen.workers_only PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"worker_cpus_seen\":\\[0,1\\],\"producer_cpus_seen\":null.*\"check_passed\":true.*\"error\":null"
+                         TIMEOUT 120 LABELS "pinning" RUN_SERIAL TRUE)
+    add_test(NAME abpair_check.${_backend}.cpus_seen.unpinned COMMAND abpair --backend ${_backend} --check)
+    set_tests_properties(abpair_check.${_backend}.cpus_seen.unpinned PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"worker_cpus_seen\":null,\"producer_cpus_seen\":null.*\"check_passed\":true.*\"error\":null"
+                         TIMEOUT 120 LABELS "${_backend};abpair" RUN_SERIAL TRUE)
     add_test(NAME wakeprobe_check.${_backend}.pin_refused.worker
              COMMAND wakeprobe --backend ${_backend} --variant none --workers 1 --worker-cpus 63
                      --wait-us 10000 --gap-us 2000 --check)
@@ -110,6 +127,22 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
                          abpair_check.${_backend}.pin_refused PROPERTIES TIMEOUT 120 LABELS "pinning" RUN_SERIAL TRUE)
 endforeach()
 
+# abpair's failure checks: --check-fault breaks one thing on purpose, and the run must stop with the FAIL
+# line of the window instead of hanging (ctest's timeout would fail a hang). Each waits out one hard limit
+# (10 s) and the two with a thread that never leaves a second one. The window logic is the same on every
+# backend, so these run on the first. Names: abpair_check.<backend>.fault.<fault>.
+function(abpair_fault_test backend fault what)
+    add_test(NAME abpair_check.${backend}.fault.${fault}
+             COMMAND abpair --backend ${backend} --check --check-fault ${fault})
+    set_tests_properties(abpair_check.${backend}.fault.${fault} PROPERTIES
+                         PASS_REGULAR_EXPRESSION "FAIL: window 0 did not finish ${what} within the hard limit"
+                         TIMEOUT 120 LABELS "${backend};abpair" RUN_SERIAL TRUE)
+endfunction()
+list(GET WAKELOOP_BACKENDS 0 _fault_backend)
+abpair_fault_test(${_fault_backend} lost_task "its drain")
+abpair_fault_test(${_fault_backend} stuck_task "its drain")
+abpair_fault_test(${_fault_backend} stuck_start "starting up")
+
 # The H5 runner's dry run: it writes its plan, prints every wakeprobe command line and runs nothing.
 # The script exits non-zero unless the plan has the expected cells: the 2026-09 designs, less the PM QoS
 # and random-gap designs (136 on Windows, 140 on Linux). Name: run_h5_dry_run.
@@ -123,3 +156,21 @@ else()
                      --build-dir "${PROJECT_BINARY_DIR}" --out-dir "${PROJECT_BINARY_DIR}/h5-dry-run" --dry-run --expect-cells 140)
 endif()
 set_tests_properties(run_h5_dry_run PROPERTIES TIMEOUT 120 LABELS "h5")
+
+# The campaign runner (run_campaign.py). A dry run of the sample plan prints every command and runs nothing;
+# the script exits non-zero unless the plan has the expected 12 processes. The unit tests start stub
+# programs only. Nothing is timed. Names: run_campaign_dry_run, run_campaign_unittest.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+    add_test(NAME run_campaign_dry_run
+             COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/run_campaign.py"
+                     --plan "${CMAKE_CURRENT_SOURCE_DIR}/testdata/plan-sample.jsonl"
+                     --build-dir "${PROJECT_BINARY_DIR}" --out-dir "${PROJECT_BINARY_DIR}/campaign-dry-run"
+                     --dry-run --expect-processes 12)
+    add_test(NAME run_campaign_unittest
+             COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test_run_campaign.py")
+    set_tests_properties(run_campaign_dry_run run_campaign_unittest
+                         PROPERTIES TIMEOUT 120 LABELS "campaign" RUN_SERIAL TRUE)
+else()
+    message(STATUS "bench: no Python 3 found; the run_campaign tests are not defined")
+endif()

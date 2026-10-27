@@ -27,11 +27,27 @@
 // counts as run. H4's workload is the decade grid N in {0, 1000, 10000, 100000} with W = 1,
 // P = 1, K = 64, reported in full (Alex, 2026-10-25; design/v2-defects.md, section 6).
 //
+// Failure checks. A window that does not finish fails the process. Three waits are bounded by
+// kHardLimit, the limit of wakeprobe: the start-up (every producer at the gate, every worker past
+// its first pass), the drain (from the end of the window until every producer has seen its last
+// task run) and the stop (from the loop's stop until every worker has left). A count window has
+// no end that the main thread can see, so its drain limit runs from the opening of the gate: a
+// count window must finish within the hard limit, which holds for --check and for nothing larger.
+// On expiry abpair tells every thread to leave and waits one more hard limit for them. If they
+// leave, it joins them. If some do not, it detaches them, leaks the window (they still point into
+// it), writes the summary and ends with std::_Exit, so that no join and no destructor waits for a
+// stuck thread. Exit code 4; the message "FAIL: window N did not finish ..." names the window and
+// prints no time. Each pinned thread also records current_cpu() when it ends. A pinned thread
+// seen on another CPU fails the process (exit code 3), and the summary lists the CPUs seen in
+// the last window that finished.
+//
 // --check is the self-test for a machine that times nothing: count mode with small numbers and
-// no time in the output. It reads no clock, except that with --work-ns each task reads it to
-// spin; nothing it measures is printed. It exits 0 only if every window ran exactly N tasks,
-// every producer completed what it posted, each side ran R windows, and the windows ran in the
-// requested order.
+// no time in the output. It reads the clock only to bound its waits and, with --work-ns, to spin
+// in each task; no reading is measured and none is printed. It exits 0 only if every window ran
+// exactly N tasks, every producer completed what it posted, each side ran R windows, and the
+// windows ran in the requested order. --check-fault (only with --check) breaks one thing on
+// purpose, to test the failure checks: lost_task (one task never frees its slot), stuck_task (one
+// task never returns) or stuck_start (one worker never starts its loop).
 
 #include "wakeloop/variants.hpp"
 
@@ -42,6 +58,7 @@
 #include <atomic>
 #include <charconv>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -50,6 +67,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -79,6 +97,11 @@ namespace
 	using Clock = std::chrono::steady_clock;
 	using benchutil::json_escape;
 
+	// The longest a wait for the window's threads may take (wakeprobe's kHardLimit); see the header.
+	constexpr auto kHardLimit = std::chrono::seconds(10);
+	constexpr int kExitError = 3;  // a thread error, a refused pin, a pinned thread off its CPU
+	constexpr int kExitStuck = 4;  // a window did not finish
+
 	constexpr unsigned kMaxWorkers = 64;  // as the wake tests
 	constexpr unsigned kMaxProducers = 64;
 	constexpr unsigned kMaxInflight = 1U << 16;
@@ -90,6 +113,15 @@ namespace
 	constexpr unsigned kCheckPairs = 2;
 	constexpr std::uint64_t kCheckTasks = 2000;
 	constexpr std::int64_t kMaxWorkNs = 1'000'000'000;  // one second of work per task
+
+	/// What --check-fault breaks on purpose, to test the failure checks. Never set outside --check.
+	enum class Fault
+	{
+		none,
+		lost_task,    // the first task of the first producer never frees its slot
+		stuck_task,   // the first task of the first producer never returns
+		stuck_start,  // worker 0 never starts its loop
+	};
 
 	struct Options
 	{
@@ -112,6 +144,7 @@ namespace
 		std::vector<unsigned> producer_cpus;  // empty: unpinned; else one CPU per producer
 		std::string out;
 		bool check = false;
+		Fault fault = Fault::none;
 
 		bool timed() const { return window_ms > 0; }
 		const std::string& arm(bool side_b) const { return side_b ? arm_b : arm_a; }
@@ -126,6 +159,7 @@ namespace
 		          << "       VARIANT is one of " << benchutil::variant_list() << "\n"
 		          << "       [--workers W] (default 1) [--producers P] (default 1) [--inflight K] (default 64)\n"
 		          << "       [--pairs R] (default 8) [--order abba|shuffle] (default abba) [--seed N]\n"
+		          << "       a count window (--window-tasks) must finish within the hard limit of its gate opening, so keep N small\n"
 		          << "       [--work-ns N] (default 0) each task spins for N ns of CPU on its worker (at most "
 		          << kMaxWorkNs << ")\n"
 		          << "       [--worker-cpus LIST] [--producer-cpus LIST] pin each worker (producer) thread to the\n"
@@ -133,7 +167,9 @@ namespace
 		          << "  --check  self-test: count windows of small numbers, no time anywhere in the output;\n"
 		          << "           takes no --window-ms, needs no --out, and fills W, P, K, R and N with\n"
 		          << "           " << kCheckWorkers << ", " << kCheckProducers << ", " << kCheckInflight << ", " << kCheckPairs << " and "
-		          << kCheckTasks << " where the command line gives none\n";
+		          << kCheckTasks << " where the command line gives none\n"
+		          << "           [--check-fault lost_task|stuck_task|stuck_start] breaks one thing on purpose, to test\n"
+		          << "           the failure checks; each makes the run fail\n";
 		std::exit(2);
 	}
 
@@ -170,6 +206,14 @@ namespace
 			usage("--work-ns expects a whole number from 0 to " + std::to_string(kMaxWorkNs) + ", got '" + std::string(text) + "'");
 		}
 		return value;
+	}
+
+	Fault parse_fault(std::string_view text)
+	{
+		if (text == "lost_task") return Fault::lost_task;
+		if (text == "stuck_task") return Fault::stuck_task;
+		if (text == "stuck_start") return Fault::stuck_start;
+		usage("--check-fault must be lost_task, stuck_task or stuck_start, got '" + std::string(text) + "'");
 	}
 
 	/// Checks one arm against the backend and the worker count; returns its variant.
@@ -230,6 +274,7 @@ namespace
 				cpus = benchutil::parse_cpu_list(value);
 				if (cpus.empty()) usage(std::string(flag) + " expects a comma-separated list of CPU numbers");
 			}
+			else if (flag == "--check-fault") o.fault = parse_fault(value);
 			else if (flag == "--out") o.out = value;
 			else usage("unknown flag " + std::string(flag));
 		}
@@ -255,6 +300,7 @@ namespace
 		{
 			if ((o.window_ms > 0) == (o.window_tasks > 0)) usage("give exactly one of --window-ms and --window-tasks");
 			if (o.out.empty()) usage("--out is required");
+			if (o.fault != Fault::none) usage("--check-fault needs --check");
 		}
 		return o;
 	}
@@ -262,6 +308,12 @@ namespace
 	// ----------------------------------------------------------------------------------------
 	// One window
 	// ----------------------------------------------------------------------------------------
+
+	/// A thread that never leaves (--check-fault). It sleeps, so that it costs no CPU.
+	[[noreturn]] void hang_forever()
+	{
+		for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -287,6 +339,9 @@ namespace
 			++s.completed;
 			s.busy.store(false, std::memory_order_release);
 		}
+		// --check-fault only: the task of a slot is swapped, so that the tasks of a normal run test no flag.
+		static void on_run_lost(wakeloop::Task&) noexcept {}  // runs, and never frees its slot
+		static void on_run_stuck(wakeloop::Task&) noexcept { hang_forever(); }
 		std::atomic<bool> busy{false};
 		std::int64_t work_ns = 0;     // set before the window starts
 		std::uint64_t completed = 0;  // written by the running worker, read after the joins
@@ -314,10 +369,48 @@ namespace
 		std::atomic<bool> stop{false};    // timed mode: stop posting
 		std::atomic<bool> failed{false};  // a worker threw or a thread did not start: everyone leaves
 		std::atomic<unsigned> ready{0};   // producers waiting at the gate
+
+		// How many threads of each role have left. The main thread waits on these with a deadline and
+		// joins only after, so that a thread that never leaves cannot hang it. A thread reports after
+		// everything else it does, and a producer takes `finished` before it reports, so the report
+		// is outside the timed interval. The mutex also publishes what a thread wrote before it.
+		void report_left(bool producer)
+		{
+			{
+				const std::lock_guard<std::mutex> lock(m_);
+				++(producer ? producers_left_ : workers_left_);
+			}
+			cv_.notify_all();
+		}
+		/// True once `want` threads of the role have left; false if `deadline` passes first.
+		bool wait_left(bool producer, std::size_t want, Clock::time_point deadline)
+		{
+			std::unique_lock<std::mutex> lock(m_);
+			return cv_.wait_until(lock, deadline, [&] { return (producer ? producers_left_ : workers_left_) >= want; });
+		}
+
+	private:
+		std::mutex m_;
+		std::condition_variable cv_;
+		std::size_t producers_left_ = 0;
+		std::size_t workers_left_ = 0;
+	};
+
+	/// The wait that a window did not finish.
+	enum class Stuck
+	{
+		none,
+		start_up,  // not every producer at the gate and every worker past its first pass
+		drain,     // not every producer has seen its last task run
+		stop,      // not every worker has left after the loop's stop
 	};
 
 	struct WindowResult
 	{
+		Stuck stuck = Stuck::none;
+		bool abandoned = false;  // and some threads are still running: the process must end without joining them
+		std::vector<int> worker_cpus_seen;    // where each pinned thread ended; empty when the role is not pinned
+		std::vector<int> producer_cpus_seen;
 		std::uint64_t tasks = 0;   // tasks that ran, summed over the slots
 		std::uint64_t posted = 0;  // tasks posted, summed over the producers
 		std::vector<std::uint64_t> producer_posted;
@@ -396,16 +489,19 @@ namespace
 		}
 	}
 
-	/// Waits until every producer is at the gate and every worker has made a pass.
+	/// Waits until every producer is at the gate and every worker has made a pass. False if that
+	/// takes longer than the hard limit. A window that has failed is not waited for: true.
 	template <class Loop>
-	void wait_until_up(const Loop& loop, const Shared& shared, unsigned producers)
+	bool wait_until_up(const Loop& loop, const Shared& shared, unsigned producers)
 	{
+		const auto give_up_at = Clock::now() + kHardLimit;
 		for (;;)
 		{
-			if (shared.failed.load(std::memory_order_acquire)) return;
+			if (shared.failed.load(std::memory_order_acquire)) return true;
 			bool up = shared.ready.load(std::memory_order_acquire) == producers;
 			for (unsigned w = 0; up && w < loop.workers(); ++w) up = loop.passes(w) > 0;
-			if (up) return;
+			if (up) return true;
+			if (Clock::now() > give_up_at) return false;
 			std::this_thread::yield();
 		}
 	}
@@ -422,36 +518,100 @@ namespace
 		shared.failed.store(true, std::memory_order_release);
 	}
 
-	/// Starts the threads of a window. A thread that cannot start sets `failed` and stops the
-	/// rest of the starts. Each thread pins itself first (pin_errors: workers, then producers).
+	/// Records the CPU the calling thread is on as it ends, when it was pinned: the pin must still
+	/// hold. Each thread writes its own element.
+	void note_cpu(const std::vector<unsigned>& cpus, std::vector<int>& seen, unsigned i)
+	{
+		if (!cpus.empty()) seen[i] = wakeprobe::current_cpu();
+	}
+
+	/// Everything the threads of one window touch. It lives on the heap so that run_window can leak
+	/// it: a thread that never leaves still points into it.
 	template <class Loop>
-	void start_threads(Loop& loop, Shared& shared, const Options& opt, std::vector<Producer>& producers,
-	                   std::vector<std::string>& errors, std::vector<std::string>& pin_errors,
-	                   std::vector<std::thread>& worker_threads, std::vector<std::thread>& producer_threads, std::string& error)
+	struct Window
+	{
+		explicit Window(const Options& opt)
+			: errors(opt.workers),
+			  pin_errors(opt.workers + opt.producers),
+			  worker_cpus_seen(opt.worker_cpus.size(), -1),
+			  producer_cpus_seen(opt.producer_cpus.size(), -1)
+		{
+			producers.reserve(opt.producers);
+			for (unsigned p = 0; p < opt.producers; ++p) producers.emplace_back(opt.inflight, quota_of(opt, p), opt.work_ns);
+			if (opt.fault == Fault::lost_task) producers[0].slots[0].run = &Slot::on_run_lost;
+			if (opt.fault == Fault::stuck_task) producers[0].slots[0].run = &Slot::on_run_stuck;
+		}
+
+		// The task storage comes first: the tasks must outlive the loop.
+		std::vector<Producer> producers;
+		Shared shared;
+		std::vector<std::string> errors;      // per worker
+		std::vector<std::string> pin_errors;  // workers, then producers
+		std::vector<int> worker_cpus_seen;    // empty when the workers are not pinned
+		std::vector<int> producer_cpus_seen;
+		std::unique_ptr<Loop> loop;
+	};
+
+	/// Starts the threads of a window. A thread that cannot start sets `failed` and stops the
+	/// rest of the starts. Each thread pins itself first (pin_errors: workers, then producers),
+	/// and reports last that it has left.
+	template <class Loop>
+	void start_threads(Window<Loop>& win, const Options& opt, std::vector<std::thread>& worker_threads,
+	                   std::vector<std::thread>& producer_threads, std::string& error)
 	{
 		const bool timed = opt.timed();
 		try
 		{
 			for (unsigned w = 0; w < opt.workers; ++w)
 			{
-				worker_threads.emplace_back([&loop, &shared, &opt, &errors, &pin_errors, w] {
-					pin_thread(opt.worker_cpus, w, shared, pin_errors[w], "worker");
-					work(loop, shared, w, errors[w]);
+				worker_threads.emplace_back([&win, &opt, w] {
+					pin_thread(opt.worker_cpus, w, win.shared, win.pin_errors[w], "worker");
+					if (opt.fault == Fault::stuck_start && w == 0) hang_forever();
+					work(*win.loop, win.shared, w, win.errors[w]);
+					note_cpu(opt.worker_cpus, win.worker_cpus_seen, w);
+					win.shared.report_left(false);
 				});
 			}
 			for (unsigned p = 0; p < opt.producers; ++p)
 			{
-				producer_threads.emplace_back([&loop, &shared, &opt, &producers, &pin_errors, p, timed, first = p % opt.workers] {
-					pin_thread(opt.producer_cpus, p, shared, pin_errors[opt.workers + p], "producer");
-					produce(loop, shared, producers[p], first, timed);
+				producer_threads.emplace_back([&win, &opt, p, timed, first = p % opt.workers] {
+					pin_thread(opt.producer_cpus, p, win.shared, win.pin_errors[opt.workers + p], "producer");
+					produce(*win.loop, win.shared, win.producers[p], first, timed);
+					note_cpu(opt.producer_cpus, win.producer_cpus_seen, p);
+					win.shared.report_left(true);
 				});
 			}
 		}
 		catch (const std::exception& e)
 		{
 			error = std::string("cannot start a thread: ") + e.what();
-			shared.failed.store(true, std::memory_order_release);
+			win.shared.failed.store(true, std::memory_order_release);
 		}
+	}
+
+	/// A pinned thread seen on another CPU as it ended: its pin did not hold. One line, empty when
+	/// every pinned thread ended where it was pinned. A thread whose pin failed is skipped: that
+	/// error is reported already.
+	std::string placement_errors(const Options& opt, const std::vector<int>& worker_seen, const std::vector<int>& producer_seen,
+	                             const std::vector<std::string>& pin_errors)
+	{
+		std::string s;
+		const auto add = [&s](const char* role, std::size_t i, int seen, unsigned want) {
+			s += (s.empty() ? "" : "; ") + std::string(role) + " " + std::to_string(i) + " ended on CPU " + std::to_string(seen) +
+			     ", not on CPU " + std::to_string(want);
+		};
+		for (std::size_t w = 0; w < opt.worker_cpus.size(); ++w)
+		{
+			if (pin_errors[w].empty() && worker_seen[w] != static_cast<int>(opt.worker_cpus[w])) add("worker", w, worker_seen[w], opt.worker_cpus[w]);
+		}
+		for (std::size_t p = 0; p < opt.producer_cpus.size(); ++p)
+		{
+			if (pin_errors[opt.workers + p].empty() && producer_seen[p] != static_cast<int>(opt.producer_cpus[p]))
+			{
+				add("producer", p, producer_seen[p], opt.producer_cpus[p]);
+			}
+		}
+		return s;
 	}
 
 	/// One window: a fresh loop of the arm's type in poll mode, W workers and P producers.
@@ -461,31 +621,55 @@ namespace
 		WindowResult res;
 		const bool timed = opt.timed();
 
-		// The task storage comes first: the tasks must outlive the loop.
-		std::vector<Producer> producers;
-		producers.reserve(opt.producers);
-		for (unsigned p = 0; p < opt.producers; ++p) producers.emplace_back(opt.inflight, quota_of(opt, p), opt.work_ns);
-		Shared shared;
-		std::vector<std::string> errors(opt.workers);
-		std::vector<std::string> pin_errors(opt.workers + opt.producers);
-
-		std::unique_ptr<Loop> loop;
+		auto win = std::make_unique<Window<Loop>>(opt);
+		Shared& shared = win->shared;
 		try
 		{
-			loop = std::make_unique<Loop>(wakeloop::Config{.wait_us = 0, .workers = opt.workers, .poll = true});
+			win->loop = std::make_unique<Loop>(wakeloop::Config{.wait_us = 0, .workers = opt.workers, .poll = true});
 		}
 		catch (const std::exception& e)
 		{
 			res.error = std::string("cannot create the ") + Loop::name + " loop: " + e.what();
 			return res;
 		}
+		Loop& loop = *win->loop;
 
 		std::vector<std::thread> worker_threads;
 		std::vector<std::thread> producer_threads;
 		worker_threads.reserve(opt.workers);
 		producer_threads.reserve(opt.producers);
-		start_threads(*loop, shared, opt, producers, errors, pin_errors, worker_threads, producer_threads, res.error);
-		wait_until_up(*loop, shared, opt.producers);
+		start_threads(*win, opt, worker_threads, producer_threads, res.error);
+
+		// The window cannot finish. Tell every thread to leave (a producer leaves its loop on
+		// `failed`, a worker on the loop's stop, and the gate opens for a producer still waiting
+		// at it) and give them one more hard limit. If they leave, join them. If some do not,
+		// detach every thread and let go of the window without destroying it: the stuck ones
+		// still point into it, and run_all ends the process without joining them.
+		const auto give_up = [&](Stuck where) {
+			res.stuck = where;
+			shared.failed.store(true, std::memory_order_release);
+			shared.go.store(true, std::memory_order_release);
+			loop.stop();
+			const auto by = Clock::now() + kHardLimit;
+			const bool left = shared.wait_left(true, producer_threads.size(), by) && shared.wait_left(false, worker_threads.size(), by);
+			for (auto* threads : {&producer_threads, &worker_threads})
+			{
+				for (auto& t : *threads)
+				{
+					if (!t.joinable()) continue;
+					if (left) t.join();
+					else t.detach();
+				}
+			}
+			if (!left)
+			{
+				(void)win.release();
+				res.abandoned = true;
+			}
+			return res;
+		};
+
+		if (!wait_until_up(loop, shared, opt.producers)) return give_up(Stuck::start_up);
 
 		Clock::time_point start{};
 		if (timed) start = Clock::now();
@@ -495,21 +679,30 @@ namespace
 			std::this_thread::sleep_for(std::chrono::milliseconds(opt.window_ms));
 			shared.stop.store(true, std::memory_order_release);
 		}
-		// The producers leave once every task they posted has run; only then stop the workers.
+		// The window ends here: at the stop in timed mode, at the gate in count mode, which has no
+		// end of its own that this thread could see. The producers leave once every task they
+		// posted has run; only then stop the workers.
+		if (!shared.wait_left(true, producer_threads.size(), Clock::now() + kHardLimit)) return give_up(Stuck::drain);
+		loop.stop();
+		if (!shared.wait_left(false, worker_threads.size(), Clock::now() + kHardLimit)) return give_up(Stuck::stop);
 		for (auto& t : producer_threads) t.join();
-		loop->stop();
 		for (auto& t : worker_threads) t.join();
 
-		for (const auto& e : errors)
+		for (const auto& e : win->errors)
 		{
 			if (!e.empty()) res.error += (res.error.empty() ? "" : "; ") + std::string("a worker threw: ") + e;
 		}
-		for (const auto& e : pin_errors)
+		for (const auto& e : win->pin_errors)
 		{
 			if (!e.empty()) res.error += (res.error.empty() ? "" : "; ") + e;
 		}
+		// Where the threads ended counts only for a window with no other error: a thread that did
+		// not start, or whose pin failed, has no CPU to compare.
+		if (res.error.empty()) res.error = placement_errors(opt, win->worker_cpus_seen, win->producer_cpus_seen, win->pin_errors);
+		res.worker_cpus_seen = win->worker_cpus_seen;
+		res.producer_cpus_seen = win->producer_cpus_seen;
 		Clock::time_point last = start;
-		for (const Producer& p : producers)
+		for (const Producer& p : win->producers)
 		{
 			std::uint64_t done = 0;
 			for (const Slot& s : p.slots) done += s.completed;
@@ -520,8 +713,8 @@ namespace
 			if (timed) last = std::max(last, p.finished);
 		}
 		if (timed) res.elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(last - start).count();
-		for (unsigned w = 0; w < opt.workers; ++w) res.passes.push_back(loop->passes(w));
-		res.wait_method = loop->wait_method();
+		for (unsigned w = 0; w < opt.workers; ++w) res.passes.push_back(loop.passes(w));
+		res.wait_method = loop.wait_method();
 		return res;
 	}
 
@@ -586,8 +779,18 @@ namespace
 		return s + "]";
 	}
 
+	/// Where the pinned threads ended, in the order of --worker-cpus and --producer-cpus: the last
+	/// window that finished. A list is empty when its role is not pinned, and holds -1 for a thread
+	/// that no window has seen end.
+	struct CpusSeen
+	{
+		std::vector<int> workers;
+		std::vector<int> producers;
+	};
+
 	std::string summary_line(const Options& o, const std::vector<Done>& done, const std::string& wait_method,
-	                         const std::string& started_utc, const std::string& error, const std::vector<std::string>& failures)
+	                         const std::string& started_utc, const std::string& error, const std::vector<std::string>& failures,
+	                         const CpusSeen& seen)
 	{
 		std::ostringstream s;
 		s << "{\"summary\":true,\"program\":\"abpair\",\"check\":" << (o.check ? "true" : "false") << ",\"backend\":\""
@@ -598,7 +801,10 @@ namespace
 		  << "\",\"window_ms\":" << (o.timed() ? std::to_string(o.window_ms) : std::string("null"))
 		  << ",\"window_tasks\":" << (o.timed() ? std::string("null") : std::to_string(o.window_tasks))
 		  << ",\"work_ns\":" << o.work_ns << ",\"worker_cpus\":" << benchutil::cpu_list_json(o.worker_cpus)
-		  << ",\"producer_cpus\":" << benchutil::cpu_list_json(o.producer_cpus) << ",\"wait\":\"poll\",\"windows\":" << done.size() << ",\"sequence\":" << sequence_json(done)
+		  << ",\"producer_cpus\":" << benchutil::cpu_list_json(o.producer_cpus)
+		  << ",\"worker_cpus_seen\":" << benchutil::cpu_list_json(seen.workers)
+		  << ",\"producer_cpus_seen\":" << benchutil::cpu_list_json(seen.producers) << ",\"wait\":\"poll\",\"windows\":"
+		  << done.size() << ",\"sequence\":" << sequence_json(done)
 		  << ",\"wait_method\":\"" << json_escape(wait_method) << "\",\"check_passed\":"
 		  << (o.check ? (failures.empty() && error.empty() ? "true" : "false") : "null") << ",\"compiler\":\""
 		  << json_escape(wakeprobe::compiler_name()) << "\",\"build_type\":\"" << ABPAIR_BUILD_TYPE << "\",\"bench_commit\":\""
@@ -703,6 +909,17 @@ namespace
 		std::ofstream file_;
 	};
 
+	/// The message of a window that did not finish. It names the window by its place in the run
+	/// (the index counts from 0, as in verify()) and prints no time.
+	std::string stuck_text(const Done& d, unsigned index)
+	{
+		const char* what = "starting up";
+		if (d.result.stuck == Stuck::drain) what = "its drain";
+		if (d.result.stuck == Stuck::stop) what = "stopping its workers";
+		return "window " + std::to_string(index) + " did not finish " + what + " within the hard limit (pair " +
+		       std::to_string(d.pair) + ", position " + std::to_string(d.position) + ")";
+	}
+
 	/// Runs one window of the arm's variant. False when this platform has no such loop.
 	bool run_one(const Options& opt, Done& d)
 	{
@@ -726,6 +943,9 @@ namespace
 		const std::vector<bool> ba = make_order(opt);
 		std::vector<Done> done;
 		std::string error;
+		bool stuck = false;      // a window did not finish: `error` is the FAIL line
+		bool abandoned = false;  // and some of its threads are still running
+		CpusSeen seen{std::vector<int>(opt.worker_cpus.size(), -1), std::vector<int>(opt.producer_cpus.size(), -1)};
 		std::string wait_method;
 		for (unsigned k = 0; k < opt.pairs && error.empty(); ++k)
 		{
@@ -740,6 +960,16 @@ namespace
 					error = "no loop for backend " + opt.backend + " and variant " + opt.arm(d.side_b);
 					break;
 				}
+				if (d.result.stuck != Stuck::none)
+				{
+					stuck = true;
+					abandoned = d.result.abandoned;
+					error = stuck_text(d, 2 * k + position);
+					break;
+				}
+				// Before the error check: a window that failed on its placement shows where its threads ended.
+				if (!d.result.worker_cpus_seen.empty()) seen.workers = d.result.worker_cpus_seen;
+				if (!d.result.producer_cpus_seen.empty()) seen.producers = d.result.producer_cpus_seen;
 				if (!d.result.error.empty())
 				{
 					error = d.result.error;
@@ -752,11 +982,14 @@ namespace
 		}
 
 		const std::vector<std::string> failures = opt.check && error.empty() ? verify(opt, done) : std::vector<std::string>{};
-		out.summary(summary_line(opt, done, wait_method, started_utc, error, failures));
+		out.summary(summary_line(opt, done, wait_method, started_utc, error, failures, seen));
 		if (!error.empty())
 		{
-			std::cerr << "abpair: " << error << "\n";
-			return 3;
+			std::cerr << (stuck ? "FAIL: " : "abpair: ") << error << "\n";
+			// The lines are out: each window line was flushed as it was written, the summary was
+			// flushed, and std::cerr does not buffer. A stuck thread would hang a normal exit.
+			if (abandoned) std::_Exit(kExitStuck);
+			return stuck ? kExitStuck : kExitError;
 		}
 		if (!failures.empty())
 		{
