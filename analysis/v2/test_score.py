@@ -22,6 +22,7 @@ import beff
 import grid
 import h4log
 import plan
+import provenance
 import readers
 import score
 import stats
@@ -886,15 +887,21 @@ class StrictProvenance(unittest.TestCase):
                 e, [1000] * 630, system="windows", coarsest_timer_us=WINDOWS_TIMER_US))
         for e in self.by_cell["H4-iocp-N1us-none"]:
             synth.write_process(self.data, e, first=synth.abpair_output(e, [1.0, 1.0]))
+        # The run was gated: run.txt has the lines the runner leaves after its gate passed, and the records exist.
+        self.records = os.path.join(self.t.root, "records")
+        self.gate = synth.write_gate(self.data, "windows", self.records)
 
-    def main(self, *extra, plan_path=None):
+    def main(self, *extra, plan_path=None, records=None):
+        folders = [self.records] if records is None else records
+        args = ["--windows", plan_path or self.plan, self.data, "--out", self.out]
+        for folder in folders:
+            args += ["--records", folder]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            return score.main(["--windows", plan_path or self.plan, self.data, "--out", self.out] + list(extra),
-                              repo=self.repo)
+            return score.main(args + list(extra), repo=self.repo)
 
-    def refused(self, *extra, plan_path=None):
+    def refused(self, *extra, plan_path=None, records=None):
         with self.assertRaises(SystemExit) as cm:
-            self.main(*extra, plan_path=plan_path)
+            self.main(*extra, plan_path=plan_path, records=records)
         self.assertFalse(os.path.exists(self.out), "a refused scoring wrote its output")
         message = str(cm.exception.code)
         self.assertTrue(message.startswith("score.py: refused: "), message)
@@ -926,6 +933,99 @@ class StrictProvenance(unittest.TestCase):
         os.remove(os.path.join(self.repo, "new.txt"))
         self.t.write(self.repo, plan.REVISION_LOG, self.text + "\nchanged\n")
         self.assertIn("not clean", self.refused())
+
+    # -- N9: the run was gated, and the records it names are the ones in the folders ----------------------------------
+
+    def test_a_gated_run_with_its_records_is_scored(self):
+        doc_rc = self.main()
+        self.assertEqual(doc_rc, 0)
+        self.assertFalse([w for w in self.result()["warnings"] if "gate" in w or "record" in w])
+
+    def test_a_run_without_run_txt_was_not_gated_and_is_refused(self):
+        os.remove(os.path.join(self.data, "run.txt"))
+        self.assertIn("has no run.txt", self.refused())
+
+    def test_every_gate_line_is_needed(self):
+        for key in provenance.GATE_KEYS:
+            with self.subTest(key=key):
+                synth.write_gate(self.data, "windows", self.records)
+                path = os.path.join(self.data, "run.txt")
+                with open(path, encoding="utf-8") as f:
+                    lines = [line for line in f.read().splitlines() if not line.startswith(key + ": ")]
+                with open(path, "w", encoding="utf-8", newline="\n") as f:
+                    f.write("\n".join(lines) + "\n")
+                message = self.refused()
+                self.assertIn("'%s'" % key, message)
+                self.assertIn("not gated by the records gate", message)
+
+    def test_a_gate_that_did_not_pass_is_refused(self):
+        path = os.path.join(self.data, "run.txt")
+        with open(path, encoding="utf-8") as f:
+            text = f.read().replace("gate: passed", "gate: refused")
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        self.assertIn("not passed", self.refused())
+
+    def test_a_record_that_run_txt_names_must_be_in_a_folder(self):
+        name = self.gate["records"].split(" ")[1]
+        os.remove(os.path.join(self.records, name))
+        message = self.refused()
+        self.assertIn(name, message)
+        self.assertIn("in none of the --records folders", message)
+
+    def test_a_record_with_another_sha256_than_run_txt_records_is_refused(self):
+        name = self.gate["records"].split(" ")[1]
+        with open(os.path.join(self.records, name), "a", encoding="utf-8") as f:
+            f.write(" ")
+        message = self.refused()
+        self.assertIn(name, message)
+        self.assertIn("and run.txt records", message)
+
+    def test_a_red_record_or_a_dry_run_record_does_not_count(self):
+        name = self.gate["other"].split(" ")[1]
+        synth.write_gate(self.data, "windows", self.records, red=(name,))
+        self.assertIn("not a green record of a real job", self.refused())
+
+    def test_the_records_may_be_in_two_folders(self):
+        other = os.path.join(self.t.root, "other-records")
+        synth.write_gate(self.data, "windows", self.records, other)
+        self.assertEqual(self.main(records=[self.records, other]), 0)
+        os.remove(self.out)
+        self.assertIn("in none of the --records folders", self.refused(records=[other]))  # the Windows record is in the first
+
+    def test_without_a_records_folder_the_records_cannot_be_checked(self):
+        self.assertIn("no --records folder was given", self.refused(records=[]))
+
+    def test_a_system_needs_a_record_of_each_of_its_sanitizers(self):
+        """The other system's, too: Linux's three for a Windows run."""
+        path = os.path.join(self.data, "run.txt")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        short = "gate other records: " + self.gate["other"].split("; ")[0]
+        text = "\n".join(short if line.startswith("gate other records: ") else line for line in text.splitlines()) + "\n"
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        message = self.refused()
+        self.assertIn("names no tsan record for linux", message)
+
+    def test_a_draft_warns_instead_of_refusing_about_the_gate(self):
+        os.remove(os.path.join(self.data, "run.txt"))
+        self.assertEqual(self.main("--draft", records=[]), 0)
+        warnings = self.result()["warnings"]
+        self.assertTrue([w for w in warnings if "has no run.txt" in w], warnings)
+        self.assertTrue([w for w in warnings if "no --records folder" in w], warnings)
+
+    def test_the_sanitizers_agree_with_the_gate_of_the_bench_scripts(self):
+        """provenance.GATE_SANITIZERS is a copy of bench/gate_lib.SANITIZERS_BY_HOST; this reads the bench file."""
+        import re
+        source = os.path.join(plan.REPO_ROOT, "bench", "gate_lib.py")
+        if not os.path.isfile(source):
+            self.skipTest("no bench/gate_lib.py beside this checkout")
+        with open(source, encoding="utf-8") as f:
+            match = re.search(r'^SANITIZERS_BY_HOST = \{"L": \(([^)]*)\), "W": \(([^)]*)\)\}', f.read(), re.MULTILINE)
+        self.assertTrue(match)
+        names = lambda text: tuple(x.strip().strip('"') for x in text.split(",") if x.strip())  # noqa: E731
+        self.assertEqual(provenance.GATE_SANITIZERS, {"linux": names(match.group(1)), "windows": names(match.group(2))})
 
     def test_a_draft_may_come_from_a_dirty_tree_and_is_marked(self):
         self.t.write(self.repo, "new.txt", "x\n")

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """The campaign runner of P1 v2 (hypotheses-v2.md, section 11, item 5).
 
-Usage: run_campaign.py --plan FILE --build-dir DIR --out-dir DIR [--dry-run] [--expect-processes N]
-                       [--resume] [--stop-after-s S]
+Usage: run_campaign.py --plan FILE --build-dir DIR --out-dir DIR --records DIR --other-records DIR [--dry-run]
+                       [--expect-processes N] [--resume] [--stop-after-s S] [--inputs-hash FILE]
+       run_campaign.py --check-gate --build-dir DIR --records DIR --other-records DIR [--plan FILE]
+                       [--inputs-hash FILE]
 
 It runs the processes of one plan, one after the other, in the plan's order. It never builds,
 never times anything itself and never overwrites a record. A process is one wakeprobe or abpair
@@ -32,6 +34,41 @@ and a campaign plan (any other family) has
     analysis/v2/plan.py <40 hex digits> revision-log-v2.md sha256:<64 hex digits>
 A stand-in or draft plan, or any other text, is refused. Under --dry-run it only warns, so that
 a stand-in or draft plan can be checked on the desktop. run.txt records the text and the kind.
+
+The records gate (hypotheses-v2.md, section 8, "Gate"; the Papers repo's rule D5). The runner takes no gate file
+and trusts none: it runs the gate itself, in its own process (bench/gate_lib.py, run_gate), from --records DIR (the
+sanitizer records of this system; on W the folder laptop-w alone) and --other-records DIR (the other system's). It runs
+at the start of a timed run, again at every --resume, and alone as --check-gate, which exits 0 or 2 and runs nothing
+(bench/run_h5.sh and run_h5.ps1 call it before any cell). A dry run needs no records; given them, it only warns.
+The gate computes everything from the actual --build-dir and the folders, and refuses (exit 2, before anything is
+written) unless all of this holds:
+    the code paths (bench/code_paths.txt) and bench/coverage.json have no change (git is LAB_GIT, else git), and the
+    build was configured from this checkout as Release with no sanitizer (WAKELOOP_SANITIZER empty or a CMake false
+    constant), no toolchain file, no interprocedural optimization and the compile and link flags a fresh configure
+    gives, on W neither CL nor _CL_ is set, and neither binary holds the symbols of a sanitizer runtime;
+    the build's own ninja (CMAKE_MAKE_PROGRAM of its cache, never one from PATH) has nothing to build, and each
+    binary's time agrees with its .ninja_log entry (a binary put in place after the build is seen);
+    the build's inputs, hashed now, with its configuration (CMake files included), and the compiler: the one CMake
+    identified at configure time, which compiled the binaries. A timed run is refused when today's banner of the compiler
+    differs from it ("the compiler changed since configure; configure and build again"); on L the binaries' .comment
+    section names that clang version too. A --resume skips the banner and wants the identity run.txt recorded
+    ("gate compiler"). There is no option to name a compiler;
+    for every sanitizer the system needs (L: ASan+UBSan, TSan, MSan; W: ASan; fixed in gate_lib.py, and no file can
+    waive one) one green record made on the laptop matches all four targets, the compiler and the configuration, is of
+    the current record format, was made with today's generator files (analysis/v2/plan.py and grid.py,
+    bench/campaign_smoke.py, run_h5.sh, run_h5.ps1) and names its logs archive, which is on this machine with the
+    sha256 the record names. A record that matches the inputs and does not fit is skipped with a note; a red record
+    stops the gate only when it records a finding (a sanitizer report, a failed or timed-out test or smoke run), never
+    when it is red for the infrastructure (a failed log pack, a dirty tree, a host refusal, a job problem);
+    the other system has its records for the same code and the same generator files;
+    every plan line has a shape that each required sanitizer's record ran in its campaign smoke (a plan line whose
+    shape key is in no such record is refused).
+run.txt records the result: the compiler identity, the code commit and fingerprint, coverage.json's sha256, the
+generator files' sha256, and the name and sha256 of every record used (analysis/v2 score.py and pilot.py read these lines
+and check the records against their folders); a resume line repeats it. The hashes of wakeprobe and abpair in run.txt
+are those the gate made. Before each process, and before a rerun, the runner hashes them again; if either differs from
+the one the gate hashed (a resume: from the start), it logs BINARY-CHANGED, starts nothing more and exits 3.
+--check-gate also prints a line "binary <tool> sha256 <hex>" for each, which run_h5 keeps and checks before every cell.
 
 Files written to the output directory:
     run.txt        written first, before any process starts: the plan's sha256, both binaries'
@@ -162,26 +199,28 @@ Exit codes:
          run; a bad plan (an unknown key, a missing limit_s, a limit_s that is not a whole number
          of at least 1 and at most 4294967, a generated_by that is not of the real form for the
          plan's kind); a plan for the other system (real run); a build that is missing, not
-         Release or multi-config (real run); an output directory that already holds records or
+         Release or multi-config (real run); no --records and --other-records, or a records gate that
+         refuses this build or a plan line (real run, --check-gate); an output directory that already holds records or
          any file this run would write; --expect-processes that does not match; a bad command
          line (a --stop-after-s below 1 too); a runner that cannot pin itself to CPU 0 (real
          run); with --resume: no output directory, no run.txt or one without the fields needed,
          another plan sha256, other binaries (real run), a .done, .attempt1, lock or pid file
          that is malformed or names no process of the plan, a live lock or tool (real run)
     3    the runner itself failed (for example a full disk, or a tool that cannot be put under
-         the runner's guard or cannot be killed); the message and traceback are on standard error
+         the runner's guard or cannot be killed), or a measured binary is not the one the run started
+         with (BINARY-CHANGED in campaign.log); the message is on standard error
     4    stopped by --stop-after-s with processes left; continue with --resume
     130  interrupted
 
-A dry run (--dry-run) prints every command line with its limit and runs nothing. It writes
-nothing, not even the output directory. It needs no LAB_JOB. A plan for the other system, a
-generated_by of the wrong form, a missing binary, other binaries than the run's own, a build
-that is not Release and a live lock or tool are warnings in a dry run, so that the desktop can
-check a plan made for the laptop's other system. A bad plan, an output directory that holds
-records and, with --resume, another plan sha256 still refuse. --dry-run --resume prints, in the
-plan's order, which ids it would skip, rename (with their k), finish from a marker, rerun and
-run, and the incomplete outcomes among the skipped ids. --stop-after-s has no effect in a dry
-run.
+A dry run (--dry-run) prints every command line with its limit and runs nothing. It writes nothing,
+not even the output directory. It needs no LAB_JOB and no records. A plan for the other system, a
+generated_by of the wrong form, a missing binary, other binaries than the run's own, a build that is
+not Release, a live lock or tool and a records gate that refuses are warnings in a dry run,
+so that the desktop can check a plan made for the laptop's other system. A bad plan, an output
+directory that holds records and, with --resume, another plan sha256 still refuse. --dry-run
+--resume prints, in the plan's order, which ids it would skip, rename (with their k), finish from a
+marker, rerun and run, and the incomplete outcomes among the skipped ids. --stop-after-s has no
+effect in a dry run.
 """
 
 import argparse
@@ -201,6 +240,12 @@ import sys
 import time
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
+
+# The siblings of this file, whether it is started as a script (python -B bench/run_campaign.py) or isolated (python -I).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import campaign_smoke  # noqa: E402  (shape_key)
+import gate_lib  # noqa: E402  (run_gate)
 
 EXIT_OK = 0
 EXIT_INCOMPLETE = 1
@@ -254,6 +299,7 @@ KILL_WAIT_S = 30  # how long a killed tool may take to be gone before the runner
 LINUX = sys.platform.startswith("linux")
 WINDOWS = sys.platform == "win32"
 PR_SET_PDEATHSIG = 1
+GATE_HOST = {"linux": "L", "windows": "W"}  # the records gate's names for the plan systems (see "The records gate")
 
 
 class Refusal(Exception):
@@ -312,6 +358,7 @@ class ResumeState:
     digests: dict      # tool -> sha256 now
     stale_lock: object  # the Holder of a lock whose runner is gone, or None
     stale_pids: tuple   # names of pid files whose tool is gone
+    compiler: object = None  # the compiler identity run.txt recorded at the start ("gate compiler"), or None
 
 
 @dataclass(frozen=True)
@@ -452,6 +499,148 @@ def check_provenance(plan, dry):
     if not dry:
         raise Refusal(message)
     warn(message)
+
+
+# ---------------------------------------------------------------------------------------------
+# The records gate
+# ---------------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class GateOutcome:
+    """What a passed gate leaves: the lines for run.txt and the resume line, and the sha256 of the binaries it hashed."""
+    lines: tuple
+    binaries: dict
+    compiler: str = ""
+
+
+def evaluate_gate(system, build_dir, records, other_records, inputs_hash, resume_compiler=None):
+    """The records gate, in this process (gate_lib.run_gate). Returns its result; Refusal if it refuses. Tests replace this
+    function. There is no way to hand it a result. resume_compiler: at --resume, the compiler identity that run.txt
+    recorded at the start (see gate_lib.run_gate)."""
+    try:
+        return gate_lib.run_gate(build=Path(build_dir), host=GATE_HOST[system], records=Path(records),
+                                 other_records=Path(other_records), tool=Path(inputs_hash) if inputs_hash else None,
+                                 resume_compiler=resume_compiler)
+    except gate_lib.GateError as err:
+        raise Refusal(f"the records gate refuses {build_dir}: {err}") from None
+
+
+def plan_shape_problems(plan, smoke_keys):
+    """The plan lines whose code shape (campaign_smoke.shape_key) is in no record's smoke of every required sanitizer."""
+    missing = {}
+    for proc in plan.processes:
+        key = campaign_smoke.shape_key({"tool": proc.tool, "args": list(proc.args), "family": proc.family})
+        if key not in smoke_keys:
+            missing.setdefault(key, []).append(proc.id)
+    if not missing:
+        return []
+    count = sum(len(ids) for ids in missing.values())
+    key, ids = next(iter(missing.items()))
+    return [f"{count} plan lines run {len(missing)} code shapes that no green record of every required sanitizer ran in "
+            f"its campaign smoke, for example {ids[0]}: {list(key)}"]
+
+
+def result_problems(result, plan, build_dir):
+    """Why a gate result does not let this run start (empty when it does)."""
+    problems = []
+    if result.get("passed") is not True or result.get("dry_run") or result.get("citable") is not True:
+        problems.append("the result is not a passed, citable gate (a dry run or a failure)")
+    if result.get("partial"):
+        problems.append("a declared gap waived a record (partial is not empty)")
+    binaries = result.get("binaries") or {}
+    for tool in TOOLS:
+        path = tool_path(build_dir, tool)
+        if binaries.get(tool) is None:
+            problems.append(f"the gate hashed no {tool}")
+        elif os.path.isfile(path) and sha256_file(path) != binaries[tool]:  # a missing file is check_build's to report
+            problems.append(f"{tool} at {path} is not the binary the gate hashed")
+    if plan is not None:
+        keys = result.get("smoke_keys")
+        problems += plan_shape_problems(plan, frozenset() if keys is None else keys)
+    return problems
+
+
+def gate_lines(result):
+    """The lines run.txt keeps about a passed gate: names and sha256 of every record, and what the gate was made of."""
+    def names(entries):
+        return ", ".join(f"{e['name']} {e['sha256']}" for e in entries)
+    own = result["wakeloop"]["coverage"]
+    other = result["other_host"]["records"]
+    return (("gate", "passed"), ("gate compiler", result["wakeloop"]["compiler"]), ("gate code commit", result["code_commit"]),
+            ("gate code fingerprint", result["code_fingerprint"]), ("gate coverage.json sha256", result["coverage_json_sha256"]),
+            ("gate generators", "; ".join(f"{k} {v}" for k, v in sorted(result["generators"].items()))),
+            ("gate records", "; ".join(f"{san} {names(own[san])}" for san in sorted(own))),
+            ("gate other records", "; ".join(f"{san} {names(other[san])}" for san in sorted(other))),
+            ("gate smoke shape keys", str(len(result["smoke_keys"]))))
+
+
+def gate_outcome(args, system, plan, build_dir, resume_compiler=None):
+    """Runs the gate for a build and, with a PLAN, checks every line of it. Returns a GateOutcome; Refusal if the gate or
+    a plan line is refused or the records folders are not given. resume_compiler: see evaluate_gate."""
+    if args.records is None or args.other_records is None:
+        raise Refusal("refusing a timed run: no --records and --other-records (the folders of this system's and the other "
+                      "system's sanitizer records; hypotheses-v2.md section 8); use --dry-run to check the plan")
+    result = evaluate_gate(system, build_dir, args.records, args.other_records, args.inputs_hash, resume_compiler)
+    problems = result_problems(result, plan, build_dir)
+    if problems:
+        raise Refusal("the records gate does not let this run start: " + "; ".join(problems))
+    return GateOutcome(gate_lines(result), dict(result["binaries"]), result["wakeloop"]["compiler"])
+
+
+def check_gate(args, plan, build_dir, dry, resume_compiler=None):
+    """The gate of a run. Returns a GateOutcome, or None when a dry run has no records or the gate refuses it (it warns).
+    A timed run the gate refuses is refused."""
+    if dry and (args.records is None or args.other_records is None):
+        return None
+    try:
+        return gate_outcome(args, plan.system, plan, build_dir, resume_compiler)
+    except Refusal as err:
+        if not dry:
+            raise
+        warn(str(err))
+        return None
+
+
+def check_gate_mode(args):
+    """--check-gate: the gate alone, for run_h5.sh and run_h5.ps1. Exit 0 or, as a Refusal, 2."""
+    if args.dry_run or args.resume:
+        raise Refusal("--check-gate runs the gate and nothing else; it takes no --dry-run or --resume")
+    plan = load_plan(args.plan) if args.plan else None
+    system = plan.system if plan else host_system()
+    if system is None:
+        raise Refusal(f"this host ({sys.platform}) is neither the laptop's Arch nor its Windows")
+    check_host_matches(system)
+    outcome = gate_outcome(args, system, plan, os.path.abspath(args.build_dir))
+    print("records gate passed: " + "; ".join(f"{k} {v}" for k, v in outcome.lines))
+    for tool in TOOLS:  # one line each, for run_h5, which hashes the binary again before every cell
+        print(f"binary {tool} sha256 {outcome.binaries[tool]}")
+    return EXIT_OK
+
+
+class BinaryChanged(Exception):
+    """A measured binary is not the one the run started with."""
+
+    def __init__(self, tool, expected, found):
+        super().__init__(f"{tool} is not the binary this run started with (sha256 {found}, was {expected})")
+        self.tool, self.expected, self.found = tool, expected, found
+
+
+class BinaryGuard:
+    """Hashes wakeprobe and abpair again before each process and each rerun. A change is logged (BINARY-CHANGED) and
+    raised; the runner exits 3 and starts nothing more."""
+
+    def __init__(self, build_dir, digests, log_path):
+        self.build_dir, self.digests, self.log_path = build_dir, dict(digests), log_path
+
+    def check(self):
+        for tool in TOOLS:
+            try:
+                found = sha256_file(tool_path(self.build_dir, tool))
+            except OSError:
+                found = "missing"
+            if found != self.digests[tool]:
+                log_event(self.log_path, f"{now()} - BINARY-CHANGED tool={tool} expected={self.digests[tool]} found={found}")
+                raise BinaryChanged(tool, self.digests[tool], found)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -956,7 +1145,7 @@ def write_run_txt(path, fields):
         os.fsync(handle.fileno())
 
 
-def run_fields(plan, build_dir, out_dir, build_type, started, placement):
+def run_fields(plan, build_dir, out_dir, build_type, started, placement, gate=None, digests=None):
     fields = [
         ("runner", "run_campaign.py"),
         ("started", started),
@@ -973,6 +1162,7 @@ def run_fields(plan, build_dir, out_dir, build_type, started, placement):
         ("processes", len(plan.processes)),
         ("build dir", build_dir),
         ("build type", build_type),
+        *(gate or ()),
         ("out dir", out_dir),
         ("runner cpu", placement.cpu),
         ("tool cpus at start", " ".join(str(cpu) for cpu in sorted(placement.original))),
@@ -980,7 +1170,7 @@ def run_fields(plan, build_dir, out_dir, build_type, started, placement):
     for tool in TOOLS:
         path = tool_path(build_dir, tool)
         fields.append((tool, path))
-        fields.append((f"{tool} sha256", sha256_file(path)))
+        fields.append((f"{tool} sha256", digests[tool] if digests else sha256_file(path)))  # the gate's, when there is one
     return fields
 
 
@@ -1212,7 +1402,11 @@ def check_resume(plan, build_dir, out_dir, dry):
     stale_lock, stale_pids = check_holders(plan, out_dir, names, done, dry)
     markers = {pid: code for pid, code in markers.items() if pid not in done}
     pending = plan_resume(plan, out_dir, names, done, markers)
-    return ResumeState(done, pending, digests, stale_lock, stale_pids)
+    compiler = recorded.get("gate compiler")
+    if not compiler and not dry:
+        raise Refusal(f"cannot resume: {os.path.join(out_dir, RUN_FILE)} has no 'gate compiler' line, so the run was not "
+                      "started by a runner with the records gate")
+    return ResumeState(done, pending, digests, stale_lock, stale_pids, compiler)
 
 
 @contextlib.contextmanager
@@ -1244,7 +1438,7 @@ def campaign_lock(out_dir, stale):
                 os.remove(path)
 
 
-def begin_resume(plan, out_dir, state):
+def begin_resume(plan, out_dir, state, gate=None):
     """Begin a resume. The renames come first, because they are what another process can make fail (a
     file that is open elsewhere): the "resumed:" line in run.txt and the lines in the log are written
     only once the interrupted files are set aside and the pid files of tools that are gone removed."""
@@ -1259,6 +1453,8 @@ def begin_resume(plan, out_dir, state):
     started = now()
     fields = [f"resumed: {started}", f"lab job {os.environ.get('LAB_JOB', '')}"]
     fields += [f"{tool} sha256 {state.digests[tool]}" for tool in TOOLS]
+    if gate is not None:
+        fields += [f"{key} {value}" for key, value in gate.lines]
     with open(os.path.join(out_dir, RUN_FILE), "a", encoding="utf-8", newline="\n") as handle:
         handle.write("; ".join(fields) + "\n")
         handle.flush()
@@ -1302,14 +1498,16 @@ def execute(proc, build_dir, out_dir, attempt, placement):
         return code, time.monotonic() - start
 
 
-def run_process(proc, build_dir, out_dir, log_path, placement, first=None):
+def run_process(proc, build_dir, out_dir, log_path, placement, first=None, guard=None):
     """Run a process, and once more if it fails. Return its Done: the outcome and the exit codes.
     `first` is the exit code of attempt 1 read from its .attempt1 file by a resume: that attempt is
-    not run again."""
+    not run again. `guard` (a BinaryGuard) is checked before every attempt."""
     codes = [] if first is None else [first]
     for attempt in (1, 2):
         if attempt <= len(codes):
             continue
+        if guard is not None:
+            guard.check()
         code, seconds = execute(proc, build_dir, out_dir, attempt, placement)
         codes.append(code)
         if attempt == 1:
@@ -1344,14 +1542,14 @@ def sigterm_as_interrupt():
         signal.signal(signal.SIGTERM, previous)
 
 
-def run_all(plan, build_dir, out_dir, done, pending, stop_at, placement):
+def run_all(plan, build_dir, out_dir, done, pending, stop_at, placement, guard=None):
     """Run every process that has no .done file, in order, and write its .done file.
 
     `done` maps an id to the Done read from its .done file (empty in a first run). `pending` maps an id
     to what a resume does with it; an id not in it runs from attempt 1. `stop_at` is a time.monotonic()
     value or None: no process starts at or after it, and the running one, its rerun included, always
-    finishes. Return (INCOMPLETE processes in all, including the ones in `done`; processes not started
-    because of `stop_at`)."""
+    finishes. `guard` is a BinaryGuard or None. Return (INCOMPLETE processes in all, including the ones in
+    `done`; processes not started because of `stop_at`)."""
     log_path = os.path.join(out_dir, LOG_FILE)
     incomplete = sum(1 for record in done.values() if record.outcome == "incomplete")
     current = None
@@ -1375,7 +1573,7 @@ def run_all(plan, build_dir, out_dir, done, pending, stop_at, placement):
             current = proc
             print(f"process {index}/{len(plan.processes)}: {proc.id} ({proc.tool}, family {proc.family})",
                   flush=True)
-            record = run_process(proc, build_dir, out_dir, log_path, placement, todo.first)
+            record = run_process(proc, build_dir, out_dir, log_path, placement, todo.first, guard)
             write_done(out_dir, proc.id, record)
             current = None
             if record.outcome == "incomplete":
@@ -1404,9 +1602,14 @@ def positive_whole_number(text):
 def parse_args(argv):
     parser = argparse.ArgumentParser(prog="run_campaign.py", allow_abbrev=False,
                                      description="Run the processes of a P1 v2 campaign plan.")
-    parser.add_argument("--plan", required=True, help="the JSON Lines plan")
+    parser.add_argument("--plan", help="the JSON Lines plan (required but for --check-gate)")
     parser.add_argument("--build-dir", required=True, help="an existing v2 Release build directory")
-    parser.add_argument("--out-dir", required=True, help="where the records and logs go")
+    parser.add_argument("--out-dir", help="where the records and logs go (required but for --check-gate)")
+    parser.add_argument("--records", help="the folder of this system's sanitizer records (W: laptop-w); a timed run needs it")
+    parser.add_argument("--other-records", help="the folder of the other system's sanitizer records; a timed run needs it")
+    parser.add_argument("--inputs-hash", help="the Papers repo's lab/bin/inputs_hash.py (default: found beside the checkout)")
+    parser.add_argument("--check-gate", action="store_true",
+                        help="run the records gate alone and exit 0 or 2 (run_h5.sh and run_h5.ps1 do, before any cell)")
     parser.add_argument("--dry-run", action="store_true", help="print every command line; run nothing")
     parser.add_argument("--expect-processes", type=int, metavar="N",
                         help="refuse (exit 2) unless the plan has exactly N processes")
@@ -1414,7 +1617,10 @@ def parse_args(argv):
                         help="continue the run in an existing --out-dir: skip the processes with a .done file")
     parser.add_argument("--stop-after-s", type=positive_whole_number, metavar="S",
                         help="start no new process once S seconds have passed; exit 4 if any remain")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not args.check_gate and (args.plan is None or args.out_dir is None):
+        parser.error("the following arguments are required: --plan, --out-dir")
+    return args
 
 
 def dry_run(plan, build_dir, out_dir):
@@ -1463,7 +1669,14 @@ def check_host(plan, dry):
     warn(message)
 
 
-def real_run(plan, build_dir, out_dir, build_type, state, begun, stop_after_s):
+def check_host_matches(system):
+    """Refusal unless this host runs SYSTEM (a plan's, or the host's own for --check-gate with a plan)."""
+    host = host_system()
+    if host != system:
+        raise Refusal(f"the plan is for {system}, this host is {host or sys.platform}")
+
+
+def real_run(plan, build_dir, out_dir, build_type, state, begun, stop_after_s, gate=None):
     """A first run (state is None) or a resume. `begun` is the time.monotonic() of the invocation.
 
     Every check has been made by now. The runner pins itself first (a refusal, with nothing written),
@@ -1477,16 +1690,26 @@ def real_run(plan, build_dir, out_dir, build_type, state, begun, stop_after_s):
             if state is None:
                 started = now()
                 write_run_txt(os.path.join(out_dir, RUN_FILE),
-                              run_fields(plan, build_dir, out_dir, build_type, started, placement))
+                              run_fields(plan, build_dir, out_dir, build_type, started, placement,
+                                         None if gate is None else gate.lines, None if gate is None else gate.binaries))
                 print(f"running {len(plan.processes)} processes, system {plan.system}, plan sha256 {plan.sha256}")
                 done, pending = {}, {}
             else:
-                begin_resume(plan, out_dir, state)
+                begin_resume(plan, out_dir, state, gate)
                 done, pending = state.done, state.pending
                 print(f"resuming {len(plan.processes)} processes, system {plan.system}, plan sha256 "
                       f"{plan.sha256}: {len(done)} done, {len(plan.processes) - len(done)} to run")
             stop_at = None if stop_after_s is None else begun + stop_after_s
-            incomplete, remaining = run_all(plan, build_dir, out_dir, done, pending, stop_at, placement)
+            # The guard holds the hashes the gate made of the binaries, not new ones, so that a binary put in place between
+            # the gate and the first process is seen (dry runs have no gate and hash the files).
+            if state is not None:
+                digests = state.digests
+            elif gate is not None:
+                digests = dict(gate.binaries)
+            else:
+                digests = {tool: sha256_file(tool_path(build_dir, tool)) for tool in TOOLS}
+            guard = BinaryGuard(build_dir, digests, os.path.join(out_dir, LOG_FILE))
+            incomplete, remaining = run_all(plan, build_dir, out_dir, done, pending, stop_at, placement, guard)
             print(f"results in {out_dir}")
             if remaining:
                 log_event(os.path.join(out_dir, LOG_FILE),
@@ -1504,6 +1727,8 @@ def real_run(plan, build_dir, out_dir, build_type, state, begun, stop_after_s):
 def run(argv):
     begun = time.monotonic()  # --stop-after-s counts from here
     args = parse_args(argv)
+    if args.check_gate:
+        return check_gate_mode(args)
     dry = args.dry_run
     # The lab gate: a timed run is started by the lab runner, which sets LAB_JOB on the laptop.
     if not dry and not os.environ.get("LAB_JOB"):
@@ -1526,9 +1751,12 @@ def run(argv):
         state = check_resume(plan, build_dir, out_dir, dry)
     else:
         check_output_dir(out_dir, plan)
+    # The last refusal: nothing has been written yet. A resume skips the banner check of the compiler and wants the identity
+    # that run.txt recorded at the start (its binaries are bound to the start by hash).
+    gate = check_gate(args, plan, build_dir, dry, None if state is None else state.compiler)
     if dry:
         return dry_run(plan, build_dir, out_dir) if state is None else dry_run_resume(plan, build_dir, out_dir, state)
-    return real_run(plan, build_dir, out_dir, build_type, state, begun, args.stop_after_s)
+    return real_run(plan, build_dir, out_dir, build_type, state, begun, args.stop_after_s, gate)
 
 
 def main(argv=None):
@@ -1539,6 +1767,9 @@ def main(argv=None):
     except Refusal as err:
         print(f"run_campaign.py: {err}", file=sys.stderr)
         return EXIT_REFUSED
+    except BinaryChanged as err:
+        print(f"run_campaign.py: {err}; nothing more was started (see {LOG_FILE})", file=sys.stderr)
+        return EXIT_INTERNAL
     except KeyboardInterrupt:
         print("run_campaign.py: interrupted", file=sys.stderr)
         return EXIT_INTERRUPTED

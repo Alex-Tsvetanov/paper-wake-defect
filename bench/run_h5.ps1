@@ -1,8 +1,17 @@
 # H5 on Windows: the 2026-09 designs, run again with v2's wakeprobe (backend iocp).
 #
-# Usage: run_h5.ps1 -BuildDir DIR -OutDir DIR [-Seed N] [-NoPin] [-DryRun] [-ExpectCells N]
+# Usage: run_h5.ps1 -BuildDir DIR -OutDir DIR [-Records DIR -OtherRecords DIR] [-Seed N] [-NoPin] [-DryRun] [-ExpectCells N]
 #   -BuildDir DIR    an existing v2 Release build directory; this script never builds
 #   -OutDir DIR      plan.txt and, per cell, <cell>.jsonl, <cell>.out and <cell>.err go here
+#   -Records DIR, -OtherRecords DIR
+#                    the folders of this system's (laptop-w) and the other system's sanitizer records. A timed run
+#                    needs them: it calls `run_campaign.py --check-gate` with the same build and folders before any
+#                    cell and exits 2 unless the records gate passes (the campaign's own gate, bench/gate_lib.py).
+#                    H5 is a block on the same binary as the campaign, so it is gated as the campaign is. The
+#                    campaign smoke runs H5's cells' shapes (bench/campaign_smoke.py) under every sanitizer.
+#                    The gate's output is kept as gate.txt in the output directory, and wakeprobe is hashed
+#                    again before every run: a binary other than the one the gate hashed stops the script with
+#                    exit 3 and a BINARY-CHANGED line in gate.txt.
 #   -Seed N          shuffle the cell order with this seed (default 20261026)
 #   -NoPin           do not pass --worker-cpus 14 --poster-cpu 2 to wakeprobe (pinned by default)
 #   -DryRun          write plan.txt and print every command line a real run executes; run nothing
@@ -30,6 +39,8 @@
 param(
     [string]$BuildDir = "",
     [string]$OutDir = "",
+    [string]$Records = "",
+    [string]$OtherRecords = "",
     [int]$Seed = 20261026,
     [switch]$NoPin,
     [switch]$DryRun,
@@ -58,7 +69,7 @@ function Write-NoBom([string]$Path) {
 # old -Pin would be ignored without a word. Refuse them, as run_h5.sh does.
 if ($args.Count -gt 0) { Fail "unknown argument '$($args[0])'" }
 if (-not $BuildDir -or -not $OutDir) {
-    Fail "usage: run_h5.ps1 -BuildDir DIR -OutDir DIR [-Seed N] [-NoPin] [-DryRun] [-ExpectCells N]"
+    Fail "usage: run_h5.ps1 -BuildDir DIR -OutDir DIR [-Records DIR -OtherRecords DIR] [-Seed N] [-NoPin] [-DryRun] [-ExpectCells N]"
 }
 
 # SHA-256 as lower-case hex. Get-FileHash is a function of the Utility module, which Windows
@@ -96,6 +107,21 @@ if ($buildType -ne "Release") {
     else { Fail "$BuildDir is built as '$buildType', not Release; nothing measured" }
 }
 
+# The records gate (hypotheses-v2.md section 8): before any cell, and before anything is written. The same gate the campaign
+# runner runs at its start, in its --check-gate mode; it must exit 0.
+if (-not $DryRun) {
+    if (-not $Records -or -not $OtherRecords) { Fail "refusing a timed run: give -Records and -OtherRecords (the sanitizer records of this system and of the other)" }
+    $py = "python"
+    if ($env:LAB_PYTHON) { $py = $env:LAB_PYTHON }
+    $gateOut = & $py (Join-Path $PSScriptRoot "run_campaign.py") --check-gate --build-dir $BuildDir --records $Records --other-records $OtherRecords
+    if ($LASTEXITCODE -ne 0) { Fail "refusing a timed run: the records gate does not pass" }
+    $gateOut | ForEach-Object { Write-Host $_ }
+    # The hash the gate made of wakeprobe: every cell is bound to it (Test-Binary), and gate.txt in the output keeps the lot.
+    $gateWakeprobeSha = ""
+    foreach ($line in $gateOut) { if ("$line" -match '^binary wakeprobe sha256 ([0-9a-f]{64})\s*$') { $gateWakeprobeSha = $Matches[1] } }
+    if (-not $gateWakeprobeSha) { Fail "the gate printed no sha256 of wakeprobe" }
+}
+
 # Nothing is overwritten: a directory that holds records is not reused.
 if (Test-Path -PathType Container $OutDir) {
     $old = Get-ChildItem -Path $OutDir -Recurse -Filter *.jsonl -File -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -103,6 +129,7 @@ if (Test-Path -PathType Container $OutDir) {
 }
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
+if (-not $DryRun) { ($gateOut | ForEach-Object { "$_" }) -join "`n" | Set-Content -Encoding ascii (Join-Path $OutDir "gate.txt") }
 
 # The plan: one entry per cell.
 function Timer-Name([int]$TimerMs) { if ($TimerMs -eq 0) { "default" } else { "${TimerMs}ms" } }
@@ -152,7 +179,7 @@ if ($cells.Count -ne $total) { Fail "the shuffle changed the number of cells ($(
 function Count-Of([string]$Design) { @($cells | Where-Object { $_.Design -eq $Design }).Count }
 $counts = "gap-sweep $(Count-Of 'gap-sweep'), bound-sweep $(Count-Of 'bound-sweep'), matrix $(Count-Of 'matrix')"
 $placement = if ($NoPin) { "off (-NoPin)" } else { "worker-cpus 14, poster-cpu 2" }
-$wakeprobeSha = Get-Sha256 $wakeprobe
+$wakeprobeSha = if ($gateWakeprobeSha) { $gateWakeprobeSha } else { Get-Sha256 $wakeprobe }  # a timed run: the gate's hash
 $header = @(
     "# seed: $Seed"
     "# build: $BuildDir"
@@ -185,7 +212,18 @@ function Cell-Line($c, [string]$Suffix) {
     $stderrFile = Join-Path $OutDir ($stem + $Suffix + ".err")
     return ('"' + $wakeprobe + '" ' + ($argv -join ' ') + ' > "' + $stdoutFile + '" 2> "' + $stderrFile + '"')
 }
+function Test-Binary {  # before every run: wakeprobe is still the binary the gate hashed, else stop (exit 3)
+    $now = ""
+    if (Test-Path -PathType Leaf $wakeprobe) { $now = Get-Sha256 $wakeprobe }
+    if ($now -ne $gateWakeprobeSha) {
+        $msg = "{0} BINARY-CHANGED wakeprobe expected={1} found={2}" -f (Get-Date -Format o), $gateWakeprobeSha, $(if ($now) { $now } else { "missing" })
+        Write-Host $msg
+        Add-Content -Encoding ascii (Join-Path $OutDir "gate.txt") $msg
+        exit 3
+    }
+}
 function Run-Cell($c, [string]$Suffix) {
+    Test-Binary
     $line = Cell-Line $c $Suffix
     & cmd.exe /c $line | Out-Null
     return $LASTEXITCODE

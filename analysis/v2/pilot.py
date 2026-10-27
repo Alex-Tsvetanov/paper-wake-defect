@@ -5,7 +5,7 @@ the fixed loop against itself (side A's throughput over side B's, as abpair name
 The power rule then gives the cell's R: the smallest even R in 14 to 24 whose power at the
 strictest Holm step is at least 0.8; else R = 24 and the cell is underpowered.
 
-  python pilot.py --linux PLAN DIR [--windows PLAN DIR] --out FILE [--markdown FILE] [--draft]
+  python pilot.py --linux PLAN DIR [--windows PLAN DIR] [--records DIR ...] --out FILE [--markdown FILE] [--draft]
 
 --out is the pilot's full record (JSON). --markdown writes the block that a person appends to
 revision-log-v2.md, where plan.py reads each cell's R from (h4log.py); it holds all 20 H4 cells,
@@ -15,8 +15,11 @@ The record carries the commit it was made at, read from git, with the provenance
 campaign plan (plan.py): refused unless the repository's working tree is clean. Outside --draft
 it is also refused when a plan's header is not of the real form of a pilot plan (C2), when a plan's
 lines are not the ones plan.py makes, or when the processes were not all built from one commit
-(section 1). --draft is for dry runs from an uncommitted tree and ends generated_by in "draft";
-those three become warnings, kept in the record.
+(section 1), or when a system's run.txt lacks the lines the campaign runner writes after its records gate passed, or
+names a sanitizer record that is in none of the --records folders (given once for each folder of the Papers repo's
+lab/sanitizer-records), has another sha256, or is not a green record of a real job (provenance.gate_problems).
+--draft is for dry runs from an uncommitted tree and ends generated_by in "draft"; those four become warnings, kept
+in the record.
 
 The block's s is written at full precision, so that h4log.py can check each row against the rule.
 """
@@ -62,8 +65,9 @@ def pilot_cell(system, backend, work_us, resolved):
     return out
 
 
-def pilot_system(plan_path, data_dir):
-    """(cells, problems): one system's pilot cells keyed by H4 key, and what its provenance lacks."""
+def pilot_system(plan_path, data_dir, records=None):
+    """(cells, problems, commits): one system's pilot cells keyed by H4 key, and what its provenance lacks, the
+    gate of its run (run.txt and the records it names in RECORDS) included."""
     header, entries = readers.load_plan(plan_path)
     system = header["system"]
     folder = readers.DataDir(data_dir)
@@ -85,6 +89,7 @@ def pilot_system(plan_path, data_dir):
     found = provenance.departures({e["id"]: e for e in wanted}, entries)
     found["order"] = provenance.order_text(system, [e["id"] for e in entries], [e["id"] for e in wanted])
     problems += provenance.departure_texts(system, found)
+    problems += provenance.gate_problems(system, data_dir, records or ())
     return cells, problems, provenance.bench_commits(r for resolved in by_cell.values() for r in resolved)
 
 
@@ -93,6 +98,9 @@ def main(argv=None, repo=plan.REPO_ROOT):
     ap = argparse.ArgumentParser(description="The A/A pilot: each H4 cell's s, R and power.")
     ap.add_argument("--linux", nargs=2, metavar=("PLAN", "DIR"))
     ap.add_argument("--windows", nargs=2, metavar=("PLAN", "DIR"))
+    ap.add_argument("--records", action="append", default=[], metavar="DIR",
+                    help="a folder of sanitizer records (the Papers repo's lab/sanitizer-records/laptop-l, laptop-w); give "
+                    "it once for each: every record that a run.txt names must be in one of them, with its sha256")
     ap.add_argument("--draft", action="store_true",
                     help="a dry run from an uncommitted tree: no clean-tree check, generated_by ends in draft")
     ap.add_argument("--out", required=True, help="the pilot's full record (JSON)")
@@ -109,7 +117,7 @@ def main(argv=None, repo=plan.REPO_ROOT):
     cells, problems, commits = {}, [], {}
     for pair in (a.linux, a.windows):
         if pair:
-            found, found_problems, found_commits = pilot_system(pair[0], pair[1])
+            found, found_problems, found_commits = pilot_system(pair[0], pair[1], a.records)
             cells.update(found)
             problems += found_problems
             for commit, n in found_commits.items():

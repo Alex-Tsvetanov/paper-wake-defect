@@ -7,7 +7,10 @@ a stub take S seconds. "--stub-marker FILE" makes the first stub that creates FI
 "--stub-sleep" seconds, so that a test can kill it; a later stub with the same FILE does not sleep.
 "--stub-only-attempt N" limits that to attempt N. "--stub-spawn FILE" makes a stub start a child that
 appends its pid to FILE and outlives it. "--stub-runner-pid N" makes a stub record the runner's CPU
-affinity. The runner starts a stub through run_campaign.launch_prefix, which the tests replace,
+affinity. The runner runs the records gate itself (run_campaign.evaluate_gate, which calls gate_lib.run_gate): every test
+replaces that function with one that returns a passing result for the stub binaries (CampaignCase.stub_evaluate), and
+GateTests change the result one fact at a time; the gate itself is tested in test_records.py. The runner starts a stub
+through run_campaign.launch_prefix, which the tests replace,
 because a script cannot be named wakeprobe.exe on Windows. The tests that start the runner as a
 program use the real launch_prefix, with shell-script stubs on POSIX and with refusals and dry runs
 everywhere, or a small driver script that patches launch_prefix (the kill tests, on both systems).
@@ -37,6 +40,7 @@ from unittest import mock
 sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import gate_lib  # noqa: E402
 import run_campaign as rc  # noqa: E402
 
 RUNNER = os.path.join(HERE, "run_campaign.py")
@@ -48,6 +52,14 @@ SHA1 = "0123456789abcdef" * 2 + "01234567"
 PILOT_BY = "analysis/v2/plan.py " + SHA1
 CAMPAIGN_BY = PILOT_BY + " revision-log-v2.md sha256:" + "ab" * 32
 STARTUP_CPUS = rc.current_affinity()  # before any test pins this process
+DELETE = object()  # in CampaignCase.gate_changes: remove the field from the stub gate result
+
+
+class AllKeys(frozenset):
+    """The shape keys of a stub gate that is not about the plan lines' shapes: every key is in it."""
+
+    def __contains__(self, key):
+        return True
 
 STUB = r'''
 import json, os, subprocess, sys, time
@@ -116,6 +128,33 @@ if value("--stub-pause"):
 sys.exit(second if rerun else first)
 '''
 
+# The programs that run the runner as a program replace evaluate_gate with a stub that passes (the real gate needs a
+# build, records and ninja); the stub is the same text in both drivers.
+STUB_GATE = r'''
+import gate_lib
+
+
+class AllKeys(frozenset):
+    def __contains__(self, key):
+        return True
+
+
+def stub_evaluate(system, build_dir, records, other_records, inputs_hash, resume_compiler=None):
+    host = rc.GATE_HOST[system]
+    other = "W" if host == "L" else "L"
+
+    def named(h):
+        return {san: [{"name": "wakeloop2-x-%s-%s.json" % (h, san), "sha256": "ab" * 32}] for san in gate_lib.SANITIZERS_BY_HOST[h]}
+    return {"passed": True, "dry_run": False, "citable": True, "partial": {}, "code_commit": "1" * 40, "code_fingerprint": "cd" * 32,
+            "coverage_json_sha256": "ee" * 32, "generators": {"g": "ff" * 32},
+            "wakeloop": {"coverage": named(host), "compiler": resume_compiler or "Clang 22.1.8"},
+            "other_host": {"host": other, "records": named(other)}, "smoke_keys": AllKeys(),
+            "binaries": {t: rc.sha256_file(rc.tool_path(build_dir, t)) for t in rc.TOOLS}}
+
+
+rc.evaluate_gate = stub_evaluate
+'''
+
 # The kill tests run the runner as a program with launch_prefix patched to start the stub.
 DRIVER = r'''
 import sys
@@ -124,7 +163,19 @@ here, stub = sys.argv[1], sys.argv[2]
 sys.path.insert(0, here)
 import run_campaign as rc
 rc.launch_prefix = lambda path: [sys.executable, stub, path]
+''' + STUB_GATE + r'''
 sys.exit(rc.main(sys.argv[3:]))
+'''
+
+# The other program tests run the real launch_prefix (shell-script stubs) with the stub gate.
+GATE_DRIVER = r'''
+import sys
+sys.dont_write_bytecode = True
+here = sys.argv[1]
+sys.path.insert(0, here)
+import run_campaign as rc
+''' + STUB_GATE + r'''
+sys.exit(rc.main(sys.argv[2:]))
 '''
 
 
@@ -178,6 +229,14 @@ class CampaignCase(unittest.TestCase):
         self.build = os.path.join(self.root, "build dir")
         self.out = os.path.join(self.root, "out dir")
         self.plan_path = os.path.join(self.root, "plan.jsonl")
+        self.records_dir = os.path.join(self.root, "records dir")
+        self.other_records_dir = os.path.join(self.root, "other records dir")
+        self.gate_calls = []     # the arguments evaluate_gate was given, one tuple per call
+        self.gate_resume_compilers = []  # and the compiler identity a resume told it to expect, per call (None: a first run)
+        self.gate_compiler = "Clang 22.1.8"  # the identity the stub gate gives to a build
+        self.gate_changes = {}   # fields of the stub result to change (DELETE removes one)
+        self.gate_refusal = None  # a message: evaluate_gate refuses with it
+        self.smoke_keys = None   # None: every shape; else the frozenset of keys the stub records ran
         self.make_build(self.build)
         # The runner pins this process while a test runs it in-process; put the CPUs back whatever
         # happens. Where CPU 0 is not ours (a cpuset), the runner takes the lowest CPU we have.
@@ -211,8 +270,34 @@ class CampaignCase(unittest.TestCase):
     def stub_prefix(self, path):
         return [sys.executable, self.stub, path]
 
-    def invoke(self, *extra, lab_job="1", dry=False, stubs=True, build=None, out=None):
+    def stub_evaluate(self, system, build_dir, records, other_records, inputs_hash, resume_compiler=None):
+        """Stands in for run_campaign.evaluate_gate: a passing result for the stub binaries of `build_dir`, with
+        self.gate_changes on top; or a refusal. It records the compiler identity a resume was told to expect."""
+        self.gate_calls.append((system, build_dir, records, other_records, inputs_hash))
+        self.gate_resume_compilers.append(resume_compiler)
+        if self.gate_refusal:
+            raise rc.Refusal(self.gate_refusal)
+        host = rc.GATE_HOST[system]
+        other = "W" if host == "L" else "L"
+
+        def named(h):
+            return {san: [{"name": f"wakeloop2-abcdef012-{h}-{san}.json", "sha256": "ab" * 32}]
+                    for san in gate_lib.SANITIZERS_BY_HOST[h]}
+        result = {"gate": 2, "host": host, "passed": True, "dry_run": False, "citable": True, "head": SHA1,
+                  "code_commit": SHA1, "code_fingerprint": "cd" * 32, "generators": {"analysis/v2/plan.py": "11" * 32},
+                  "coverage_json_sha256": "ee" * 32, "partial": {},
+                  "wakeloop": {"coverage": named(host), "compiler": resume_compiler or self.gate_compiler},
+                  "other_host": {"host": other, "records": named(other)},
+                  "binaries": {tool: rc.sha256_file(rc.tool_path(build_dir, tool)) for tool in rc.TOOLS
+                               if os.path.isfile(rc.tool_path(build_dir, tool))},
+                  "smoke_keys": AllKeys() if self.smoke_keys is None else self.smoke_keys}
+        result.update(self.gate_changes)
+        return {key: value for key, value in result.items() if value is not DELETE}
+
+    def invoke(self, *extra, lab_job="1", dry=False, stubs=True, build=None, out=None, gate=True):
         argv = ["--plan", self.plan_path, "--build-dir", build or self.build, "--out-dir", out or self.out, *extra]
+        if gate and not dry and "--records" not in extra:
+            argv += ["--records", self.records_dir, "--other-records", self.other_records_dir]
         if dry:
             argv.append("--dry-run")
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -223,6 +308,7 @@ class CampaignCase(unittest.TestCase):
                 os.environ["LAB_JOB"] = lab_job
             if stubs:
                 stack.enter_context(mock.patch.object(rc, "launch_prefix", self.stub_prefix))
+            stack.enter_context(mock.patch.object(rc, "evaluate_gate", self.stub_evaluate))
             stack.enter_context(contextlib.redirect_stdout(stdout))
             stack.enter_context(contextlib.redirect_stderr(stderr))
             code = rc.main(argv)
@@ -645,6 +731,387 @@ class RunTests(CampaignCase):
         self.assertIn("already holds records", stderr)
 
 
+class GateTests(CampaignCase):
+    """The records gate in the runner (hypotheses-v2.md, section 8): the runner runs the gate itself, with no gate file to
+    trust, and refuses on anything but a passing, citable result for the binaries and the plan it is about to run."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_plan(make_process("a"), make_process("b"))
+
+    def assert_gate_refused(self, needle, *extra, **options):
+        code, stdout, stderr = self.invoke(*extra, **options)
+        self.assert_refused(code, stderr, needle)
+
+    def test_a_timed_run_needs_the_records_folders(self):
+        self.assert_gate_refused("no --records and --other-records", gate=False)
+        self.assert_gate_refused("no --records and --other-records", "--records", self.records_dir)
+        self.assertEqual(self.gate_calls, [])
+
+    def test_there_is_no_gate_file_to_hand_in(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(rc.main(["--plan", self.plan_path, "--build-dir", self.build, "--out-dir", self.out,
+                                      "--gate", "gate.json"]), 2)
+
+    def test_there_is_no_option_to_name_a_compiler_or_a_gap_or_a_dry_run_record(self):
+        for flag in ("--compiler", "--coverage", "--accept-dry-run", "--inputs"):
+            with self.subTest(flag=flag), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(rc.main(["--plan", self.plan_path, "--build-dir", self.build, "--out-dir", self.out,
+                                          flag, "x"]), 2)
+
+    def test_a_dry_run_needs_no_records_and_says_nothing(self):
+        code, stdout, stderr = self.invoke(dry=True, gate=False)
+        self.assertEqual(code, 0, stderr)
+        self.assertNotIn("gate", stderr)
+        self.assertFalse(os.path.exists(self.out))
+        self.assertEqual(self.gate_calls, [])
+
+    def test_the_gate_is_run_in_process_on_the_actual_build(self):
+        code, _, stderr = self.invoke("--inputs-hash", "inputs_hash.py")
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(self.gate_calls, [(rc.host_system(), self.build, self.records_dir, self.other_records_dir, "inputs_hash.py")])
+
+    def test_evaluate_gate_calls_gate_lib_with_the_hosts_letter_and_no_dry_run_acceptance(self):
+        calls = []
+
+        def fake(**kwargs):
+            calls.append(kwargs)
+            return {"fake": True}
+        with mock.patch.object(gate_lib, "run_gate", fake):
+            self.assertEqual(rc.evaluate_gate("linux", "b", "r", "o", None), {"fake": True})
+            rc.evaluate_gate("windows", "b", "r", "o", "tool.py")
+        self.assertEqual([(c["host"], str(c["build"]), str(c["records"]), str(c["other_records"])) for c in calls],
+                         [("L", "b", "r", "o"), ("W", "b", "r", "o")])
+        self.assertIsNone(calls[0]["tool"])
+        self.assertEqual(str(calls[1]["tool"]), "tool.py")
+        self.assertIsNone(calls[0]["resume_compiler"])
+        self.assertNotIn("accept_dry_run", calls[0], "the runner has no way to accept a dry-run record")
+        with mock.patch.object(gate_lib, "run_gate", fake):
+            rc.evaluate_gate("linux", "b", "r", "o", None, "Clang 22.1.8")
+        self.assertEqual(calls[2]["resume_compiler"], "Clang 22.1.8")
+
+    def test_a_gate_error_is_a_refusal_with_its_reason(self):
+        def refuse(**kwargs):
+            raise gate_lib.GateError("no green msan record on L matches every target")
+        with mock.patch.object(gate_lib, "run_gate", refuse):
+            with self.assertRaisesRegex(rc.Refusal, "no green msan record"):
+                rc.evaluate_gate("linux", "b", "r", "o", None)
+
+    def test_the_result_is_recorded_in_run_txt_with_every_records_name_and_sha256(self):
+        code, _, stderr = self.invoke()
+        self.assertEqual(code, 0, stderr)
+        facts = self.run_txt()
+        self.assertEqual(facts["gate"], "passed")
+        self.assertEqual(facts["gate code commit"], SHA1)
+        self.assertEqual(facts["gate code fingerprint"], "cd" * 32)
+        self.assertEqual(facts["gate coverage.json sha256"], "ee" * 32)
+        self.assertIn("analysis/v2/plan.py " + "11" * 32, facts["gate generators"])
+        host = rc.GATE_HOST[rc.host_system()]
+        other = "W" if host == "L" else "L"
+        for san in gate_lib.SANITIZERS_BY_HOST[host]:
+            self.assertIn(f"{san} wakeloop2-abcdef012-{host}-{san}.json " + "ab" * 32, facts["gate records"])
+        for san in gate_lib.SANITIZERS_BY_HOST[other]:
+            self.assertIn(f"{san} wakeloop2-abcdef012-{other}-{san}.json " + "ab" * 32, facts["gate other records"])
+        self.assertEqual(facts["gate smoke shape keys"], "0")
+        self.assertEqual(facts["gate compiler"], "Clang 22.1.8")
+        self.assertEqual(self.read(rc.RUN_FILE).count("gate: passed"), 1)
+
+    def test_review_n4_a_resume_tells_the_gate_the_compiler_the_run_started_with(self):
+        """At --resume the banner check is skipped (the binaries are hash-bound to the start) and the identity run.txt
+        recorded is the one the build must have."""
+        self.gate_compiler = "Clang 22.1.8"
+        self.assertEqual(self.invoke()[0], 0)
+        self.assertEqual(self.gate_resume_compilers, [None], "a first run lets the gate read the banner")
+        os.remove(self.path("b.done"))
+        self.gate_compiler = "Clang 99.0.0"  # what a stub gate would otherwise say after a compiler update
+        code, _, stderr = self.invoke("--resume")
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(self.gate_resume_compilers, [None, "Clang 22.1.8"])
+        self.assertIn("gate compiler Clang 22.1.8", self.read(rc.RUN_FILE).splitlines()[-1])
+
+    def test_a_resume_of_a_run_without_the_gate_compiler_line_is_refused(self):
+        self.assertEqual(self.invoke()[0], 0)
+        text = self.read(rc.RUN_FILE)
+        with open(self.path(rc.RUN_FILE), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("".join(line + "\n" for line in text.splitlines() if not line.startswith("gate compiler: ")))
+        os.remove(self.path("b.done"))
+        calls = len(self.gate_calls)
+        code, _, stderr = self.invoke("--resume")
+        self.assertEqual(code, 2)
+        self.assertIn("no 'gate compiler' line", stderr)
+        self.assertEqual(len(self.gate_calls), calls, "refused before the gate ran")
+
+    def test_review_n4_a_resume_with_a_dry_run_needs_no_gate_compiler_line(self):
+        self.assertEqual(self.invoke()[0], 0)
+        os.remove(self.path("b.done"))
+        code, _, stderr = self.invoke("--resume", dry=True, gate=False)
+        self.assertEqual(code, 0, stderr)
+
+    def test_review_n9_the_guard_holds_the_hashes_the_gate_made_not_new_ones(self):
+        """LOW: the guard hashed the binaries again after the gate; a binary put in place between the two went unseen."""
+        self.write_plan(make_process("a"), make_process("b"))
+        wakeprobe = rc.tool_path(self.build, "wakeprobe")
+        gate_hash = rc.sha256_file(wakeprobe)
+        real = rc.result_problems
+
+        def swap_after_the_checks(*args, **kwargs):
+            problems = real(*args, **kwargs)  # the runner has compared the file with the gate's hash: it matched
+            with open(wakeprobe, "ab") as handle:
+                handle.write(b"# a binary put in place after the gate hashed it\n")
+            return problems
+
+        with mock.patch.object(rc, "result_problems", swap_after_the_checks):
+            code, _, stderr = self.invoke()
+        self.assertEqual(code, 3, stderr)
+        self.assertIn("is not the binary this run started with", stderr)
+        self.assertFalse(os.path.exists(self.path("a.jsonl")), "nothing was started")
+        self.assertIn(f"wakeprobe sha256: {gate_hash}", self.read(rc.RUN_FILE), "run.txt holds the gate's hash too")
+
+    def test_what_the_runner_refuses_in_a_result(self):
+        tools_without_one = {tool: "0" * 64 for tool in rc.TOOLS[:1]}
+        cases = [
+            ("not a passed, citable", {"passed": False}),
+            ("not a passed, citable", {"passed": DELETE}),
+            ("not a passed, citable", {"dry_run": True}),
+            ("not a passed, citable", {"citable": False}),
+            ("not a passed, citable", {"citable": DELETE}),
+            ("partial is not empty", {"partial": {"wakeprobe": {"covered_by": ["asan"], "reason": "x"}}}),
+            ("hashed no abpair", {"binaries": tools_without_one}),
+            ("hashed no wakeprobe", {"binaries": {"abpair": "0" * 64}}),
+            ("is not the binary the gate hashed", {"binaries": {tool: "0" * 64 for tool in rc.TOOLS}}),
+        ]
+        for needle, changes in cases:
+            with self.subTest(changes=changes):
+                self.gate_changes = changes
+                self.assert_gate_refused(needle)
+
+    def test_a_refusal_of_the_gate_itself_is_the_runners(self):
+        self.gate_refusal = "the records gate refuses: no green tsan record matches"
+        self.assert_gate_refused("no green tsan record matches")
+
+    def test_a_binary_swapped_after_the_gate_hashed_it_is_refused(self):
+        original = self.stub_evaluate
+
+        def swapping(*args):
+            result = original(*args)
+            with open(rc.tool_path(self.build, "abpair"), "wb") as handle:
+                handle.write(b"swapped after the gate hashed it")
+            return result
+        with mock.patch.object(self, "stub_evaluate", swapping):
+            self.assert_gate_refused("abpair")
+
+    def test_the_gate_is_the_last_refusal_and_changes_nothing(self):
+        os.makedirs(self.out)
+        before = self.snapshot()
+        self.gate_changes = {"passed": False}
+        code, _, stderr = self.invoke()
+        self.assertEqual(code, 2, stderr)
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(os.path.exists(self.path(rc.RUN_FILE)))
+        self.assertFalse(os.path.exists(self.path(rc.LOCK_FILE)))
+        # An earlier refusal still comes first, so its message is not hidden by the gate's.
+        code, _, stderr = self.invoke(lab_job=None, gate=False)
+        self.assertEqual(code, 2)
+        self.assertIn("LAB_JOB", stderr)
+
+    def test_the_gate_runs_again_at_every_resume_and_a_new_refusal_stops_it(self):
+        self.assertEqual(self.invoke()[0], 0)
+        self.assertEqual(len(self.gate_calls), 1)
+        os.remove(self.path("b.done"))
+        before = self.snapshot()
+        self.gate_refusal = "the records gate refuses: a red record of the same inputs appeared"
+        code, _, stderr = self.invoke("--resume")
+        self.assertEqual(code, 2)
+        self.assertIn("a red record of the same inputs appeared", stderr)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(len(self.gate_calls), 2, "the refused resume ran the gate")
+        self.gate_refusal = None
+        code, _, stderr = self.invoke("--resume")
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(len(self.gate_calls), 3)
+        self.assertIn("gate code commit " + SHA1, self.read(rc.RUN_FILE).splitlines()[-1])
+
+    def test_a_resume_needs_the_records_folders_too(self):
+        self.assertEqual(self.invoke()[0], 0)
+        os.remove(self.path("b.done"))
+        before = self.snapshot()
+        code, _, stderr = self.invoke("--resume", gate=False)
+        self.assertEqual(code, 2)
+        self.assertIn("no --records and --other-records", stderr)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_dry_run_given_records_that_the_gate_refuses_only_warns(self):
+        self.gate_refusal = "the records gate refuses: nothing matches"
+        code, _, stderr = self.invoke("--records", self.records_dir, "--other-records", self.other_records_dir, dry=True)
+        self.assertEqual(code, 0, stderr)
+        self.assertIn("nothing matches", stderr)
+        self.assertFalse(os.path.exists(self.out))
+
+    def test_a_dry_run_given_records_that_pass_does_not_warn(self):
+        code, _, stderr = self.invoke("--records", self.records_dir, "--other-records", self.other_records_dir, dry=True)
+        self.assertEqual(code, 0, stderr)
+        self.assertNotIn("gate", stderr)
+
+    # -- the shapes of the plan lines ------------------------------------------------------------------
+
+    def keys_of_plan(self):
+        plan = rc.load_plan(self.plan_path)
+        return {rc.campaign_smoke.shape_key({"tool": p.tool, "args": list(p.args), "family": p.family}) for p in plan.processes}
+
+    def test_a_plan_line_whose_shape_no_record_ran_is_refused_and_nothing_is_written(self):
+        self.write_plan(make_process("a"), make_process("b", tool="abpair", extra=("--arm-a", "none", "--arm-b", "absent_wake")))
+        keys = self.keys_of_plan()
+        wakeprobe_key = next(k for k in keys if k[0] == "wakeprobe")
+        self.smoke_keys = frozenset({wakeprobe_key})
+        code, _, stderr = self.invoke()
+        self.assert_refused(code, stderr, "no green record of every required sanitizer ran")
+        self.assertIn("b", stderr)
+        self.smoke_keys = frozenset(keys)
+        self.assertEqual(self.invoke()[0], 0)
+
+    def test_a_shape_that_only_some_sanitizers_ran_is_not_in_the_intersection(self):
+        """The gate hands over the shapes every required sanitizer's record ran; one missing from it is refused."""
+        keys = self.keys_of_plan()
+        self.smoke_keys = frozenset()
+        self.assert_gate_refused("no green record of every required sanitizer ran")
+        self.smoke_keys = frozenset(keys)
+        self.assertEqual(self.invoke()[0], 0)
+
+    # -- --check-gate ------------------------------------------------------------------------------------
+
+    def check_gate(self, *extra):
+        argv = ["--check-gate", "--build-dir", self.build, "--records", self.records_dir,
+                "--other-records", self.other_records_dir, *extra]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(rc, "evaluate_gate", self.stub_evaluate), mock.patch.dict(os.environ), \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            os.environ.pop("LAB_JOB", None)
+            code = rc.main(argv)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_check_gate_exits_0_runs_the_gate_and_runs_nothing(self):
+        code, stdout, stderr = self.check_gate()
+        self.assertEqual(code, 0, stderr)
+        self.assertIn("records gate passed", stdout)
+        for tool in rc.TOOLS:  # one line each, for run_h5, which hashes wakeprobe again before every cell
+            self.assertIn(f"\nbinary {tool} sha256 {rc.sha256_file(rc.tool_path(self.build, tool))}\n", "\n" + stdout)
+        self.assertEqual(len(self.gate_calls), 1)
+        self.assertFalse(os.path.exists(self.out), "nothing is written")
+
+    def test_check_gate_exits_2_when_the_gate_refuses(self):
+        self.gate_changes = {"partial": {"x": 1}}
+        code, _, stderr = self.check_gate()
+        self.assertEqual(code, 2)
+        self.assertIn("partial is not empty", stderr)
+        self.gate_changes = {}
+        self.gate_refusal = "the records gate refuses: no green asan record"
+        code, _, stderr = self.check_gate()
+        self.assertEqual(code, 2)
+        self.assertIn("no green asan record", stderr)
+
+    def test_check_gate_needs_the_folders_and_takes_no_dry_run_or_resume(self):
+        with mock.patch.object(rc, "evaluate_gate", self.stub_evaluate), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(rc.main(["--check-gate", "--build-dir", self.build]), 2)
+            self.assertEqual(rc.main(["--check-gate", "--build-dir", self.build, "--records", "r", "--other-records", "o",
+                                      "--dry-run"]), 2)
+            self.assertEqual(rc.main(["--check-gate", "--build-dir", self.build, "--records", "r", "--other-records", "o",
+                                      "--resume"]), 2)
+        self.assertEqual(self.gate_calls, [])
+
+    def test_check_gate_with_a_plan_checks_the_plans_shapes_and_system(self):
+        self.smoke_keys = frozenset()
+        code, _, stderr = self.check_gate("--plan", self.plan_path)
+        self.assertEqual(code, 2)
+        self.assertIn("no green record of every required sanitizer ran", stderr)
+        self.smoke_keys = None
+        self.assertEqual(self.check_gate("--plan", self.plan_path)[0], 0)
+        self.write_plan(make_process("a"), system=OTHER_SYSTEM[rc.host_system()])
+        code, _, stderr = self.check_gate("--plan", self.plan_path)
+        self.assertEqual(code, 2)
+        self.assertIn("the plan is for", stderr)
+
+    def test_the_plan_is_not_needed_for_check_gate_and_is_for_everything_else(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(rc.main(["--build-dir", self.build, "--out-dir", self.out]), 2)  # no --plan
+            self.assertEqual(rc.main(["--plan", self.plan_path, "--build-dir", self.build]), 2)  # no --out-dir
+
+    # -- the binaries between processes ---------------------------------------------------------------
+
+    def swap_after(self, hook, tool, pid):
+        """Replace `tool`'s binary when `hook` (a name in run_campaign) is called for process `pid`."""
+        original = getattr(rc, hook)
+
+        def after(out_dir, process_id, *rest):
+            result = original(out_dir, process_id, *rest)
+            if process_id == pid:
+                with open(rc.tool_path(self.build, tool), "wb") as handle:
+                    handle.write(b"rebuilt in the middle of the campaign")
+            return result
+        return mock.patch.object(rc, hook, after)
+
+    def test_a_binary_replaced_between_two_processes_stops_the_run_with_exit_3(self):
+        for tool in rc.TOOLS:
+            with self.subTest(tool=tool):
+                self.tearDown_out()
+                self.make_binaries()
+                self.write_plan(make_process("a"), make_process("b"), make_process("c"))
+                with self.swap_after("write_done", tool, "a"):
+                    code, stdout, stderr = self.invoke()
+                self.assertEqual(code, 3, stderr)
+                self.assertIn("is not the binary this run started with", stderr)
+                self.assertTrue(os.path.exists(self.path("a.done")))
+                self.assertFalse(os.path.exists(self.path("b.jsonl")), "nothing more was started")
+                self.assertFalse(os.path.exists(self.path("b.pid")))
+                last = self.read(rc.LOG_FILE).splitlines()[-1]
+                self.assertRegex(last, rf"^\S+ - BINARY-CHANGED tool={tool} expected=[0-9a-f]{{64}} found=[0-9a-f]{{64}}$")
+                self.assertFalse(os.path.exists(self.path(rc.LOCK_FILE)), "the lock is released")
+
+    def test_a_binary_replaced_during_a_failed_first_run_stops_before_the_rerun(self):
+        self.write_plan(make_process("a", codes="1,0"), make_process("b"))
+        with self.swap_after("write_marker", "wakeprobe", "a"):
+            code, _, stderr = self.invoke()
+        self.assertEqual(code, 3, stderr)
+        self.assertTrue(os.path.exists(self.path("a.attempt1")))
+        self.assertFalse(os.path.exists(self.path("a-rerun.jsonl")), "the rerun was not started")
+        self.assertIn("BINARY-CHANGED tool=wakeprobe", self.read(rc.LOG_FILE))
+
+    def test_a_deleted_binary_is_a_change_too(self):
+        self.write_plan(make_process("a"), make_process("b"))
+        original = rc.write_done
+
+        def delete(out_dir, process_id, done):
+            original(out_dir, process_id, done)
+            if process_id == "a":
+                os.remove(rc.tool_path(self.build, "abpair"))
+        with mock.patch.object(rc, "write_done", delete):
+            code, _, _ = self.invoke()
+        self.assertEqual(code, 3)
+        self.assertIn("found=missing", self.read(rc.LOG_FILE))
+
+    def test_a_resume_after_such_a_stop_is_refused_while_the_binary_differs(self):
+        self.write_plan(make_process("a"), make_process("b"))
+        with self.swap_after("write_done", "abpair", "a"):
+            self.assertEqual(self.invoke()[0], 3)
+        code, _, stderr = self.invoke("--resume")
+        self.assertEqual(code, 2)
+        self.assertIn("not the binaries this run started with", stderr)
+
+    def test_an_untouched_binary_does_not_stop_a_run(self):
+        self.write_plan(make_process("a"), make_process("b"), make_process("c"))
+        self.assertEqual(self.invoke()[0], 0)
+        self.assertNotIn("BINARY-CHANGED", self.read(rc.LOG_FILE))
+
+    def tearDown_out(self):
+        if os.path.exists(self.out):
+            import shutil
+            shutil.rmtree(self.out)
+
+    def make_binaries(self):
+        for tool in rc.TOOLS:
+            with open(rc.tool_path(self.build, tool), "wb") as handle:
+                handle.write(b"not a program: " + tool.encode("ascii"))
+
+
 class TimeoutTests(CampaignCase):
     """A tool that does not end is killed at its limit_s, and that run has failed (section 8)."""
 
@@ -870,7 +1337,8 @@ class ResumeTests(ResumeCase):
         self.assertEqual(first_block, run_txt)
         digests = [self.run_txt()[tool + " sha256"] for tool in rc.TOOLS]
         pattern = (r"resumed: \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d; lab job 1; "
-                   + "; ".join(f"{tool} sha256 ({digest})" for tool, digest in zip(rc.TOOLS, digests)) + r"\n")
+                   + "; ".join(f"{tool} sha256 ({digest})" for tool, digest in zip(rc.TOOLS, digests))
+                   + r"; gate passed; gate compiler [^;]+; gate code commit [0-9a-f]{40}; .*\n")
         self.assertRegex(self.tail(rc.RUN_FILE, run_txt), "^" + pattern + "$")
         # campaign.log only grew: the resume, the set-aside files, then the two processes that ran
         added = self.log_events(log)
@@ -1504,7 +1972,8 @@ class KillTests(CampaignCase):
     def start_runner(self, *extra):
         env = dict(os.environ, LAB_JOB="1")
         argv = [sys.executable, "-I", "-B", self.driver, HERE, self.stub, "--plan", self.plan_path,
-                "--build-dir", self.build, "--out-dir", self.out, *extra]
+                "--build-dir", self.build, "--out-dir", self.out, "--records", self.records_dir,
+                "--other-records", self.other_records_dir, *extra]
         log = open(os.path.join(self.root, "runner.log"), "wb")
         self.addCleanup(log.close)
         runner = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
@@ -1583,17 +2052,24 @@ class KillTests(CampaignCase):
 
 
 class ProgramTests(CampaignCase):
-    """The runner started as a program, as the lab runner starts it."""
+    """The runner started as a program, as the lab runner starts it (with the stub gate, through GATE_DRIVER)."""
+
+    def setUp(self):
+        super().setUp()
+        self.gate_driver = os.path.join(self.root, "gate_driver.py")
+        with open(self.gate_driver, "w", encoding="ascii") as handle:
+            handle.write(GATE_DRIVER)
 
     def run_program(self, *args, lab_job=None):
         env = {k: v for k, v in os.environ.items() if k != "LAB_JOB"}
         if lab_job:
             env["LAB_JOB"] = lab_job
-        return subprocess.run([sys.executable, "-B", RUNNER, *args], capture_output=True, text=True, env=env,
-                              timeout=120, check=False)
+        return subprocess.run([sys.executable, "-B", self.gate_driver, HERE, *args], capture_output=True, text=True,
+                              env=env, timeout=120, check=False)
 
     def common(self, *extra):
-        return ["--plan", self.plan_path, "--build-dir", self.build, "--out-dir", self.out, *extra]
+        return ["--plan", self.plan_path, "--build-dir", self.build, "--out-dir", self.out,
+                "--records", self.records_dir, "--other-records", self.other_records_dir, *extra]
 
     def install_shell_stubs(self):
         for tool in rc.TOOLS:
@@ -1651,7 +2127,7 @@ class ProgramTests(CampaignCase):
         """Start the runner on the plan and send it SIGTERM once a stub has created the marker."""
         env = {k: v for k, v in os.environ.items()}
         env["LAB_JOB"] = "1"
-        runner = subprocess.Popen([sys.executable, "-B", RUNNER, *self.common()], env=env,
+        runner = subprocess.Popen([sys.executable, "-B", self.gate_driver, HERE, *self.common()], env=env,
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             deadline = time.monotonic() + 30

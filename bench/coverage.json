@@ -1,0 +1,66 @@
+{
+ "provenance": "Derived from paper-io-core bench/coverage.json (itself from paper-one-port bench/coverage.json at commit 1f27ea8), same author (Apache-2.0). Changed: P1 v2 has no competitor harnesses, so 'targets' is empty; the declared gaps are wakeloop's, worded for it.",
+ "about": "A note for readers; nothing in it changes what a record must be. The gate (bench/gate_lib.py, run by bench/run_campaign.py before a timed run, at every resume and as --check-gate) fixes the required sanitizers in its code: on L ASan+UBSan, TSan and MSan, on W ASan. Every first-party target (wakeloop, wakeloop_tests, wakeprobe, abpair) needs a green record of each of them, made on the laptop, whole in one record, with the logs archive and its sha256, from the generator files of today. A declared gap never waives a record: 'targets' is empty on purpose (bench/test_records.py checks that). The gate reads nothing from this file except its sha256, which it records in its result so that a later reader can tell which wording was current. 'declared_gaps' lists what the records cannot see although they exist. A record is the build under the sanitizer, the whole CTest suite run serially, and the campaign smoke, one reduced real run of every distinct code shape of the campaign, pilot and H5 runs (bench/sanitize_wakeloop.sh, bench/sanitize_wakeloop.ps1, bench/campaign_smoke.py). The line numbers below are those of ANALYSIS_COMMIT ad39c9c.",
+ "targets": {},
+ "declared_gaps": [
+  {
+   "gap": "io_uring kernel writes are invisible to MSan, and so are the kernel's reads",
+   "sanitizers": [
+    "msan"
+   ],
+   "reason": "MemorySanitizer cannot see what the kernel writes through a raw system call or into the shared io_uring rings, and it checks no argument of a raw syscall(). The io_uring backend (loop/src/uring.cpp, in the Linux build, so in every L record) calls io_uring_setup, io_uring_enter and io_uring_register through ::syscall and maps the rings with mmap. MSan does not see the kernel's writes into the mapped rings or into the structures the calls fill, so a field the kernel never wrote would not be reported as uninitialised; likewise an uninitialised byte of a submission entry or of an argument structure that the kernel reads would not be reported. The L records still build and run the backend: its 221 wake matrix tests, wakeprobe --check and abpair --check on io_uring run under MSan like the other backends'.",
+   "mitigation": "In the code: every structure a raw call fills or reads is value-initialised first (io_uring_params at uring.cpp:107, the wait's __kernel_timespec and io_uring_getevents_arg in wait()), io_uring_params is unpoisoned whole after io_uring_setup returns (detail::kernel_wrote, uring.cpp:111) and each completion entry is unpoisoned as reap() reads it (uring.cpp:310, sizeof(io_uring_cqe)); the submission entries are set field by field in arm_wake_poll and arm_stop_poll on zero-filled ring memory. The eventfds are read and written through libc, which MSan intercepts. Checks are never disabled. The io_uring backend is also under ASan+UBSan and TSan, which see the ring words as ordinary memory and atomics."
+  },
+  {
+   "gap": "under MSan the C++ standard library is the instrumented libc++, not the libstdc++ of the measured build",
+   "sanitizers": [
+    "msan"
+   ],
+   "reason": "MemorySanitizer needs every library the program calls into to be instrumented, so the L MSan record is built with -stdlib=libc++ against an instrumented libc++ (WAKELOOP_MSAN_LIBCXX, default ~/opt/libcxx-msan-gcc, CMakeLists.txt). The measured L build is Release with clang++ and no -stdlib flag, which links libstdc++. The inputs hash covers first-party files only, so the MSan record matches the measured build by hash although the standard library code that ran under it (std::thread, std::mutex, std::condition_variable, std::atomic, containers, chrono) is libc++'s, not libstdc++'s. The condvar backend leans on the standard library most.",
+   "mitigation": "None needed for coverage: the ASan+UBSan and TSan records are built on the same libstdc++ as the measured build, and every first-party target has a green record of each of the three sanitizers. The MSan record covers wakeloop's own reads of uninitialised memory, not libstdc++'s."
+  },
+  {
+   "gap": "W has ASan only: no TSan, MSan, UBSan or leak check",
+   "sanitizers": [
+    "tsan",
+    "msan"
+   ],
+   "reason": "Rule D5 asks W for ASan with MSVC (or clang-cl). MSVC has no ThreadSanitizer, MemorySanitizer or UndefinedBehaviorSanitizer and its ASan has no leak check, so the IOCP backend (loop/src/iocp.cpp) and the Windows side of probe_platform.hpp (timer resolution, affinity) are checked for memory errors only. The condvar backend and the loop core (loop.hpp, task_stack.hpp) are the same source on both systems, so the Linux TSan, MSan and UBSan records cover them in that build; they do not cover MSVC's standard library or the IOCP backend's races.",
+   "mitigation": "None."
+  },
+  {
+   "gap": "W: stack-use-after-return is not instrumented",
+   "sanitizers": [
+    "asan"
+   ],
+   "reason": "MSVC's ASan detects stack-use-after-return only when the code is compiled with /fsanitize-address-use-after-return (cl 19.51 accepts the option, read on the desktop on 2026-10-27) and the runtime option detect_stack_use_after_return is on. CMakeLists.txt passes /fsanitize=address /Zi only, and it is a code path of the frozen build, so the W record does not catch this class of error. The L record does: clang's ASan on Linux has it on by default and the driver also sets detect_stack_use_after_return=1.",
+   "mitigation": "None in the record. Adding the compile option is a change to CMakeLists.txt, a code path, so it needs a revision-log entry and new records on both systems."
+  },
+  {
+   "gap": "Leaks at exit on W",
+   "sanitizers": [
+    "asan"
+   ],
+   "reason": "MSVC's ASan has no leak check (the W driver sets no detect_leaks), so a leak in wakeloop, wakeprobe or abpair on W is not reported at exit."
+  },
+  {
+   "gap": "Full-size runs are not executed under sanitizers; every code shape is",
+   "sanitizers": [
+    "asan",
+    "tsan",
+    "msan"
+   ],
+   "reason": "CTest runs wakeprobe and abpair only as --check, which times nothing, so it runs none of the measured code. The campaign smoke (bench/campaign_smoke.py) closes that: in every record, on the laptop, it runs one reduced real invocation of every distinct code shape of the campaign, pilot and H5 runs under the record's sanitizer build. A shape is a backend, a variant or pair of arms, a worker count, a protocol and a family of analysis/v2/plan.py's entries and of run_h5's dry-run lines (the generators' own, not a list kept here), with calibration where the run has it, the blocking or timed bound, the random, fixed or phase gap, the timer slack and the timer period, the --out writer, abpair's timed window with and without task work, and the pinning arguments; so every variant instantiation of the loop that the campaign times is executed once per backend and worker count. The record carries its shape keys and the hashes of the generator files, and the runner refuses a plan line whose shape no required sanitizer's record ran. What the smoke does not run is the size: 5 posts or rounds instead of 630, a 200 ms window and 1 pair instead of 10 s and 2, the first of the 30 phase targets of each sweep shape, one bound of the two (1 ms and 10 ms), one gap seed and one value of N per shape. A defect that shows only after many posts, in a long window, or at one of those values is not seen. The flag --pm-qos-us, which no plan and no H5 cell uses, is not run either. The smoke keeps each run's exit code and sanitizer report count and nothing it measures.",
+   "mitigation": "None in the record."
+  },
+  {
+   "gap": "Tests that run no instrumented code",
+   "sanitizers": [
+    "asan",
+    "tsan",
+    "msan"
+   ],
+   "reason": "run_h5_dry_run (bash or PowerShell), run_campaign_dry_run, run_campaign_unittest (Python, stub programs) and defect_sites (a CMake script) are in the suite and in every record's test count, and they pass or fail on their own. They start no first-party C++ program under the sanitizer, so they add no sanitizer coverage to the count of green tests."
+  }
+ ]
+}

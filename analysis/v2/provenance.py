@@ -4,6 +4,8 @@ score.py and pilot.py share these checks. Each returns the reason it fails, or N
 --draft a failed check refuses the run; with --draft it is a warning.
 """
 
+import hashlib
+import json
 import os
 import re
 import sys
@@ -14,6 +16,18 @@ import grid  # noqa: E402
 import plan  # noqa: E402
 
 COMMIT_NAME = re.compile(r"[0-9a-f]{40}")  # what bench_commit holds when the build knew its commit
+
+# The lines the campaign runner (bench/run_campaign.py) writes into run.txt after the gate of sanitizer records passed
+# (bench/gate_lib.py): a run without them was not gated. A "gate records" line is "<san> <name> <sha256>[, <name>
+# <sha256>]" per sanitizer, joined by "; ". The sanitizers each system needs are those of bench/gate_lib.py,
+# SANITIZERS_BY_HOST (bench/test_records.py compares the two).
+RUN_FILE = "run.txt"
+GATE_KEYS = ("gate", "gate compiler", "gate code commit", "gate code fingerprint", "gate coverage.json sha256",
+             "gate generators", "gate records", "gate other records", "gate smoke shape keys")
+GATE_SANITIZERS = {"linux": ("asan", "tsan", "msan"), "windows": ("asan",)}
+OTHER_SYSTEM = {"linux": "windows", "windows": "linux"}
+SYSTEM_TAG = {"linux": "L", "windows": "W"}
+RECORD_FILE = re.compile(r"(wakeloop2-[0-9a-f]+-([LW])-([a-z]+)-\S*\.json) ([0-9a-f]{64})")
 
 
 def header_problem(header, system, kind):
@@ -90,6 +104,93 @@ def commit_problem(commits):
     if not isinstance(only, str) or not COMMIT_NAME.fullmatch(only):
         return "bench_commit is %r, not a commit name" % (only,)
     return None
+
+
+def read_run_txt(data_dir):
+    """The fields of run.txt in DATA_DIR, the first line of each key ('key: value'); None if there is no such file.
+    Resume lines come after the first block and are not read."""
+    path = os.path.join(data_dir, RUN_FILE)
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    fields = {}
+    for line in text.splitlines():
+        key, sep, value = line.partition(": ")
+        if sep:
+            fields.setdefault(key, value)
+    return fields
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def named_records(value):
+    """{sanitizer: [(name, sha256, host tag, sanitizer in the name)]} from a 'gate records' value."""
+    out = {}
+    for part in value.split("; "):
+        san, _, rest = part.partition(" ")
+        if san:
+            out[san] = [(m.group(1), m.group(4), m.group(2), m.group(3)) for m in RECORD_FILE.finditer(rest)]
+    return out
+
+
+def gate_problems(system, data_dir, records_dirs):
+    """The reasons the run in DATA_DIR was not gated, as sentences (empty when it was): run.txt lacks a gate line or
+    says the gate did not pass; a sanitizer the system needs has no record named (own system's for 'gate records',
+    the other's for 'gate other records'); a named record is in none of RECORDS_DIRS, or has another sha256 than
+    run.txt records, or is red or a dry run; or no records folder was given.
+
+    The runner writes these lines only after its gate passed, so a missing line means a run that was not gated
+    (the gate is the runner's, and no run is timed without it); the folder check is the second look: the records are
+    still the ones the gate read."""
+    if not records_dirs:
+        found = ["%s: no --records folder was given, so the records named in run.txt were not checked" % system]
+    else:
+        found = []
+    fields = read_run_txt(data_dir)
+    if fields is None:
+        return found + ["%s: %s has no %s, so the records gate of the run cannot be checked" % (system, data_dir, RUN_FILE)]
+    absent = [k for k in GATE_KEYS if k not in fields]
+    if absent:
+        return found + ["%s: run.txt has no %s line%s: the run was not gated by the records gate" % (
+            system, ", ".join("'%s'" % k for k in absent[:3]), "s" if len(absent) > 1 else "")]
+    if fields["gate"] != "passed":
+        found.append("%s: run.txt says 'gate: %s', not passed" % (system, fields["gate"]))
+    for key, which in (("gate records", system), ("gate other records", OTHER_SYSTEM[system])):
+        named = named_records(fields[key])
+        for san in GATE_SANITIZERS[which]:
+            entries = named.get(san) or []
+            if not entries:
+                found.append("%s: run.txt names no %s record for %s in '%s'" % (system, san, which, key))
+            for name, sha, tag, name_san in entries:
+                if tag != SYSTEM_TAG[which] or name_san != san:
+                    found.append("%s: the record %s is named as a %s record of %s" % (system, name, san, which))
+                    continue
+                where = [os.path.join(d, name) for d in records_dirs if os.path.isfile(os.path.join(d, name))]
+                if not where:
+                    if records_dirs:
+                        found.append("%s: the record %s that run.txt names is in none of the --records folders" % (system, name))
+                    continue
+                actual = sha256_of(where[0])
+                if actual != sha:
+                    found.append("%s: the record %s has sha256 %s, and run.txt records %s" % (system, name, actual, sha))
+                    continue
+                try:
+                    with open(where[0], encoding="utf-8") as f:
+                        rec = json.load(f)
+                except (OSError, ValueError):
+                    found.append("%s: the record %s cannot be read" % (system, name))
+                    continue
+                if rec.get("green") is not True or rec.get("dry_run"):
+                    found.append("%s: the record %s is not a green record of a real job" % (system, name))
+    return found
 
 
 def bench_commits(resolved):

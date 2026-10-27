@@ -1,7 +1,7 @@
 """Scoring of the P1 v2 campaign (hypotheses-v2.md, sections 1 to 5, 7 and 8).
 
   python score.py [--linux PLAN DIR] [--windows PLAN DIR] [--revision-log FILE | --no-revision-log]
-                  [--draft] --out RESULTS.json
+                  [--records DIR ...] [--draft] --out RESULTS.json
 
 PLAN is a system's plan (plan.py) and DIR the folder of its outputs, as the campaign runner
 leaves them (readers.py): ID.jsonl, ID-rerun.jsonl, ID.done and the void runs. A process is good
@@ -20,8 +20,13 @@ clean. The scoring is refused when:
   - a plan's lines differ from the ones plan.py makes, or an H4 comparison does not have R / 2
     processes for its cell in the log;
   - the good processes were not all built from one commit (section 1: every build, on both
-    systems, is the Release build of one commit).
---draft is for dry runs and tests: those four become warnings, --no-revision-log is allowed, no
+    systems, is the Release build of one commit);
+  - a system's run.txt lacks the lines the campaign runner writes after its records gate passed
+    (provenance.GATE_KEYS), or a record it names (the system's own sanitizer records and the other
+    system's) is in none of the --records folders, has another sha256 than run.txt records, or is not a
+    green record of a real job. --records is given once for each folder of the Papers repo's
+    lab/sanitizer-records that holds them (laptop-l, laptop-w); with none, the records cannot be checked.
+--draft is for dry runs and tests: those five become warnings, --no-revision-log is allowed, no
 clean tree is needed, and the output is marked draft.
 
 F1, F2, F4 and F4c each hold cells of both systems, so Holm runs over both. Every cell of the
@@ -321,9 +326,10 @@ def refusal(problems):
     return plan_mod.Refusal("; ".join(shown) + more)
 
 
-def score_system(plan_path, data_dir, h4_r=None, strict=False):
+def score_system(plan_path, data_dir, h4_r=None, strict=False, records=None):
     """One system's cells, sweeps and H4 comparisons. strict: refuse, before scoring anything, a plan whose
-    header or lines are not the real ones (score() asks for it outside draft)."""
+    header or lines are not the real ones, or a run that was not gated (score() asks for it outside draft).
+    records: the folders of the sanitizer records that run.txt names."""
     header, groups, order = resolve_plan(plan_path, data_dir)
     system = header["system"]
     problems = []  # what the plan and the builds lack as provenance; refused outside --draft
@@ -332,6 +338,7 @@ def score_system(plan_path, data_dir, h4_r=None, strict=False):
         problems.append("%s: %s" % (system, found))
     departures = plan_departures(system, groups, h4_r, order)
     problems += departure_problems(system, departures)
+    problems += provenance.gate_problems(system, data_dir, records or ())
     if strict and problems:
         raise refusal(problems)
     commits = provenance.bench_commits(r for resolved in groups.values() for r in resolved)
@@ -410,15 +417,16 @@ def provenance_problems(systems, h4_r_source):
     return problems
 
 
-def score(inputs, h4_r=None, generated_by="analysis/v2/score.py", h4_r_source=None, draft=False):
+def score(inputs, h4_r=None, generated_by="analysis/v2/score.py", h4_r_source=None, draft=False, records=None):
     """inputs: (plan, data_dir) per system; h4_r: the revision log's h4-r rows (h4log.read_log), or
-    None; h4_r_source: the {file, sha256} of that log, recorded in the output.
+    None; h4_r_source: the {file, sha256} of that log, recorded in the output; records: the folders of the
+    sanitizer records that each run.txt names.
 
     Outside draft, a provenance problem raises plan.Refusal; with draft each one is a warning.
     """
     systems = {}
     for plan_path, data_dir in inputs:
-        result = score_system(plan_path, data_dir, h4_r, strict=not draft)
+        result = score_system(plan_path, data_dir, h4_r, strict=not draft, records=records)
         if result["system"] in systems:
             raise ValueError("system %s given twice" % result["system"])
         systems[result["system"]] = result
@@ -544,6 +552,9 @@ def main(argv=None, repo=None):
                         "(default: %s at the repository root)" % plan_mod.REVISION_LOG)
     source.add_argument("--no-revision-log", action="store_true",
                         help="score without it (with --draft only): the underpowered H4 cells are then not known")
+    ap.add_argument("--records", action="append", default=[], metavar="DIR",
+                    help="a folder of sanitizer records (the Papers repo's lab/sanitizer-records/laptop-l, laptop-w); give "
+                    "it once for each: every record that a run.txt names must be in one of them, with its sha256")
     ap.add_argument("--draft", action="store_true",
                     help="a dry run: provenance problems become warnings, no clean tree is needed, and the output "
                     "ends generated_by in draft")
@@ -569,7 +580,7 @@ def main(argv=None, repo=None):
                              "underpowered cells)" % e)
         h4_r_source = {"file": os.path.basename(path), "sha256": digest}
     try:
-        result = score(inputs, h4_r, by, h4_r_source, a.draft)
+        result = score(inputs, h4_r, by, h4_r_source, a.draft, a.records)
     except (plan_mod.Refusal, beff_mod.BeffError) as e:
         raise SystemExit("score.py: refused: %s" % e)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:

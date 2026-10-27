@@ -6,6 +6,7 @@ every name against the tools' sources). Every value that comes from the plan is 
 plan entry; every value that comes from the build or the host is a fixture.
 """
 
+import hashlib
 import json
 import os
 
@@ -22,6 +23,48 @@ LOW = 0.01
 BENCH_COMMIT = "0123456789abcdef0123456789abcdef01234567"  # a fixture, not a commit of anything
 OTHER_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
 WINDOWS_TIMER_US = 15625  # the default timer period of Windows, in us (a fixture for the summary)
+
+
+GATE_SANITIZERS = {"linux": ("asan", "tsan", "msan"), "windows": ("asan",)}
+SYSTEM_TAG = {"linux": "L", "windows": "W"}
+
+
+def write_gate(data_dir, system, records_dir, other_records_dir=None, red=(), skip=(), wrong_sha=()):
+    """What a campaign run leaves of a passed records gate, as fixtures: the first block of run.txt with the gate lines
+    (the form bench/run_campaign.py writes) in DATA_DIR, and the records it names, green ones with fixed names, in
+    RECORDS_DIR (the system's own) and OTHER_RECORDS_DIR (the other system's; the same folder by default). red: names
+    of records to write red; skip: names not written; wrong_sha: names whose sha256 in run.txt is not the file's.
+    Returns {"records": ..., "other": ...}, the two 'gate records' values."""
+    other = "windows" if system == "linux" else "linux"
+    other_records_dir = other_records_dir or records_dir
+    values = {}
+    for key, which, folder in (("records", system, records_dir), ("other", other, other_records_dir)):
+        os.makedirs(folder, exist_ok=True)
+        parts = []
+        for san in GATE_SANITIZERS[which]:
+            name = "wakeloop2-abc123def-%s-%s-20261028t100000.json" % (SYSTEM_TAG[which], san)
+            path = os.path.join(folder, name)
+            if name not in skip:
+                with open(path, "w", encoding="utf-8", newline="\n") as f:
+                    json.dump({"green": name not in red, "dry_run": False, "sanitizer": san}, f)
+            sha = "0" * 64
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    sha = hashlib.sha256(f.read()).hexdigest()
+            if name in wrong_sha:
+                sha = "f" * 64
+            parts.append("%s %s %s" % (san, name, sha))
+        values[key] = "; ".join(parts)
+    lines = [("runner", "run_campaign.py"), ("plan system", system), ("build type", "Release"),
+             ("gate", "passed"), ("gate compiler", "Clang 22.1.8" if system == "linux" else "MSVC 19.51.36246"),
+             ("gate code commit", BENCH_COMMIT), ("gate code fingerprint", "a" * 64),
+             ("gate coverage.json sha256", "b" * 64), ("gate generators", "bench/run_h5.sh " + "c" * 64),
+             ("gate records", values["records"]), ("gate other records", values["other"]),
+             ("gate smoke shape keys", "129"), ("out dir", data_dir)]
+    with open(os.path.join(data_dir, "run.txt"), "w", encoding="utf-8", newline="\n") as f:
+        for key, value in lines:
+            f.write("%s: %s\n" % (key, value))
+    return values
 
 
 def write_lines(path, objs):

@@ -233,17 +233,22 @@ class RealPilot(unittest.TestCase):
         _, self.entries = readers.load_plan(self.plan)
         for e in self.entries:
             synth.write_process(self.data, e, first=synth.abpair_output(e, ratios_for(0.010)))
+        # The run was gated: run.txt has the lines the runner leaves after its gate passed, and the records exist.
+        self.records = os.path.join(self.t.root, "records")
+        self.gate = synth.write_gate(self.data, "windows", self.records)
         self.out = os.path.join(self.t.root, "record.json")
         self.md = os.path.join(self.t.root, "block.md")
 
-    def main(self, *extra, plan_path=None):
+    def main(self, *extra, plan_path=None, records=None):
+        args = ["--windows", plan_path or self.plan, self.data, "--out", self.out]
+        for folder in ([self.records] if records is None else records):
+            args += ["--records", folder]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            return pilot.main(["--windows", plan_path or self.plan, self.data, "--out", self.out] + list(extra),
-                              repo=self.repo)
+            return pilot.main(args + list(extra), repo=self.repo)
 
-    def refused(self, *extra, plan_path=None):
+    def refused(self, *extra, plan_path=None, records=None):
         with self.assertRaises(SystemExit) as cm:
-            self.main(*extra, plan_path=plan_path)
+            self.main(*extra, plan_path=plan_path, records=records)
         self.assertFalse(os.path.exists(self.out), "a refused record was written")
         message = str(cm.exception.code)
         self.assertTrue(message.startswith("pilot.py: refused: "), message)
@@ -324,6 +329,42 @@ class RealPilot(unittest.TestCase):
         cell = [c for c in self.record()["cells"].values() if any(p["id"] == e["id"] for p in c["processes"])][0]
         self.assertEqual(cell["pairs"], 6)
 
+    # -- N9: the run was gated, and the records it names are the ones in the folders ----------------------------------
+
+    def test_a_run_without_run_txt_or_with_a_line_missing_was_not_gated(self):
+        path = os.path.join(self.data, "run.txt")
+        os.remove(path)
+        self.assertIn("has no run.txt", self.refused())
+        synth.write_gate(self.data, "windows", self.records)
+        with open(path, encoding="utf-8") as f:
+            lines = [line for line in f.read().splitlines() if not line.startswith("gate records: ")]
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(lines) + "\n")
+        message = self.refused()
+        self.assertIn("'gate records'", message)
+        self.assertIn("not gated by the records gate", message)
+
+    def test_a_record_that_run_txt_names_must_be_in_a_folder_with_its_sha256(self):
+        name = self.gate["records"].split(" ")[1]
+        with open(os.path.join(self.records, name), "a", encoding="utf-8") as f:
+            f.write(" ")
+        self.assertIn("and run.txt records", self.refused())
+        os.remove(os.path.join(self.records, name))
+        self.assertIn("in none of the --records folders", self.refused())
+        self.assertIn("no --records folder was given", self.refused(records=[]))
+
+    def test_a_red_record_does_not_count(self):
+        name = self.gate["records"].split(" ")[1]
+        synth.write_gate(self.data, "windows", self.records, red=(name,))
+        self.assertIn("not a green record of a real job", self.refused())
+
+    def test_a_draft_warns_about_the_gate(self):
+        os.remove(os.path.join(self.data, "run.txt"))
+        self.assertEqual(self.main("--draft", records=[]), 0)
+        warnings = self.record()["warnings"]
+        self.assertTrue([w for w in warnings if "has no run.txt" in w], warnings)
+        self.assertTrue([w for w in warnings if "no --records folder" in w], warnings)
+
     def test_the_block_of_a_real_pilot_is_what_h4log_accepts(self):
         # Both systems are needed for the block; the Linux plan is made and filled the same way.
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -334,9 +375,10 @@ class RealPilot(unittest.TestCase):
         _, entries = readers.load_plan(linux)
         for i, e in enumerate(entries):
             synth.write_process(linux_data, e, first=synth.abpair_output(e, ratios_for(0.0125 if i % 2 else 0.011)))
+        synth.write_gate(linux_data, "linux", self.records, self.records)
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             rc = pilot.main(["--linux", linux, linux_data, "--windows", self.plan, self.data, "--out", self.out,
-                             "--markdown", self.md], repo=self.repo)
+                             "--markdown", self.md, "--records", self.records], repo=self.repo)
         self.assertEqual(rc, 0)
         with open(self.md, "r", encoding="utf-8") as f:
             rows = h4log.parse_block(f.read())

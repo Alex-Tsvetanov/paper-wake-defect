@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 # H5 on Linux: the 2026-09 designs, run again with v2's wakeprobe (backends io_uring and epoll).
 #
-# Usage: run_h5.sh --build-dir DIR --out-dir DIR [--seed N] [--no-pin] [--dry-run] [--expect-cells N]
+# Usage: run_h5.sh --build-dir DIR --out-dir DIR [--records DIR --other-records DIR] [--seed N] [--no-pin] [--dry-run]
+#                  [--expect-cells N]
 #   --build-dir DIR     an existing v2 Release build directory; this script never builds
 #   --out-dir DIR       plan.txt and, per cell, <cell>.jsonl, <cell>.out and <cell>.err go here
+#   --records DIR, --other-records DIR
+#                       the folders of this system's and the other system's sanitizer records. A timed run needs
+#                       them: it calls `run_campaign.py --check-gate` with the same build and folders before any
+#                       cell and exits 2 unless the records gate passes (the campaign's own gate, bench/gate_lib.py).
+#                       H5 is a block on the same binary as the campaign, so it is gated as the campaign is. The
+#                       campaign smoke runs H5's cells' shapes (bench/campaign_smoke.py) under every sanitizer.
+#                       The gate's output is kept as gate.txt in the output directory, and wakeprobe is hashed
+#                       again before every run: a binary other than the one the gate hashed stops the script with
+#                       exit 3 and a BINARY-CHANGED line in gate.txt.
 #   --seed N            shuffle the cell order with this seed (default 20261026)
 #   --no-pin            do not pass --worker-cpus 14 --poster-cpu 2 to wakeprobe (pinned by default)
 #   --dry-run           write plan.txt and print every wakeprobe command line; run nothing
@@ -42,23 +52,28 @@ backends="io_uring epoll"
 
 die() { echo "run_h5.sh: $*" >&2; exit 2; }
 usage() {
-    echo "usage: run_h5.sh --build-dir DIR --out-dir DIR [--seed N] [--no-pin] [--dry-run] [--expect-cells N]" >&2
+    echo "usage: run_h5.sh --build-dir DIR --out-dir DIR [--records DIR --other-records DIR] [--seed N] [--no-pin] [--dry-run] [--expect-cells N]" >&2
     exit 2
 }
 
+here=$(cd "$(dirname "$0")" && pwd)
 build_dir=""
 out_dir=""
+records=""
+other_records=""
 seed=20261026
 pin=1
 dry=0
 expect=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --build-dir|--out-dir|--seed|--expect-cells)
+        --build-dir|--out-dir|--records|--other-records|--seed|--expect-cells)
             [ $# -ge 2 ] || die "missing value for $1"
             case "$1" in
                 --build-dir) build_dir=$2 ;;
                 --out-dir) out_dir=$2 ;;
+                --records) records=$2 ;;
+                --other-records) other_records=$2 ;;
                 --seed) seed=$2 ;;
                 --expect-cells) expect=$2 ;;
             esac
@@ -96,6 +111,18 @@ if [ "$build_type" != Release ]; then
     fi
 fi
 
+# The records gate (hypotheses-v2.md section 8): before any cell, and before anything is written. The same gate the campaign
+# runner runs at its start, in its --check-gate mode; exit 0 only if it passes.
+if [ "$dry" != 1 ]; then
+    [ -n "$records" ] && [ -n "$other_records" ] || die "refusing a timed run: give --records and --other-records (the sanitizer records of this system and of the other)"
+    gate_out=$(python3 "$here/run_campaign.py" --check-gate --build-dir "$build_dir" --records "$records" --other-records "$other_records") \
+        || die "refusing a timed run: the records gate does not pass"
+    printf '%s\n' "$gate_out"
+    # The hash the gate made of wakeprobe: every cell is bound to it (check_binary), and gate.txt in the output keeps the lot.
+    gate_wakeprobe_sha=$(printf '%s\n' "$gate_out" | sed -n 's/^binary wakeprobe sha256 //p' | tr -d '\r')
+    [ -n "$gate_wakeprobe_sha" ] || die "the gate printed no sha256 of wakeprobe"
+fi
+
 # Nothing is overwritten: a directory that holds records is not reused.
 if [ -d "$out_dir" ]; then
     old=$(find "$out_dir" -name '*.jsonl' -print -quit 2>/dev/null || true)
@@ -103,6 +130,7 @@ if [ -d "$out_dir" ]; then
 fi
 mkdir -p "$out_dir"
 out_dir=$(cd "$out_dir" && pwd)
+if [ "$dry" != 1 ]; then printf '%s\n' "$gate_out" > "$out_dir/gate.txt"; fi
 
 # The plan: one line per cell, fields separated by spaces:
 #   design arm variant backend bound_us gap_us posts warmup slack_ns file
@@ -155,7 +183,7 @@ total=${#cells[@]}
 # The shuffle is Python's random.Random(seed), as in run_matrix.sh.
 mapfile -t cells < <(printf '%s\n' "${cells[@]}" | python3 -c \
     'import random, sys; lines = sys.stdin.read().splitlines(); random.Random(int(sys.argv[1])).shuffle(lines); print("\n".join(lines))' \
-    "$seed")
+    "$seed" | tr -d '\r')  # tr: a Windows Python ends its lines with CR LF, and a CR would end up in a file name
 [ "${#cells[@]}" -eq "$total" ] || die "the shuffle changed the number of cells (${#cells[@]} of $total)"
 
 count_of() {
@@ -165,7 +193,7 @@ count_of() {
 }
 counts="gap-sweep $(count_of gap-sweep), bound-sweep $(count_of bound-sweep), matrix $(count_of matrix)"
 if [ "$pin" = 1 ]; then placement="worker-cpus 14, poster-cpu 2"; else placement="off (--no-pin)"; fi
-wakeprobe_sha=$(sha256sum "$wakeprobe" | cut -d' ' -f1)
+wakeprobe_sha=${gate_wakeprobe_sha:-$(sha256sum "$wakeprobe" | cut -d' ' -f1)}  # a timed run: the gate's hash
 {
     echo "# seed: $seed"
     echo "# build: $build_dir"
@@ -198,8 +226,17 @@ make_cmd() {  # the fields of a plan line, then the suffix
         cmd+=(--worker-cpus 14 --poster-cpu 2)
     fi
 }
+check_binary() {  # before every run: wakeprobe is still the binary the gate hashed, else stop (exit 3)
+    local now
+    now=$(sha256sum "$wakeprobe" 2>/dev/null | cut -d' ' -f1)
+    if [ "$now" != "$gate_wakeprobe_sha" ]; then
+        echo "$(date -Is) BINARY-CHANGED wakeprobe expected=$gate_wakeprobe_sha found=${now:-missing}" | tee -a "$out_dir/gate.txt" >&2
+        exit 3
+    fi
+}
 run_cell() {  # a plan line, then the suffix; returns wakeprobe's exit code
     local rc=0
+    check_binary
     # shellcheck disable=SC2086  # fields are space separated by construction
     make_cmd $1 "$2"
     "${cmd[@]}" >"$stdout_file" 2>"$stderr_file" || rc=$?
