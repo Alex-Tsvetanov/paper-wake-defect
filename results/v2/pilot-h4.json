@@ -1,0 +1,1992 @@
+{
+ "bench_commits": {
+  "c651e31d4cc15ef2ba947f9db3b27736a99a5ee9": 80
+ },
+ "cells": {
+  "linux-condvar-N0us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    -0.002489036650980272,
+    0.0017681991172249778,
+    -0.002106556106415801,
+    -7.03210812033517e-05,
+    0.004997273700543343,
+    0.003310261271410425,
+    -0.0020150003619884456,
+    -0.009041483584418286
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 0.9999999992257773,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.004334545286409711,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 0
+  },
+  "linux-condvar-N100us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    -1.5841343711033816e-05,
+    -3.125930814452199e-05,
+    -1.9610850459161116e-05,
+    3.2843914034209856e-05,
+    -1.604973527614095e-05,
+    -1.4835196263555385e-05,
+    -8.324130047997609e-06,
+    -4.745460012384695e-05
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 2.2910805771093328e-05,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 100
+  },
+  "linux-condvar-N10us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    0.00021523731391726993,
+    2.607355917272991e-05,
+    -0.0002056124330067263,
+    -0.00014934048743947586,
+    -0.00022382542317095163,
+    -0.00011872443659629237,
+    1.0652521597347366e-05,
+    1.7603572449110166e-05
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.00014799204947455006,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 10
+  },
+  "linux-condvar-N1us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    0.0013328199963596981,
+    0.0012293732605765165,
+    -0.0008640941324151172,
+    0.0002888333123272713,
+    -0.0003608384448411238,
+    -0.003432974524488349,
+    -0.00010540654060801833,
+    -0.0009272906750226914
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.0015069575730544385,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 1
+  },
+  "linux-epoll-N0us": {
+   "R": 24,
+   "backend": "epoll",
+   "log_ratios": [
+    0.053766390135003825,
+    0.007420566288921525,
+    -0.0068135001278488375,
+    0.060285820070299166,
+    0.0350516668865651,
+    -0.061614219426021063,
+    0.022037457707328536,
+    0.013611156279450512
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 0.0024898596566810226,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N0us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N0us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N0us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N0us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.03856057261611845,
+   "system": "linux",
+   "underpowered": true,
+   "work_us": 0
+  },
+  "linux-epoll-N100us": {
+   "R": 14,
+   "backend": "epoll",
+   "log_ratios": [
+    3.248695322620612e-05,
+    6.3999201656858965e-06,
+    3.1233461899879724e-05,
+    -4.852892990810755e-06,
+    -3.345073250664498e-05,
+    -1.107596339321387e-05,
+    2.641855988801015e-05,
+    1.4044674333730483e-05
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N100us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N100us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N100us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N100us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 2.3188733622744e-05,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 100
+  },
+  "linux-epoll-N10us": {
+   "R": 14,
+   "backend": "epoll",
+   "log_ratios": [
+    2.4289712326284188e-05,
+    -4.416020175599667e-05,
+    -6.831659033664807e-05,
+    -6.351517585025582e-07,
+    0.00012761080007259374,
+    4.6609463547686056e-05,
+    4.758032388981172e-05,
+    5.647725754033439e-05
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N10us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N10us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N10us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N10us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 6.168065338970847e-05,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 10
+  },
+  "linux-epoll-N1us": {
+   "R": 14,
+   "backend": "epoll",
+   "log_ratios": [
+    0.002906845630432545,
+    0.0003156252821934369,
+    -9.559822181044436e-05,
+    -6.68895303125208e-05,
+    0.0025877728004392664,
+    -0.0019059420359555097,
+    0.002746377513216446,
+    -0.0005004882517316648
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N1us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N1us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N1us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-epoll-N1us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.0017809977714103686,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 1
+  },
+  "linux-io_uring-N0us": {
+   "R": 24,
+   "backend": "io_uring",
+   "log_ratios": [
+    0.10214936256074919,
+    0.19325043569230885,
+    -0.1346245266035422,
+    0.07779700096337556,
+    -0.21381593441110908,
+    -0.37992128495456984,
+    0.08484669363935868,
+    0.13115465152572708
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 2.6534502685650796e-13,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N0us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N0us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N0us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N0us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.20142119579063086,
+   "system": "linux",
+   "underpowered": true,
+   "work_us": 0
+  },
+  "linux-io_uring-N100us": {
+   "R": 14,
+   "backend": "io_uring",
+   "log_ratios": [
+    -9.083163225587439e-06,
+    -2.7160823010106447e-05,
+    -1.3039580166146229e-05,
+    -2.3675451778764365e-05,
+    -7.345075110708939e-05,
+    3.089977668667726e-05,
+    -4.113907346455989e-05,
+    3.315320589914385e-05
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N100us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N100us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N100us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N100us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 3.54274628304525e-05,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 100
+  },
+  "linux-io_uring-N10us": {
+   "R": 14,
+   "backend": "io_uring",
+   "log_ratios": [
+    -5.8326577074295884e-05,
+    -2.0213083184738128e-05,
+    5.7744177722431554e-05,
+    6.191802863242572e-05,
+    -0.00011307513990745292,
+    2.8167588004080936e-06,
+    -2.6373068295062668e-06,
+    0.00014493769568786947
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N10us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N10us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N10us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N10us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 7.938826071637536e-05,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 10
+  },
+  "linux-io_uring-N1us": {
+   "R": 14,
+   "backend": "io_uring",
+   "log_ratios": [
+    -0.0034096817920467744,
+    -0.00014608019002694593,
+    0.0008875767681737174,
+    0.00039442636737186873,
+    0.0007848162510824177,
+    0.00010215333370981217,
+    0.000783104206650122,
+    -0.002713265310194166
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N1us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N1us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N1us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-io_uring-N1us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.001682548948616116,
+   "system": "linux",
+   "underpowered": false,
+   "work_us": 1
+  },
+  "windows-condvar-N0us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    -0.0002301965623076972,
+    0.00037487075119972755,
+    0.0009199500458284308,
+    0.013718923981741217,
+    -0.00011216697109520819,
+    0.00038819395212052235,
+    0.0022045487759159306,
+    0.005241400136048808
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 0.9999999667335943,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N0us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.00475742970184998,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 0
+  },
+  "windows-condvar-N100us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    3.7966076861439273e-05,
+    1.4504892153216778e-05,
+    -2.8626991094680094e-05,
+    -8.757530002129816e-06,
+    -1.8436489687779212e-05,
+    -4.217999078432254e-06,
+    -2.9457643423060392e-05,
+    2.8445803455396296e-05
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N100us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 2.5560639952983952e-05,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 100
+  },
+  "windows-condvar-N10us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    -5.746804429498453e-06,
+    -3.417117149913131e-05,
+    -6.0030572512301855e-05,
+    -0.0002418936817557221,
+    -0.00021030687302678048,
+    3.7715200070764705e-05,
+    -1.041530774144546e-05,
+    3.241084869372076e-05
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N10us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.00010678104029710107,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 10
+  },
+  "windows-condvar-N1us": {
+   "R": 14,
+   "backend": "condvar",
+   "log_ratios": [
+    0.00011352005360982323,
+    -9.242043369337966e-05,
+    1.933029334655726e-05,
+    0.0002609291804274959,
+    -4.120850484885632e-06,
+    9.254216806430273e-05,
+    -0.00015159586707907648,
+    0.00015334657410943567
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-condvar-N1us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.0001340583415029833,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 1
+  },
+  "windows-iocp-N0us": {
+   "R": 14,
+   "backend": "iocp",
+   "log_ratios": [
+    -0.0012555338046082347,
+    3.564515390496407e-05,
+    0.00020422795732836547,
+    -0.0032362685755110234,
+    -0.0020247262505779283,
+    -0.0010670634832576264,
+    -0.0016343283781141951,
+    0.0002985509559388807
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N0us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N0us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N0us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N0us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.0012348727278008228,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 0
+  },
+  "windows-iocp-N100us": {
+   "R": 14,
+   "backend": "iocp",
+   "log_ratios": [
+    -3.661635448736213e-05,
+    1.3596411803310315e-05,
+    -1.1007967359033977e-06,
+    4.7201629940625946e-05,
+    -2.3483371129444793e-07,
+    -6.379939285653756e-05,
+    -2.733316185704044e-05,
+    4.638657912362945e-06
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N100us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N100us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N100us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N100us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 3.399050512482959e-05,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 100
+  },
+  "windows-iocp-N10us": {
+   "R": 14,
+   "backend": "iocp",
+   "log_ratios": [
+    -4.452515870919532e-06,
+    -0.00018535451465473274,
+    -6.936146214968296e-06,
+    -0.000280139824085253,
+    0.0002001417464633156,
+    1.8047341335078114e-05,
+    0.0002246300580665905,
+    -0.00023714095390887547
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N10us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N10us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N10us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N10us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.00018927888205106457,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 10
+  },
+  "windows-iocp-N1us": {
+   "R": 14,
+   "backend": "iocp",
+   "log_ratios": [
+    0.0003146637390828562,
+    -5.069758172925112e-05,
+    -0.0001669428231154478,
+    -0.00037556139390177405,
+    0.00014971533481943257,
+    -5.626797719681704e-05,
+    3.878064512895084e-05,
+    -0.00015723837339391952
+   ],
+   "note": null,
+   "pairs": 8,
+   "power": 1.0,
+   "processes": [
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N1us-p0",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N1us-p1",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N1us-p2",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    },
+    {
+     "exits": [
+      0
+     ],
+     "first_problem": null,
+     "id": "pilot-iocp-N1us-p3",
+     "lost_units": {
+      "first": 0,
+      "rerun": 0,
+      "void": 0
+     },
+     "ok": true,
+     "outcome": "ok",
+     "problem": null,
+     "rerun": false,
+     "rerun_problem": null,
+     "used": "first",
+     "void_runs": []
+    }
+   ],
+   "s": 0.00021070991749506658,
+   "system": "windows",
+   "underpowered": false,
+   "work_us": 1
+  }
+ },
+ "draft": false,
+ "generated_by": "analysis/v2/pilot.py c651e31d4cc15ef2ba947f9db3b27736a99a5ee9",
+ "h4_r": 1,
+ "rule": "hypotheses-v2.md section 7",
+ "warnings": []
+}

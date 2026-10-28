@@ -196,3 +196,68 @@ The records, and the campaign smoke.
   hash wakeprobe again before every run; a change stops them with exit 3.
 - Each job configures a fresh build directory: a reused one keeps `bench_commit` and `bench_dirty`
   from its configure, which are then stale.
+
+### 2026-10-28: each H4 cell's R, from the A/A pilot
+
+The A/A pilot of section 7 ran on the laptop on 2026-10-28 at commit c651e31 (code commit
+d9e0ef7), before any confirmatory window. No confirmatory data existed. The rule is unchanged;
+this entry records the values it gives.
+
+**The runs**
+- `plan.py pilot` made the plans on the laptop from a clean clone at c651e31. Each had the
+  sha256 computed on the desktop before the runs: `plans/pilot-linux.jsonl`
+  22853d44fd8543e3cde08df75bdd423425b24c2431c897921b341a55fc8be89b (48 processes) and
+  `plans/pilot-windows.jsonl` 94a3162f10544dc49a49a57a98fa7465b46f6e35832600aca34ed08f079df1c1
+  (32 processes). Both are committed with this entry, byte for byte as run.
+- Windows ran from 11:07 to 11:29 and Linux from 11:34 to 12:06 (UTC+2). Each runner passed
+  its records gate first, with the four green D5 records at c651e31 (Linux ASan, TSan and MSan;
+  Windows MSVC ASan). All 80 processes exited 0 at their first run. None was rerun, void or
+  incomplete.
+- The laptop job archives are kept in the lab's archive: `p1-pilot-l.tar.gz`, sha256
+  932ae04079f1547eecba97f9c3dad32a88b90cfbab33060d2e42227eeeb44a19, and `p1-pilot-w.tar.gz`,
+  sha256 681ce7bf2fc43e69f0dfc966a14155fb4e0f2a2062b1f2862ccc16998a003bd4.
+- `pilot.py` ran at c651e31 on a clean tree, with `--records` for the Papers repository's
+  `lab/sanitizer-records` and its `laptop-w`. It passed every check with no warning. Its record
+  is `results/v2/pilot-h4.json` (sha256
+  501730480a13531f8eac87f33318f1c795a073e160c213e821373e53abf46800). The block below is its
+  `--markdown` output, unchanged.
+
+**What the rule gives**
+- Every F4 cell (N = 1, 10 and 100 us, 15 cells) has R = 14, the floor, with power 1.0000 at
+  the strictest Holm step; s is 0.000023 to 0.0018. No confirmatory cell is underpowered.
+- N = 0 is outside F4, a disclosed repeat (section 3). It has R = 14 on IOCP and on the condition
+  variable of both systems. On Linux, epoll (s = 0.0386, power 0.0025) and io_uring (s = 0.2014,
+  power 0.0000) reach power 0.8 at no R up to 24. So both have R = 24 and are declared
+  underpowered: their tests are run and reported, and a non-rejection reads as inconclusive.
+
+**Read by hand, after pilot.py had given R.** The P1 session printed the per-pair ratios of the
+six N = 0 cells and of Linux io_uring at N = 1 us, and the per-window throughput and passes of
+the Linux processes of epoll, io_uring and the condition variable at N = 0 and of io_uring at
+N = 1 us. All are the fixed loop against itself and compare no arms. Seen: on io_uring at N = 0
+the throughput varied from window to window inside one process, from 2.3 to 5.0 million tasks/s,
+while the passes per window stayed near 1.47 million. It changed nothing.
+
+<!-- h4-r:begin -->
+| cell | system | backend | N (us) | pairs | s | power | R | underpowered |
+|---|---|---|---|---|---|---|---|---|
+| linux-epoll-N0us | linux | epoll | 0 | 8 | 0.03856057261611845 | 0.0025 | 24 | yes |
+| linux-epoll-N1us | linux | epoll | 1 | 8 | 0.0017809977714103686 | 1.0000 | 14 | no |
+| linux-epoll-N10us | linux | epoll | 10 | 8 | 0.00006168065338970847 | 1.0000 | 14 | no |
+| linux-epoll-N100us | linux | epoll | 100 | 8 | 0.000023188733622744 | 1.0000 | 14 | no |
+| linux-io_uring-N0us | linux | io_uring | 0 | 8 | 0.20142119579063086 | 0.0000 | 24 | yes |
+| linux-io_uring-N1us | linux | io_uring | 1 | 8 | 0.001682548948616116 | 1.0000 | 14 | no |
+| linux-io_uring-N10us | linux | io_uring | 10 | 8 | 0.00007938826071637536 | 1.0000 | 14 | no |
+| linux-io_uring-N100us | linux | io_uring | 100 | 8 | 0.0000354274628304525 | 1.0000 | 14 | no |
+| linux-condvar-N0us | linux | condvar | 0 | 8 | 0.004334545286409711 | 1.0000 | 14 | no |
+| linux-condvar-N1us | linux | condvar | 1 | 8 | 0.0015069575730544385 | 1.0000 | 14 | no |
+| linux-condvar-N10us | linux | condvar | 10 | 8 | 0.00014799204947455006 | 1.0000 | 14 | no |
+| linux-condvar-N100us | linux | condvar | 100 | 8 | 0.000022910805771093328 | 1.0000 | 14 | no |
+| windows-iocp-N0us | windows | iocp | 0 | 8 | 0.0012348727278008228 | 1.0000 | 14 | no |
+| windows-iocp-N1us | windows | iocp | 1 | 8 | 0.00021070991749506658 | 1.0000 | 14 | no |
+| windows-iocp-N10us | windows | iocp | 10 | 8 | 0.00018927888205106457 | 1.0000 | 14 | no |
+| windows-iocp-N100us | windows | iocp | 100 | 8 | 0.00003399050512482959 | 1.0000 | 14 | no |
+| windows-condvar-N0us | windows | condvar | 0 | 8 | 0.00475742970184998 | 1.0000 | 14 | no |
+| windows-condvar-N1us | windows | condvar | 1 | 8 | 0.0001340583415029833 | 1.0000 | 14 | no |
+| windows-condvar-N10us | windows | condvar | 10 | 8 | 0.00010678104029710107 | 1.0000 | 14 | no |
+| windows-condvar-N100us | windows | condvar | 100 | 8 | 0.000025560639952983952 | 1.0000 | 14 | no |
+<!-- h4-r:end -->
