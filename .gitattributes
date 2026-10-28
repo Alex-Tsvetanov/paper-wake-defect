@@ -4,3 +4,4 @@
 bench/code_paths.txt text eol=lf
 *.pdf binary
 *.jsonl text eol=lf
+results/v2/*.json text eol=lf

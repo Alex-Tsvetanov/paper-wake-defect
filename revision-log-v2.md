@@ -315,3 +315,53 @@ and stopped the timer's source.
   for good processes and reruns.
 - Its cells are reported beside the confirmatory results, as an extra run with this cause. They
   never enter F1, F2 or any Holm step, and they decide nothing.
+
+### 2026-10-29: the confirmatory scoring
+
+Both systems' campaigns ran at 796b71f (chain A16) and exited 0. Archives, sha256 matched:
+- Linux: `gap37-a-q1-p1-campaign-fba5024d/p1-campaign-l.tar.gz`, sha256
+  239784122130b3bf6f855849faad1a55f3eeb139d3b8d3665037a828aa1e331a. Run 2026-10-28 18:09 to
+  2026-10-29 00:14 (UTC+2). All 2,328 processes are good at their first run: no rerun, no void
+  run, no lost unit.
+- Windows: `gap37-w-q1-p1-campaign-e3b32dd9/p1-campaign-w.tar.gz`, sha256
+  9048d6ab407b635edc28020f3e25243cd866ad3577404b2ddfa772f64ecceedc. 1,428 of 1,432 good (the
+  entry above).
+
+The scoring:
+
+    git show 4ec2551:revision-log-v2.md > DIR/revision-log-v2.md
+    python analysis/v2/score.py --linux plans/plan-linux.jsonl L --windows plans/plan-windows.jsonl W
+        --revision-log DIR/revision-log-v2.md --records <Papers>/lab/sanitizer-records
+        --records <Papers>/lab/sanitizer-records/laptop-w --out results/v2/score.json
+
+- L and W are each archive's `out/campaign`. The log copy has the sha256 of the plan headers,
+  7353b1a2bf9a0387bb08efec32048cdbc8d02248c51280cec544e4db73477be2.
+- score.py ran at 4d51e63 on a clean tree, so the output names 4d51e63. The code is
+  ANALYSIS_COMMIT's: no file under `analysis/`, `bench/`, `loop/` or `tests/` and not
+  `CMakeLists.txt` changed between cf4c3d8 and 4d51e63.
+- No refusal, no warning, no departure from either plan, one bench commit (796b71f) for every
+  good process, and both systems' gate lines checked against the four D5 records.
+- `results/v2/score.json`, sha256
+  ecb624940338508ee7ced13b1243ecd137eaed273c17d85e7b6a8aaae9b51242, is committed with this
+  entry byte for byte as made. Its summary line: "H1: 101 of 102 F1 cells rejected; H2: 80 of
+  80; H3: 10 of 10 criteria hold; H4: 15 of 15 F4 cells".
+- Of the four incomplete Windows cells, one is in a family: `S-condvar-wrong_worker-W4-B1ms`,
+  in F1's m and not rejected. It is the one F1 cell not rejected. The other three are in no
+  family: the two widened lazy-wake cells are reported per unit, and
+  `Bt-condvar-unobserved_primitive-W1-B10ms` is a predicted blind spot.
+
+**How the extra run is scored**, fixed now, before its data exist (decision 28 left it open):
+1. Its own output folder is checked first, as the campaign's: the runner's gate lines, and
+   every process good by the same rules.
+2. A copy of the Windows campaign folder is made, and in it every file of the extra plan's 40
+   processes (`<id>.*` and `<id>-rerun.*`) is replaced by the extra run's files of the same
+   names. Every other file stays, `run.txt` included.
+3. score.py runs as above with that copy as the Windows folder. So the four cells take B_eff
+   from the campaign's absent-wake cells, as in the confirmatory scoring.
+4. Only the four cells are read from that output: `cells`, their entries in `blind_spots`
+   and `lazy_wake_per_unit`, and the F1 cell's entry in H1's tests, whose exact p is not
+   compared with any Holm threshold. That output's family counts and Holm steps are not
+   results, and they are not reported.
+
+Desktop check of steps 2 and 3, nothing new read: with the campaign's own files of the 40
+processes standing in for the extra run's, the output is byte for byte `results/v2/score.json`.
