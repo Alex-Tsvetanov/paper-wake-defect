@@ -286,3 +286,32 @@ The plans are committed with this entry, byte for byte as made.
   `score.py --revision-log DIR/revision-log-v2.md`. Its h4-r block is the one above.
 - `.gitattributes` keeps `*.jsonl` at LF in every checkout, so a checked-out plan has the
   sha256 named here.
+
+### 2026-10-28: four Windows cells incomplete, and a disclosed extra run (Alex, decision 28)
+
+The Windows campaign ran on the laptop on 2026-10-28 at 796b71f, from 12:40 to 16:57 (UTC+2).
+Of its 1,432 processes, 1,428 are good. The other four read a timer resolution of 10 ms against
+the default of 15.625 ms, at their start, a gap or their end. Some process on the laptop held
+that timer from 13:47:37 to 13:47:49. By the rule under "Good processes" a finer reading makes
+a process not good. All four exited 0, so the runner did not rerun them (section 8 reruns only
+failed runs). Their cells have 9 good processes of 10, so each is incomplete:
+
+- `S-condvar-wrong_worker-W4-B1ms` (p5), `S-iocp-lazy_wake_wide-W4-B1ms` (p7),
+  `Bt-condvar-lazy_wake_wide-W1-B1ms` (p8), `Bt-condvar-unobserved_primitive-W1-B10ms` (p5).
+
+The rules are unchanged. In the confirmatory scoring the four cells are incomplete: they stay in
+their families' m and are not rejected. When this was decided, no result of the campaign had been
+read. Only the processes' goodness, their timer readings and the laptop's 10 s samples had been
+read. At 13:47:50 those samples show System at 20% CPU, and NVDisplay.Container.exe and
+sppsvc.exe running. Which process asked for the timer is not known.
+
+**The extra run.** The four cells run again whole on Windows, at 796b71f, once the lab has found
+and stopped the timer's source.
+- The plan is the 40 lines of `plans/plan-windows.jsonl` whose cell is one of the four,
+  unchanged, in the plan's order, under the plan's header. Its sha256 is
+  662b5c34f64c4b41e6e0c28c142565f7b90ffb4b6c9a9fa22c01d1dd84fd708d. The job makes it from the
+  committed plan and checks this sha256 before any run.
+- It runs under the campaign runner and its records gate, with the same seeds and the same rules
+  for good processes and reruns.
+- Its cells are reported beside the confirmatory results, as an extra run with this cause. They
+  never enter F1, F2 or any Holm step, and they decide nothing.
