@@ -261,3 +261,28 @@ while the passes per window stayed near 1.47 million. It changed nothing.
 | windows-condvar-N10us | windows | condvar | 10 | 8 | 0.00010678104029710107 | 1.0000 | 14 | no |
 | windows-condvar-N100us | windows | condvar | 100 | 8 | 0.000025560639952983952 | 1.0000 | 14 | no |
 <!-- h4-r:end -->
+
+### 2026-10-28: the run plans
+
+`plan.py campaign` made the confirmatory plans at commit 4ec2551 on a clean tree. It read each
+H4 cell's R from the block above; the log's sha256 at that commit is
+7353b1a2bf9a0387bb08efec32048cdbc8d02248c51280cec544e4db73477be2. No confirmatory data existed.
+The plans are committed with this entry, byte for byte as made.
+
+- `plans/plan-linux.jsonl`, sha256
+  78102dfaf50ded2e201823794aaa2ef1121806ea69013a4c27daa23a82b78dca: 2,328 processes in 226
+  cells (S 1,500, Bt 460, the sweep 180, H4 188).
+- `plans/plan-windows.jsonl`, sha256
+  3a475a5e3de78b1fbc208289139b1f66a8b20a93ec9cef67f1456c67635a28f9: 1,432 processes in 140
+  cells (S 920, Bt 280, the sweep 120, H4 112).
+- H4 has R / 2 processes per comparison: 7 in every cell but Linux epoll and io_uring at N = 0,
+  which have 12.
+- Desktop check, nothing timed: both plans pass the runner's provenance check, and every plan
+  line's shape is in the campaign smoke of every record its system needs (the four D5 records
+  at c651e31): 113 distinct shapes on Linux, 70 on Windows.
+- Each plan header records the log's sha256 at 4ec2551, and score.py refuses a log with another
+  sha256. This entry and any later one change it. So the scoring reads the log as it was at
+  4ec2551: `git show 4ec2551:revision-log-v2.md > DIR/revision-log-v2.md`, then
+  `score.py --revision-log DIR/revision-log-v2.md`. Its h4-r block is the one above.
+- `.gitattributes` keeps `*.jsonl` at LF in every checkout, so a checked-out plan has the
+  sha256 named here.

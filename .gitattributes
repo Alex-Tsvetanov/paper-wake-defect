@@ -3,3 +3,4 @@
 *.py text eol=lf
 bench/code_paths.txt text eol=lf
 *.pdf binary
+*.jsonl text eol=lf
