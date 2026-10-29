@@ -130,6 +130,12 @@ class Inputs(unittest.TestCase):
         self.assertIn("only on the laptop", str(e.exception))
         self.assertEqual(self.checked("94c04692be81", JDK, anywhere=True)[1], "c" * 40)
 
+    def test_java_options_in_the_environment_are_refused(self):
+        with mock.patch.dict(os.environ, {"JAVA_TOOL_OPTIONS": "-Xint"}):
+            with self.assertRaises(run_h6.Refusal) as e:
+                self.checked("alex-laptop", JDK)
+        self.assertIn("JAVA_TOOL_OPTIONS", str(e.exception))
+
     def test_another_jdk_is_refused(self):
         with self.assertRaises(run_h6.Refusal) as e:
             self.checked("alex-laptop", "openjdk version \"1.8.0_492\"")
@@ -227,6 +233,41 @@ class Fakes(unittest.TestCase):
         self.assertTrue([n for n in os.listdir(self.dir) if n.startswith(order[5]["id"] + ".jsonl.void-")])
         fields = run_h6.read_fields(os.path.join(self.dir, "run.txt"))
         self.assertIn("resumed utc", fields)
+
+    def test_resume_runs_only_an_owed_rerun(self):
+        run, _ = self.fake_run({})
+        self.timed(run)
+        order = run_h6.plan()
+        pid = order[3]["id"]
+        with open(os.path.join(self.dir, pid + ".done"), "w") as f:
+            f.write("first 1\n")  # the first attempt failed; the runner was killed in the rerun
+        open(os.path.join(self.dir, pid + "-rerun.jsonl"), "w").close()
+        self.args.resume = True
+        run, calls = self.fake_run({})
+        self.assertEqual(self.timed(run), 0)
+        self.assertEqual(calls, [pid + "-rerun"])
+        with open(os.path.join(self.dir, pid + ".done")) as f:
+            self.assertEqual(f.read(), "first 1\nrerun 0\n")
+        self.assertTrue(os.path.exists(os.path.join(self.dir, pid + ".jsonl")))  # the failed first run stays
+
+    def test_an_unreadable_done_file_is_set_aside_and_run_again(self):
+        run, _ = self.fake_run({})
+        self.timed(run)
+        pid = run_h6.plan()[7]["id"]
+        with open(os.path.join(self.dir, pid + ".done"), "w") as f:
+            f.write("first")
+        self.args.resume = True
+        run, calls = self.fake_run({})
+        self.timed(run)
+        self.assertEqual(calls, [pid])
+        self.assertTrue([n for n in os.listdir(self.dir) if n.startswith(pid + ".done.void-")])
+
+    def test_a_dry_run_writes_nothing(self):
+        self.args.dry_run = True
+        with mock.patch.object(run_h6, "gate", return_value=self.gate), redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(run_h6.timed(self.args), 0)
+        self.assertEqual(os.listdir(self.dir), [])
+        self.assertEqual(len(out.getvalue().splitlines()), 40)
 
     def test_resume_refuses_another_gate(self):
         self.interrupted()

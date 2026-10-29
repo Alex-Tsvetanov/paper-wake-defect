@@ -114,21 +114,25 @@ def gate_problems(fields, records_dir):
 
 
 def end_problems(fields, run_dir, entries):
-    """Why the run did not end: no 'ended utc' line, or planned processes without a .done file."""
+    """Why the run did not end: no 'ended utc' line, or a planned process whose attempts did not end."""
     found = [] if fields.get("ended utc") else ["run.txt has no 'ended utc' line: the run did not end"]
-    missing = [e["id"] for e in entries if not os.path.exists(os.path.join(run_dir, e["id"] + ".done"))]
-    if missing:
-        found.append("%d planned processes have no .done file, e.g. %s" % (len(missing), ", ".join(missing[:3])))
+    open_ = [e["id"] for e in entries if not run_h6.ended(read_done(run_dir, e["id"]))]
+    if open_:
+        found.append("%d planned processes did not end (no .done file, or a rerun owed), e.g. %s"
+                     % (len(open_), ", ".join(open_[:3])))
     return found
 
 
 def read_done(run_dir, pid):
-    """{'first': exit, 'rerun': exit} from <id>.done, or {} when there is none."""
-    try:
-        with open(os.path.join(run_dir, pid + ".done"), encoding="ascii") as f:
-            return {k: int(v) for k, v in (line.split() for line in f.read().splitlines() if line.strip())}
-    except (OSError, ValueError):
-        return {}
+    """{'first': exit[, 'rerun': exit]} from <id>.done (run_h6.read_done), or {}."""
+    return run_h6.read_done(os.path.join(run_dir, pid + ".done"))
+
+
+def resumes(run_dir):
+    """How the run was resumed: run.txt's 'resumed utc' lines and the files set aside as void runs."""
+    with open(os.path.join(run_dir, "run.txt"), encoding="utf-8") as f:
+        stamps = [l.split(": ", 1)[1] for l in f.read().splitlines() if l.startswith("resumed utc: ")]
+    return {"resumed_utc": stamps, "void_files": sorted(n for n in os.listdir(run_dir) if ".void-" in n)}
 
 
 def compile_events(out_path):
@@ -141,8 +145,8 @@ def compile_events(out_path):
                     continue
                 m = COMPILE_LINE.match(line)
                 if m and m.group(5) == RUN_METHOD:
-                    events.append((int(m.group(1)), int(m.group(2)), int(m.group(4)), "%" in m.group(3),
-                                   "made not entrant" in m.group(6)))
+                    dead = "made not entrant" in m.group(6) or "COMPILE SKIPPED" in m.group(6)
+                    events.append((int(m.group(1)), int(m.group(2)), int(m.group(4)), "%" in m.group(3), dead))
     except OSError:
         pass
     return events
@@ -150,7 +154,7 @@ def compile_events(out_path):
 
 def compiled_at(events, uptime_ms):
     """True when run() had OSR code at uptime_ms: an OSR compile started at or before it whose compile id was not
-    made not entrant by then (module text). None when the time is not known."""
+    made not entrant, or skipped, by then (module text). None when the time is not known."""
     if uptime_ms is None:
         return None
     live = set()
@@ -250,13 +254,17 @@ def spread(values):
 
 def process_view(p):
     s = p["summary"]
-    gc = [l for l in p["lines"] if l.get("kind") == "trial"]
+    trials = [l for l in p["lines"] if l.get("kind") == "trial"]
+    placed = None if any(l.get("gc_count") is None for l in trials) else sum(l["gc_count"] for l in trials)
     return {"id": p["entry"]["id"], "good": p["good"], "problem": p["problem"], "used": p["used"],
             "exits": p["exits"], "lost_wakes": p["lost_wakes"],
             "warmup_natural_posts": s.get("warmup_natural_posts"),
             "warmup_natural_over_half_b": s.get("warmup_natural_over_half_b"),
             "run_compiled_at_first_post": p["run_compiled_at_first_post"],
-            "gc_count": sum(l.get("gc_count") or 0 for l in gc), "gc_time_ms": sum(l.get("gc_time_ms") or 0 for l in gc),
+            "gc_measured": s.get("gc_count_measured"), "gc_in_trials": placed,
+            "gc_ambiguous": sum(l.get("gc_ambiguous") or 0 for l in trials),
+            "gc_time_ms_in_trials": sum(l.get("gc_time_ms") or 0 for l in trials),
+            "gc_clock_error_ns": s.get("gc_clock_error_ns"),
             "max_delay_ns": s.get("max_delay_ns"), "timerslack_ns": s.get("timerslack_ns")}
 
 
@@ -337,7 +345,7 @@ def score(run_dir, records_dir, generated_by, draft=False):
             "draft": draft, "warnings": problems,
             "provenance": {k: fields.get(k) for k in ("h6 commit", "h6 inputs hash", "h6 functional record",
                                                       "jdk", "cpus", "lab job")},
-            "thresholds_ns": {"t_med": T_MED_NS, "t_count": T_COUNT_NS},
+            "thresholds_ns": {"t_med": T_MED_NS, "t_count": T_COUNT_NS}, "resumes": resumes(run_dir),
             "H6a": h6a(cells), "H6b": h6b(cells),
             "cells": {"%s-%s" % k: c for k, c in cells.items()},
             "incomplete_cells": sorted("%s-%s" % k for k, c in cells.items() if not c["complete"])}

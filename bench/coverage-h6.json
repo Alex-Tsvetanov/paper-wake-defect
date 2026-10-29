@@ -4,8 +4,8 @@
  "stand_in": "A green functional record (historical/netty/run_h6.py --functional, made by a lab job on Linux at the measured commit, check mode, no time) stands in for a record.",
  "inputs": {
   "analysis/v2/rng.py": "160d03b57ef1c110bbe0ffe5123a0f401bf46c01d506b1f997718521da7b3226",
-  "historical/netty/H6Probe.java": "0310e456052914addd80461c003c9f0d26e5030a9b79ba1badaea45c47bf4f69",
-  "historical/netty/run_h6.py": "ba9f31a582d5fa8a1b63c4e393eb29af1e7705e38ef74d19c076cda8c6f7683d"
+  "historical/netty/H6Probe.java": "39f80995f026eb16a44e2d2116a17a4a789cc1e4351da5a2d897d0d4353be51b",
+  "historical/netty/run_h6.py": "adf4c4b00045d6468005680db551a945be93577eb04731fa6a6b63682732651c"
  },
  "third_party": {
   "OpenJDK8U-jdk_x64_linux_hotspot_8u504b01.tar.gz": "9c70e102f527ac674ac2fe9c7d47b9a04e2d19842ba5ab8e9b33f368bbadfaea",

@@ -19,10 +19,17 @@ A timed run (needs LAB_JOB) also needs, in --records, a green functional record 
 on the laptop at this commit, these inputs and this JDK. It builds, writes plan.txt (the 40
 processes in the order of section 3, shuffled with seed 20261026) and run.txt (the gate lines),
 and runs each process under `taskset -c 0,2,14` with the JVM flags of section 2. A process that
-fails (exit not 0, or its timeout) is run once more into <id>-rerun.*; <id>.done records both exits
-(section 5). --resume continues an interrupted run in its folder: the gate must give the same lines
-and the build the same class files; processes with a .done file are kept, and the files of one
-without are set aside as <name>.void-<utc> (a void run, never a failed run).
+fails (exit not 0, or its timeout) is run once more into <id>-rerun.*; <id>.done records each
+attempt's exit as it ends (section 5). --dry-run writes nothing into the folder. --resume continues an
+interrupted run in its folder, as the campaign runner's resume does (bench/run_campaign.py): the
+gate must give the same lines on the laptop and the build the same class files; an ended process is
+kept; an attempt that did not end has its files set aside as <name>.void-<utc> and runs again (a void
+run, which never counts as a failed one); a process whose first attempt failed and whose rerun did
+not end gets only its rerun. The addendum does not foresee a resume: using it needs a revision-log
+entry, and the scorer reports it.
+
+The JVM must see none of JAVA_TOOL_OPTIONS, _JAVA_OPTIONS and JDK_JAVA_OPTIONS: they would add flags
+to every probe.
 
 CPUs: --cpus REST,POSTER,LOOP, default 0,2,14 (section 2); a timed run refuses any other.
 
@@ -38,6 +45,7 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -48,6 +56,7 @@ import rng  # noqa: E402
 COVERAGE = "bench/coverage-h6.json"
 LAB_HOST = "alex-laptop"  # bench/gate_lib.py LAB_HOSTS["L"]: the laptop's Arch (test_run_h6.py checks they agree)
 JDK_BUILD = "1.8.0_504-b01"  # Temurin 8u504-b01 (hypotheses-v2-h6.md section 1)
+JAVA_OPTION_VARIABLES = ("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")
 ARMS = {"cr7": "4.1.0.CR7", "final": "4.1.0.Final"}
 PROTOCOLS = ("forced", "natural")
 PROCESSES_PER_CELL = 10
@@ -259,6 +268,9 @@ def checked_inputs(netty_dir, jdk, anywhere=False):
     (unless anywhere), or if the inputs, the jars or the JDK differ from what is declared."""
     if not anywhere and not is_lab_host(platform.node()):
         raise Refusal("this host is %r: H6 runs only on the laptop's Arch (%s)" % (platform.node(), LAB_HOST))
+    set_options = [v for v in JAVA_OPTION_VARIABLES if os.environ.get(v)]
+    if set_options:
+        raise Refusal("%s set: the JVM would take flags the plan does not name" % ", ".join(set_options))
     coverage = load_coverage()
     commit = clean_commit()
     problems = input_problems(coverage) + jar_problems(coverage, netty_dir)
@@ -358,6 +370,8 @@ def resume_problems(a, order, gate_lines, hashes):
         return ["the folder has no readable plan.txt and run.txt: %s" % e]
     if entries != order:
         found.append("plan.txt is not this plan")
+    if not is_lab_host(fields.get("h6 host")):
+        found.append("run.txt's host is %r, not the laptop's" % fields.get("h6 host"))
     for key, value in gate_lines:
         if key != "h6 host" and fields.get(key) != value:
             found.append("run.txt's %r is %r, the gate now gives %r" % (key, fields.get(key), value))
@@ -366,11 +380,27 @@ def resume_problems(a, order, gate_lines, hashes):
     return found
 
 
-def set_aside(out_dir, pid, stamp):
-    """Renames the files of an attempt that has no .done file to <name>.void-<stamp> (section 8: a void run)."""
+def set_aside(out_dir, stem, stamp):
+    """Renames the files of an attempt that did not end (<stem>.*) to <name>.void-<stamp>: a void run."""
     for name in sorted(os.listdir(out_dir)):
-        if name.startswith(pid + ".") or name.startswith(pid + "-rerun."):
+        if name.startswith(stem + ".") and ".void-" not in name and not name.endswith(".done"):
             os.rename(os.path.join(out_dir, name), os.path.join(out_dir, "%s.void-%s" % (name, stamp)))
+
+
+def read_done(path):
+    """The exits recorded so far: {'first': rc[, 'rerun': rc]}; {} when there is no readable .done file."""
+    try:
+        with open(path, encoding="ascii") as f:
+            pairs = [line.split() for line in f.read().splitlines() if line.strip()]
+        exits = {k: int(v) for k, v in pairs}
+    except (OSError, ValueError):
+        return {}
+    return exits if set(exits) in ({"first"}, {"first", "rerun"}) else {}
+
+
+def ended(exits):
+    """True when a process needs no more attempts: its first attempt passed, or its rerun ended."""
+    return exits.get("first") == 0 or "rerun" in exits
 
 
 def timed(a, run=run_one):
@@ -380,8 +410,16 @@ def timed(a, run=run_one):
         raise Refusal("a timed run uses CPUs %s (section 2), not %s" % (CPUS, tuple(a.cpus)))
     gate_lines = gate(a)
     order = plan()
+    sizes = list(SIZES)
+    if a.dry_run:  # builds in a temporary folder and only prints the commands
+        with tempfile.TemporaryDirectory(prefix="h6-dry-") as tmp:
+            classes, _ = build(a.jdk, a.netty_dir, tmp)
+            for e in order:
+                print(" ".join(probe_command(a.jdk, a.netty_dir, classes, e["arm"], a.cpus, os.path.join(tmp, "native"),
+                                             ["--protocol", e["protocol"], "--process", str(e["process"])] + sizes)))
+        return 0
     os.makedirs(a.out_dir, exist_ok=True)
-    if not a.resume and any(n.endswith(".jsonl") for n in os.listdir(a.out_dir)):
+    if not a.resume and any(n.endswith(".jsonl") or n.endswith(".done") for n in os.listdir(a.out_dir)):
         raise Refusal("%s already holds outputs; --resume continues an interrupted run" % a.out_dir)
     classes, hashes = build(a.jdk, a.netty_dir, a.out_dir)
     native = os.path.join(a.out_dir, "native")
@@ -404,34 +442,33 @@ def timed(a, run=run_one):
                                             ("class sha256", json.dumps(hashes, sort_keys=True)),
                                             ("started utc", stamp)]:
                 f.write("%s: %s\n" % (key, value))
-    sizes = list(SIZES)
-    if a.dry_run:
-        for e in order:
-            print(" ".join(probe_command(a.jdk, a.netty_dir, classes, e["arm"], a.cpus, native,
-                                         ["--protocol", e["protocol"], "--process", str(e["process"])] + sizes)))
-        return 0
     failed = 0
     for n, e in enumerate(order, 1):
         done = os.path.join(a.out_dir, e["id"] + ".done")
-        if os.path.exists(done):
-            with open(done, encoding="ascii") as f:
-                failed += f.read().splitlines()[-1].split()[-1] != "0"
+        exits = read_done(done)
+        if ended(exits):
+            failed += exits.get("rerun", exits["first"]) != 0
             continue
-        set_aside(a.out_dir, e["id"], stamp)
-        exits = []
-        for suffix in ("", "-rerun"):
+        if not exits and os.path.exists(done):  # unreadable: the runner was killed while writing it
+            os.rename(done, "%s.void-%s" % (done, stamp))
+        attempts = ("-rerun",) if exits else ("", "-rerun")
+        for suffix in attempts:
+            set_aside(a.out_dir, e["id"] + suffix, stamp)
+        for suffix in attempts:
             stem = os.path.join(a.out_dir, e["id"] + suffix)
             cmd = probe_command(a.jdk, a.netty_dir, classes, e["arm"], a.cpus, native,
                                 ["--protocol", e["protocol"], "--process", str(e["process"]), "--out", stem + ".jsonl"]
                                 + sizes)
             rc = run(cmd, stem, timeout_s())
-            exits.append(rc)
+            with open(done, "a", encoding="ascii", newline="\n") as f:  # each attempt as it ends
+                f.write("%s %d\n" % ("rerun" if suffix else "first", rc))
+                f.flush()
+                os.fsync(f.fileno())
             print("%s process %d/%d %s%s exit %d" % (utc_now(), n, len(order), e["id"], suffix, rc), flush=True)
             if rc == 0:
                 break
-        with open(os.path.join(a.out_dir, e["id"] + ".done"), "w", encoding="ascii", newline="\n") as f:
-            f.write("".join("%s %d\n" % (k, rc) for k, rc in zip(("first", "rerun"), exits)))
-        failed += exits[-1] != 0
+        exits = read_done(done)
+        failed += exits.get("rerun", exits.get("first")) != 0
     with open(os.path.join(a.out_dir, "run.txt"), "a", encoding="utf-8", newline="\n") as f:
         f.write("ended utc: %s\nincomplete processes: %d\n" % (utc_now(), failed))
     print("incomplete processes: %d" % failed)

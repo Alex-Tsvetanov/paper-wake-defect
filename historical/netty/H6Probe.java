@@ -172,9 +172,33 @@ public final class H6Probe {
         volatile Integer wakenUpAtHook;
     }
 
-    /** GC events by JMX notification, so that no GC reading falls between two measured posts (section 5). */
+    /**
+     * GC events by JMX notification, so that no GC reading falls between two measured posts (section 5). A
+     * GcInfo start time counts from the JVM's own start, which is not RuntimeMXBean's uptime zero, so one
+     * GC before the warm-up, timed with nanoTime on both sides, maps those times onto nanoTime.
+     */
     static final class GcLog implements NotificationListener {
         final List<long[]> events = Collections.synchronizedList(new ArrayList<long[]>());  // {start ms, duration ms}
+        long anchorNs, anchorMs, errorNs = -1;  // errorNs < 0: no calibration
+
+        /** One System.gc() timed with nanoTime: its GcInfo start time anchors the mapping. */
+        void calibrate() throws InterruptedException {
+            int before = events.size();
+            long t0 = System.nanoTime();
+            System.gc();
+            long t1 = System.nanoTime();
+            long deadline = t1 + TimeUnit.SECONDS.toNanos(2);  // a notification arrives after its GC
+            while (events.size() == before && System.nanoTime() < deadline) Thread.sleep(10);
+            if (events.size() == before) return;
+            anchorMs = events.get(events.size() - 1)[0];
+            anchorNs = t0;
+            errorNs = (t1 - t0) + TimeUnit.MILLISECONDS.toNanos(1);  // the GC's own span, plus the ms resolution
+        }
+
+        /** A GC start time on the nanoTime clock, or Long.MIN_VALUE without a calibration. */
+        long startNs(long startMs) {
+            return errorNs < 0 ? Long.MIN_VALUE : anchorNs + TimeUnit.MILLISECONDS.toNanos(startMs - anchorMs);
+        }
         final List<NotificationEmitter> emitters = new ArrayList<NotificationEmitter>();
 
         void start() {
@@ -264,7 +288,7 @@ public final class H6Probe {
     ForcedStrategy strategy;
     Thread helper;
     volatile String loopTid, helperTid, loopSlack;
-    long maxDelay;
+    long maxDelay = -1;  // -1 until a measured post has run
     int lostWakes;
 
     H6Probe(Options o) {
@@ -316,6 +340,9 @@ public final class H6Probe {
         startThreads();
         gcLog.start();  // before pinning, so any thread it needs is pinned with the rest
         pin();
+        gcLog.calibrate();
+        summary.put("gc_clock_error_ns", gcLog.errorNs < 0 ? null : time(gcLog.errorNs));
+        if (gcLog.errorNs < 0) summary.put("gc_clock", "no calibration: the GC per trial is not known");
         warmUp();
         measure();
         gcLog.stop();
@@ -557,24 +584,41 @@ public final class H6Probe {
     void measure() throws InterruptedException {
         int n = o.trials * o.posts;
         long gcCount0 = gcCount();
-        long anchorNs = System.nanoTime();
-        long anchorMs = ManagementFactory.getRuntimeMXBean().getUptime();
-        summary.put("first_measured_uptime_ms", o.check ? null : (Object) anchorMs);
+        int gcEvents0 = gcLog.events.size();
+        summary.put("first_measured_uptime_ms", o.check ? null : (Object) ManagementFactory.getRuntimeMXBean().getUptime());
         Forced[] forced = strategy != null ? new Forced[n] : null;
         Task[] natural = strategy == null ? new Task[n] : null;
-        if (forced != null) {
-            for (int k = 0; k < n; k++) forced[k] = forcedPost();
-        } else {
-            for (int k = 0; k < n; k++) natural[k] = new Task(null, null);
-            for (int k = 0; k < n; k++) naturalPost(natural[k]);
+        int done = 0;
+        try {
+            if (forced != null) {
+                for (; done < n; done++) forced[done] = forcedPost();
+            } else {
+                for (int k = 0; k < n; k++) natural[k] = new Task(null, null);
+                for (; done < n; done++) naturalPost(natural[done]);
+            }
+        } finally {
+            // The posts that ran are written even when a lost wake ended the process (section 5).
+            long gcDuring = gcCount() - gcCount0;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);  // notifications arrive after the GC
+            while (gcLog.events.size() - gcEvents0 < gcDuring && System.nanoTime() < deadline) Thread.sleep(10);
+            summary.put("gc_count_measured", gcDuring);
+            writePosts(forced, natural, done, gcEvents0);
         }
-        long gcDuring = gcCount() - gcCount0;
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);  // notifications arrive after the GC
-        while (gcLog.events.size() < gcDuring && System.nanoTime() < deadline) Thread.sleep(10);
-        summary.put("gc_count_measured", gcDuring);
-        for (int trial = 0; trial < o.trials; trial++) {
-            long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
-            for (int i = 0; i < o.posts; i++) {
+    }
+
+    /** The lines of the first `done` measured posts, their trials' GC, and the GC events themselves. */
+    void writePosts(Forced[] forced, Task[] natural, int done, int gcEvents0) {
+        List<long[]> gcs;
+        synchronized (gcLog.events) {
+            gcs = new ArrayList<long[]>(gcLog.events.subList(gcEvents0, gcLog.events.size()));
+        }
+        long origin = done == 0 ? 0 : (forced != null ? forced[0].x.submit : natural[0].submit);
+        long[] from = new long[o.trials], to = new long[o.trials];
+        boolean any = false;
+        for (int trial = 0; trial < o.trials && trial * o.posts < done; trial++) {
+            from[trial] = Long.MAX_VALUE;
+            to[trial] = Long.MIN_VALUE;
+            for (int i = 0; i < o.posts && trial * o.posts + i < done; i++) {
                 int k = trial * o.posts + i;
                 Map<String, Object> line = new LinkedHashMap<String, Object>();
                 line.put("kind", "post");
@@ -600,27 +644,50 @@ public final class H6Probe {
                     line.put("delay_ns", time(delay));
                     line.put("realized_gap_ns", k == 0 ? null : time(t.submit - natural[k - 1].ran));
                 }
-                first = Math.min(first, start);
-                last = Math.max(last, end);
+                from[trial] = Math.min(from[trial], start);
+                to[trial] = Math.max(to[trial], end);
                 maxDelay = Math.max(maxDelay, delay);
+                any = true;
                 lines.add(json(line));
             }
-            // GC events whose start falls in the trial, from the trial's first post to its last run.
-            long fromMs = anchorMs + (first - anchorNs) / 1000000L, toMs = anchorMs + (last - anchorNs) / 1000000L;
-            long count = 0, ms = 0;
-            synchronized (gcLog.events) {
-                for (long[] e : gcLog.events) {
-                    if (e[0] >= fromMs && e[0] <= toMs) {
-                        count++;
-                        ms += e[1];
+        }
+        if (!any) maxDelay = -1;
+        // Each GC goes to the trial that holds its start; one within the clock's error of a trial's edge is
+        // ambiguous and counted in no trial. Without a calibration no GC is placed.
+        long[] count = new long[o.trials], ms = new long[o.trials], ambiguous = new long[o.trials];
+        for (long[] e : gcs) {
+            long s = gcLog.startNs(e[0]);
+            Integer placed = null;
+            boolean unsure = gcLog.errorNs < 0;
+            for (int trial = 0; trial < o.trials && !unsure && trial * o.posts < done; trial++) {
+                if (s >= from[trial] - gcLog.errorNs && s <= to[trial] + gcLog.errorNs) {
+                    if (s - from[trial] < gcLog.errorNs || to[trial] - s < gcLog.errorNs) {
+                        ambiguous[trial]++;
+                        unsure = true;
+                    } else {
+                        placed = trial;
                     }
                 }
             }
+            if (placed != null && !unsure) {
+                count[placed]++;
+                ms[placed] += e[1];
+            }
+            Map<String, Object> g = new LinkedHashMap<String, Object>();
+            g.put("kind", "gc");
+            g.put("start_ns", gcLog.errorNs < 0 || done == 0 ? null : time(s - origin));  // from the first measured post
+            g.put("duration_ms", o.check ? null : (Object) e[1]);
+            g.put("trial", unsure ? null : placed);
+            g.put("ambiguous", unsure);
+            lines.add(json(g));
+        }
+        for (int trial = 0; trial < o.trials && trial * o.posts < done; trial++) {
             Map<String, Object> t = new LinkedHashMap<String, Object>();
             t.put("kind", "trial");
             t.put("trial", trial);
-            t.put("gc_count", count);
-            t.put("gc_time_ms", o.check ? null : (Object) ms);
+            t.put("gc_count", gcLog.errorNs < 0 ? null : (Object) count[trial]);
+            t.put("gc_ambiguous", gcLog.errorNs < 0 ? null : (Object) ambiguous[trial]);
+            t.put("gc_time_ms", o.check || gcLog.errorNs < 0 ? null : (Object) ms[trial]);
             lines.add(json(t));
         }
     }
@@ -683,7 +750,7 @@ public final class H6Probe {
         slack.put("main", slack());
         slack.put("loop", loopSlack);
         summary.put("timerslack_ns", slack);
-        summary.put("max_delay_ns", o.check ? null : (Object) maxDelay);
+        summary.put("max_delay_ns", o.check || maxDelay < 0 ? null : (Object) maxDelay);
         summary.put("lost_wakes", lostWakes);
         summary.put("warn_records", WARN.count);
         summary.put("warn_messages", new ArrayList<String>(WARN.kept));

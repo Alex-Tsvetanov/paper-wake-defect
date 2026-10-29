@@ -233,6 +233,16 @@ class Compiled(unittest.TestCase):
         self.assertEqual([h6.compiled_at(e, ms) for ms in (1000, 1800, 2050, 2200)], [False, True, False, True])
         self.assertIsNone(h6.compiled_at(e, None))
 
+    def test_a_skipped_compile_is_no_code(self):
+        root = tempfile.mkdtemp(prefix="p1v2-h6c-")
+        self.addCleanup(shutil.rmtree, root, True)
+        path = os.path.join(root, "x.out")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("   1657  427 % !   3       io.netty.channel.epoll.EpollEventLoop::run @ 0 (235 bytes)\n"
+                    "   1700  427 % !   3       io.netty.channel.epoll.EpollEventLoop::run @ 0 (235 bytes)"
+                    "   COMPILE SKIPPED: out of nodes (retry at different tier)\n")
+        self.assertFalse(h6.compiled_at(h6.compile_events(path), 1800))
+
     def test_only_osr_code_counts_and_ids_retire_it(self):
         # The desktop's check-final-forced.out: OSR 432 made not entrant and not redone; non-OSR 429 stays.
         e = [(1657, 427, 3, True, False), (1667, 429, 3, False, False), (1941, 432, 4, True, False),
@@ -283,7 +293,21 @@ class Gate(unittest.TestCase):
         self.assertIn("did not end", str(e.exception))
         with self.assertRaises(h6.Refusal) as e:
             Run(self).build(missing_done=("cr7-forced-p9",)).score()
-        self.assertIn("no .done file", str(e.exception))
+        self.assertIn("did not end", str(e.exception))
+
+    def test_a_rerun_still_owed_is_refused(self):
+        with self.assertRaises(h6.Refusal) as e:
+            Run(self).build({"final-natural-p6": {"attempts": [("", 1)]}}).score()
+        self.assertIn("1 planned processes did not end", str(e.exception))
+
+    def test_resumes_and_void_files_are_reported(self):
+        run = Run(self).build()
+        with open(os.path.join(run.dir, "run.txt"), "a", encoding="utf-8") as f:
+            f.write("resumed utc: 20261030t010000\n")
+        open(os.path.join(run.dir, "cr7-forced-p2.jsonl.void-20261030t010000"), "w").close()
+        r = run.score()
+        self.assertEqual(r["resumes"], {"resumed_utc": ["20261030t010000"],
+                                        "void_files": ["cr7-forced-p2.jsonl.void-20261030t010000"]})
 
     def test_draft_turns_refusals_into_warnings(self):
         r = Run(self).build(gate=False).score(draft=True)
