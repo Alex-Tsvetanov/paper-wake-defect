@@ -1,0 +1,15 @@
+{
+ "decision": "Alex, decision 37 (2026-10-29): a separate gap file for H6 (revision-log-v2.md)",
+ "gap": "No sanitizer applies to JVM bytecode. The H6 harness (Java) and Netty's 2016 native epoll library are a declared sanitizer gap. Any first-party C or C++ code in H6 would need a normal D5 record.",
+ "stand_in": "A green functional record (historical/netty/run_h6.py --functional, made by a lab job on Linux at the measured commit, check mode, no time) stands in for a record.",
+ "inputs": {
+  "analysis/v2/rng.py": "160d03b57ef1c110bbe0ffe5123a0f401bf46c01d506b1f997718521da7b3226",
+  "historical/netty/H6Probe.java": "f2b5c9147fbc6f9a1f5ad9d8189c257d0b99abc83766e2cfe47005e7791e771c",
+  "historical/netty/run_h6.py": "b587d5b52dfe171d31cce76a4530a2180c4c339b522b1f34f26499b4ec3365f2"
+ },
+ "third_party": {
+  "OpenJDK8U-jdk_x64_linux_hotspot_8u504b01.tar.gz": "9c70e102f527ac674ac2fe9c7d47b9a04e2d19842ba5ab8e9b33f368bbadfaea",
+  "netty-all-4.1.0.CR7.jar": "bce6ce004eb63cdb455f0da747c50aa75a2f80f4682b9537c531cbe4cd564ffa",
+  "netty-all-4.1.0.Final.jar": "840f27fb93ffdf372f6f554bad726759891d538c41b4eaac60ee9e86c29b48bd"
+ }
+}
