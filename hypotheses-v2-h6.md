@@ -1,6 +1,7 @@
 # P1 v2, H6: the historical case (addendum to hypotheses-v2.md)
 
-**Status: draft 3, 2026-10-29. Not frozen.** `hypotheses-v2.md` section 3 deferred H6 to this
+**Status: frozen 2026-10-29 (Alex, decision 38), from draft 3 (d70b9c2). Never edited after;
+later changes go into `revision-log-v2.md`.** `hypotheses-v2.md` section 3 deferred H6 to this
 addendum: "Its design (bound, n, trial, the forced and the natural protocol) goes into a dated
 addendum, frozen before any scoring run and before any reproduction that shows CR7's
 behaviour." No run of Netty 4.1.0.CR7 has been made, on any machine. Everything said below

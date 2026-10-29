@@ -553,3 +553,18 @@ commit stand in for a record. The existing coverage file and gate lines stay unc
   code lives under `historical/netty/`, outside the records' code paths, so the campaign's
   records and gate lines remain valid.
 - Any first-party C or C++ code in H6 (JNI or a native helper) would need a normal record.
+
+### 2026-10-29: H6 frozen (Alex, decisions 36 to 39)
+
+- Decision 36: H6 is Netty's Epoll event loop on the laptop's Linux, CR7 against Final, forced
+  and natural. It narrows decision 6, which named NioEventLoop: read at the CR7 tag, the NIO
+  loop keeps its wakeup pending, so the defect barely arises there (derived, not run; the note
+  is in `hypotheses-v2-h6.md` section 1).
+- Decision 37: the D5 gate for H6 (entry above).
+- Decision 38: `hypotheses-v2-h6.md` is frozen from draft 3 (d70b9c2). Drafts 1 (c61e1d4) and
+  2 (79513c6) came before. Two Opus checks: the first found one HIGH issue (`run()` sleeps 1 s
+  after any exception it catches, in both versions, a confound the size of the defect) and six
+  MEDIUM ones; the second found none HIGH and two MEDIUM ones. All were fixed before the freeze.
+  The freeze commit changes only the status line.
+- Decision 39: the freeze is pushed with the commits before it.
+- No run of Netty 4.1.0.CR7 was made before the freeze, on any machine.
