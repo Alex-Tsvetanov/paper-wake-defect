@@ -512,3 +512,12 @@ p1-extra-w ran on the laptop's Windows on 2026-10-29 (chain A18) at 796b71f, fro
   its first 30 s in P2): the six processes that started in this run's first 30 s have the same
   durations as their cells' later processes, and their median delays lie within or at the top
   of the later ones' range. Nothing is concluded from it.
+
+### 2026-10-29: no further extra run (Alex, decision 35)
+
+After the extra run, two Windows cells are still incomplete: `S-condvar-wrong_worker-W4-B1ms`
+and `Bt-condvar-unobserved_primitive-W1-B10ms`. Alex chose to stop here. Both cells are
+reported as incomplete in the confirmatory scoring and in the extra run, with the timer readings
+that made them so. No further run of them is made. The confirmatory results do not depend on
+them: the first is one of F1's 102 cells, counted in its m and not rejected, and the second is
+in no family.
