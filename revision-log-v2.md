@@ -473,3 +473,42 @@ H5 was scored at 72aa42a, on a clean tree, after that commit was pushed (Alex, d
 - Part 2 does not recur. Both Linux groups fail, as in 2026-09, but of the two Windows groups
   the 1 ms timer fails and only the default timer passes.
 - By the rule fixed before scoring, the reading is (c): reported as found, with no attribution.
+
+### 2026-10-29: the extra run, checked and scored
+
+p1-extra-w ran on the laptop's Windows on 2026-10-29 (chain A18) at 796b71f, from 18:43:33 to
+18:48:20 (UTC+2), more than 15 min after boot, and exited 0. Archive
+`gap39-w-q1-p1-extra-ddc81f9b/p1-extra-w.tar.gz`, sha256
+8f7e541e9671951a92482ae913b4e5abcf1b017d140e04a7ea4d8c1c2adab798, matched.
+
+- The plan made in the job has the logged sha256 (662b5c34...). Before the runner started, the
+  timer guard read the default resolution. The gate lines pass against the four D5 records; one
+  bench commit (796b71f); no rerun, no void run, no lost unit.
+- 38 of 40 processes are good. Two read a 10 ms timer again:
+  `S-condvar-wrong_worker-W4-B1ms-p7` (started 18:47:37; the default at its start and gaps,
+  10 ms at its end, 18:47:45) and `Bt-condvar-unobserved_primitive-W1-B10ms-p9` (10 ms at its
+  start and gaps, the default at its end, 18:48:00). So the request began after 18:47:37 and
+  ended before 18:48:00.
+- The laptop's sample at 18:47:42 shows taskhostw.exe at 28% CPU and System at 23%, with
+  MoUsoCoreWorker.exe, WmiPrvSE.exe, SecurityHealthService.exe and NVDisplay.Container.exe.
+  Both incidents began at hh:47:37 (13:47:37 on 2026-10-28, 18:47:37 on 2026-10-29). The source
+  is still not known.
+- Scored by the entry of 2026-10-28 (the overlay), with score.py at 9d0d942 on a clean tree.
+  Its code is cf4c3d8's: since then only `analysis/v2/h5.py` and `test_h5.py` were added, and
+  score.py imports neither. The output `results/v2/score-extra-w.json`, sha256
+  b4263a58681efcdf136e045e1097d77e9d3141e75181e608f6c63c35af7536d1, is committed with this
+  entry byte for byte as made. Only the four cells are read from it:
+  - `S-iocp-lazy_wake_wide-W4-B1ms`: complete. T_med flags 0 of 300 trials (exact 95% interval
+    0 to 0.0122), so its blind-spot prediction holds. Per unit, 17 of 6,300 units exceed half of
+    B_eff.
+  - `Bt-condvar-lazy_wake_wide-W1-B1ms`: complete. T_med flags 0 of 300; the prediction holds.
+    Per unit, 0 of 6,300.
+  - `S-condvar-wrong_worker-W4-B1ms`: incomplete again (9 good processes, which flag 270 of 270
+    trials).
+  - `Bt-condvar-unobserved_primitive-W1-B10ms`: incomplete again (9 good processes, which flag
+    0 of 270).
+  As the entry of 2026-10-28 says, these cells decide nothing.
+- A diagnostic the lab asked for (on Windows, a job that starts after idle ran 3 to 10% slow in
+  its first 30 s in P2): the six processes that started in this run's first 30 s have the same
+  durations as their cells' later processes, and their median delays lie within or at the top
+  of the later ones' range. Nothing is concluded from it.
