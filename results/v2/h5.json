@@ -1,0 +1,362 @@
+{
+ "analysis": "P1 v2 H5, hypotheses-v2.md section 3 (exploratory)",
+ "bench_commit": "796b71fd8fd88ab57654bd27eafe6c4ea0d408d4",
+ "bound_independence": {
+  "groups": [
+   {
+    "backend": "epoll",
+    "bounds_us": "0 1000 10000 100000",
+    "h2_pass": false,
+    "h2_ratio": 5.678699796843257,
+    "incomplete_runs": 0,
+    "max_median_us": 36.338,
+    "min_median_us": 6.399,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "verdict": "fail"
+   },
+   {
+    "backend": "io_uring",
+    "bounds_us": "0 1000 10000 100000",
+    "h2_pass": false,
+    "h2_ratio": 5.858607224210869,
+    "incomplete_runs": 0,
+    "max_median_us": 36.007,
+    "min_median_us": 6.146,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "verdict": "fail"
+   },
+   {
+    "backend": "iocp",
+    "bounds_us": "0 1000 10000 100000",
+    "h2_pass": false,
+    "h2_ratio": 4.670329670329671,
+    "incomplete_runs": 0,
+    "max_median_us": 42.5,
+    "min_median_us": 9.1,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "verdict": "fail"
+   },
+   {
+    "backend": "iocp",
+    "bounds_us": "0 1000 10000 100000",
+    "h2_pass": true,
+    "h2_ratio": 1.2299794661190964,
+    "incomplete_runs": 0,
+    "max_median_us": 59.9,
+    "min_median_us": 48.7,
+    "system": "windows",
+    "variant": "timer=default",
+    "verdict": "pass"
+   }
+  ]
+ },
+ "criteria": {
+  "bound_ratio_limit": 1.25,
+  "delay_model_limit": 0.05,
+  "source": "analysis/summarize.py"
+ },
+ "delay_model": {
+  "cells": [
+   {
+    "backend": "epoll",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0016302384930761994,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 1000
+   },
+   {
+    "backend": "epoll",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0023957066921307594,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 100000
+   },
+   {
+    "backend": "epoll",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.001374195783149634,
+    "system": "linux",
+    "variant": "slack=default",
+    "wait_us": 1000
+   },
+   {
+    "backend": "io_uring",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0006081232145075146,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 1000
+   },
+   {
+    "backend": "io_uring",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0007882966483192002,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 100000
+   },
+   {
+    "backend": "io_uring",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0019587607361841314,
+    "system": "linux",
+    "variant": "slack=default",
+    "wait_us": 1000
+   },
+   {
+    "backend": "epoll",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0015520199579446255,
+    "steps": 30,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 1000
+   },
+   {
+    "backend": "epoll",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.004952260219240031,
+    "steps": 30,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 10000
+   },
+   {
+    "backend": "io_uring",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0017016832168762497,
+    "steps": 30,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 1000
+   },
+   {
+    "backend": "io_uring",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.004158303668648661,
+    "steps": 30,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "wait_us": 10000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.04227358063054315,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "wait_us": 1000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.0007495026571463883,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "wait_us": 100000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.016243358657331546,
+    "system": "windows",
+    "variant": "timer=default",
+    "wait_us": 1000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "matrix",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.021264203893816606,
+    "system": "windows",
+    "variant": "timer=default",
+    "wait_us": 100000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": false,
+    "median_abs_residual_over_beff": 0.26197167873743377,
+    "steps": 30,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "wait_us": 1000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.007430256469949171,
+    "steps": 30,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "wait_us": 10000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.013983140541146294,
+    "steps": 30,
+    "system": "windows",
+    "variant": "timer=default",
+    "wait_us": 1000
+   },
+   {
+    "backend": "iocp",
+    "bimodal": false,
+    "design": "gap-sweep",
+    "h1_pass": true,
+    "median_abs_residual_over_beff": 0.009345909928174951,
+    "steps": 30,
+    "system": "windows",
+    "variant": "timer=default",
+    "wait_us": 10000
+   }
+  ],
+  "configurations": [
+   {
+    "cells": 4,
+    "incomplete_runs": 0,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "verdict": "pass",
+    "wait_us": 1000
+   },
+   {
+    "cells": 2,
+    "incomplete_runs": 0,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "verdict": "pass",
+    "wait_us": 10000
+   },
+   {
+    "cells": 2,
+    "incomplete_runs": 0,
+    "system": "linux",
+    "variant": "slack=1ns",
+    "verdict": "pass",
+    "wait_us": 100000
+   },
+   {
+    "cells": 2,
+    "incomplete_runs": 0,
+    "system": "linux",
+    "variant": "slack=default",
+    "verdict": "pass",
+    "wait_us": 1000
+   },
+   {
+    "cells": 2,
+    "incomplete_runs": 0,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "verdict": "fail",
+    "wait_us": 1000
+   },
+   {
+    "cells": 1,
+    "incomplete_runs": 0,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "verdict": "pass",
+    "wait_us": 10000
+   },
+   {
+    "cells": 1,
+    "incomplete_runs": 0,
+    "system": "windows",
+    "variant": "timer=1ms",
+    "verdict": "pass",
+    "wait_us": 100000
+   },
+   {
+    "cells": 2,
+    "incomplete_runs": 0,
+    "system": "windows",
+    "variant": "timer=default",
+    "verdict": "pass",
+    "wait_us": 1000
+   },
+   {
+    "cells": 1,
+    "incomplete_runs": 0,
+    "system": "windows",
+    "variant": "timer=default",
+    "verdict": "pass",
+    "wait_us": 10000
+   },
+   {
+    "cells": 1,
+    "incomplete_runs": 0,
+    "system": "windows",
+    "variant": "timer=default",
+    "verdict": "pass",
+    "wait_us": 100000
+   }
+  ]
+ },
+ "draft": false,
+ "generated_by": "analysis/v2/h5.py 72aa42a2828d2a687056c35658e0bb78b3a3b083",
+ "notes": {
+  "incomplete": [],
+  "lost_wakes": [],
+  "reruns": [],
+  "slack": [],
+  "timer": []
+ },
+ "reading": {
+  "outcome": "c",
+  "part1_delay_model": "recurs",
+  "part2_bound_independence": "does not recur"
+ },
+ "systems": {
+  "linux": {
+   "cells": 140,
+   "complete": 140,
+   "gap_sweep_cells_without_verdict": []
+  },
+  "windows": {
+   "cells": 136,
+   "complete": 136,
+   "gap_sweep_cells_without_verdict": []
+  }
+ },
+ "warnings": []
+}

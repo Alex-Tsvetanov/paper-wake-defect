@@ -453,3 +453,23 @@ and gate passes, all 140 and 136 cells are complete, and nothing was scored.
 
 This code is written after the H5 data arrived, which is disclosed here. ANALYSIS_COMMIT for H1
 to H4 stays cf4c3d8: nothing it ran changes, and their scoring is done (f3bd9ec).
+
+### 2026-10-29: H5 scored
+
+H5 was scored at 72aa42a, on a clean tree, after that commit was pushed (Alex, decision 33):
+
+    python analysis/v2/h5.py --linux L --windows W --records <Papers>/lab/sanitizer-records
+        --records <Papers>/lab/sanitizer-records/laptop-w --out results/v2/h5.json
+
+- L and W are the `out/h5` folders of the two archives named in the entry above.
+- No refusal, no warning. All 140 and 136 cells are complete, at their first run, from one
+  bench commit (796b71f). There is no lost wake, no timer note and no slack note.
+- `results/v2/h5.json`, sha256
+  022b41bf7f7168a22315f471d3bf586669d27ffd0320a7c1cbbdb88e5debf9dd, is committed with this
+  entry byte for byte as made. Its summary line: "H5: 1 delay-model configurations failing, 3
+  bound-independence groups failing, 0 incomplete cells; reading c".
+- Part 1 recurs: the only failing delay-model configuration is Windows, 1 ms timer, B = 1 ms
+  (its gap-sweep cell).
+- Part 2 does not recur. Both Linux groups fail, as in 2026-09, but of the two Windows groups
+  the 1 ms timer fails and only the default timer passes.
+- By the rule fixed before scoring, the reading is (c): reported as found, with no attribution.
