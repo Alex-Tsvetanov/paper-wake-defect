@@ -521,3 +521,35 @@ reported as incomplete in the confirmatory scoring and in the extra run, with th
 that made them so. No further run of them is made. The confirmatory results do not depend on
 them: the first is one of F1's 102 cells, counted in its m and not rejected, and the second is
 in no family.
+
+### 2026-10-29: what the lab found about the 10 ms timer (read-only)
+
+The lab ran a read-only check on the laptop's Windows at 20:41 on 2026-10-29: scheduled tasks
+whose last run falls in either window, enabled tasks with a trigger at minute 47, and the
+System, TaskScheduler and Application logs around 13:47 on 2026-10-28 and 18:47 on 2026-10-29.
+It found one candidate per day, a different one each day, and proved neither:
+- 2026-10-29: the scheduled task
+  `\Microsoft\Windows\DeviceDirectoryClient\RegisterDeviceLocationRightsChange` last ran at
+  18:47:33, 4 s before the window began. It has no next run, so it is started by an event.
+- 2026-10-28: the Application log has Microsoft-Windows-Security-SPP event 16394 ("Offline
+  downlevel migration succeeded") at 13:47:41 and event 16384 at 13:48:12, which reschedules the
+  Software Protection service. This matches sppsvc.exe in the laptop's sample at 13:47:50.
+- No enabled task has a trigger at minute 47, and the TaskScheduler log has no event in either
+  window (it is probably off).
+So both incidents fall at the time of Windows' own background services, not of anything P1
+runs. The host was not changed. This is a disclosure; nothing is concluded from it.
+
+### 2026-10-29: the D5 gate for H6 (Alex, decision 37)
+
+H6's harness is Java, and no sanitizer applies to JVM bytecode. Alex chose a separate gap file
+(his answer to the lab, relayed verbatim: "Separate gap file (Recommended)"; the option read: "A
+new bench/coverage-h6.json declares the Java harness and Netty's 2016 native epoll library a
+sanitizer gap and lists each input's hash. Green functional tests on Linux at the measured
+commit stand in for a record. The existing coverage file and gate lines stay unchanged."):
+- `bench/coverage-h6.json` declares the gap and names every first-party H6 input by path with
+  its hash, and the two Netty jars by their sha256. Green functional tests of the harness on
+  Linux, run in check mode at the measured commit, stand in for a record.
+- `bench/coverage.json`, `bench/code_paths.txt` and every D5 record stay as they are. The H6
+  code lives under `historical/netty/`, outside the records' code paths, so the campaign's
+  records and gate lines remain valid.
+- Any first-party C or C++ code in H6 (JNI or a native helper) would need a normal record.
