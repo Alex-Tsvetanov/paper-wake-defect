@@ -13,8 +13,9 @@ from fractions import Fraction
 import h6
 import run_h6
 
-COMMIT, DIGEST = "c" * 40, "d" * 64
+COMMIT, DIGEST, JDK = "c" * 40, "d" * 64, "openjdk version \"1.8.0_504\" (Temurin) build 1.8.0_504-b01"
 POSTS = run_h6.TRIALS * run_h6.POSTS
+ARGS = list(run_h6.SIZES) + ["--loop-cpu", "14", "--poster-cpu", "2", "--rest-cpu", "0"]
 COMPILED = ("   1657  427 % !   3       io.netty.channel.epoll.EpollEventLoop::run @ 0 (235 bytes)\n"
             "   1941  432 % !   4       io.netty.channel.epoll.EpollEventLoop::run @ 0 (235 bytes)\n")
 
@@ -49,7 +50,8 @@ def lines_for(entry, misses=(), hits=(), summary=None):
          "hook_injections": run_h6.WARMUP_POSTS + POSTS if entry["protocol"] == "forced" else None,
          "hook_armed_with_tasks": 0 if entry["protocol"] == "forced" else None, "max_delay_ns": 1000400000,
          "warmup_natural_posts": 1000, "warmup_natural_over_half_b": 0, "first_measured_uptime_ms": 12000,
-         "timerslack_ns": {"main": "50000", "loop": "50000"}}
+         "timerslack_ns": {"main": "50000", "loop": "50000"},
+         "args": ["--netty-version", run_h6.ARMS[entry["arm"]], "--protocol", entry["protocol"]] + ARGS}
     s.update(summary or {})
     return lines + [s]
 
@@ -71,22 +73,27 @@ class Run:
         os.makedirs(self.dir)
         os.makedirs(self.records)
 
-    def build(self, special=None, record=None, gate=True):
+    def build(self, special=None, record=None, gate=True, fields=None, ended=True, missing_done=()):
         special = special or {}
         order = run_h6.plan()
         with open(os.path.join(self.dir, "plan.txt"), "w", encoding="utf-8") as f:
             f.write("# H6 plan\n" + "".join(json.dumps(e, sort_keys=True) + "\n" for e in order))
-        rec = {"green": True, "lab_job": "test-job", "commit": COMMIT, "inputs_hash": DIGEST}
+        rec = {"green": True, "lab_job": "test-job", "host": run_h6.LAB_HOST, "desktop_check": False,
+               "commit": COMMIT, "inputs_hash": DIGEST, "jdk": JDK}
         rec.update(record or {})
         name = "h6-functional-ccccccccc-L-20261029t200000.json"
         with open(os.path.join(self.records, name), "w", encoding="utf-8") as f:
             json.dump(rec, f)
         sha = run_h6.sha256_file(os.path.join(self.records, name))
+        run_txt = {"h6 gate": "passed", "h6 host": run_h6.LAB_HOST, "h6 commit": COMMIT, "h6 inputs hash": DIGEST,
+                   "h6 functional record": "%s %s" % (name, sha), "jdk": JDK, "cpus": "0,2,14"}
+        if not gate:
+            del run_txt["h6 gate"]
+        run_txt.update(fields or {})
+        if ended:
+            run_txt["ended utc"] = "20261030t000000"
         with open(os.path.join(self.dir, "run.txt"), "w", encoding="utf-8") as f:
-            if gate:
-                f.write("h6 gate: passed\nh6 commit: %s\nh6 inputs hash: %s\nh6 functional record: %s %s\n"
-                        % (COMMIT, DIGEST, name, sha))
-            f.write("jdk: synthetic\ncpus: 0,2,14\n")
+            f.write("".join("%s: %s\n" % kv for kv in run_txt.items()))
         for e in order:
             spec = special.get(e["id"], {})
             attempts = spec.get("attempts", [("", 0)])
@@ -97,6 +104,8 @@ class Run:
                                                            spec.get("summary")))
                 with open(stem + ".out", "w", encoding="utf-8") as f:
                     f.write(spec.get("out", COMPILED))
+            if e["id"] in missing_done:
+                continue
             with open(os.path.join(self.dir, e["id"] + ".done"), "w", encoding="ascii") as f:
                 f.write("".join("%s %d\n" % (("first", "rerun")[k], rc) for k, (_, rc) in enumerate(attempts)))
         return self
@@ -163,6 +172,13 @@ class GoodProcesses(unittest.TestCase):
     def test_a_wrong_hook_count_is_not_good(self):
         self.assertIn("hook injected", self.view("final-forced-p4", {"summary": {"hook_injections": 300}})["problem"])
 
+    def test_other_sizes_or_cpus_are_not_good(self):
+        args = [a if a != "1100" else "50" for a in ARGS]
+        p = self.view("cr7-forced-p5", {"summary": {"args": args}})
+        self.assertIn("--slot-ms", p["problem"])
+        args = [a if a != "14" else "4" for a in ARGS]
+        self.assertIn("--loop-cpu", self.view("cr7-natural-p5", {"summary": {"args": args}})["problem"])
+
 
 class H6b(unittest.TestCase):
     def test_natural_hits_and_the_predictions(self):
@@ -188,6 +204,11 @@ class H6b(unittest.TestCase):
         self.assertEqual(d["latch_ok"], {"True": 3150})
         self.assertEqual(d["x_delay_ns"]["max"], 30000)
 
+    def test_realized_gaps_are_reported(self):
+        cell = Run(self).build().score()["cells"]["final-natural"]
+        self.assertEqual((cell["realized_gap_ns"]["n"], cell["realized_gap_ns"]["max"]), (3150, 300))
+        self.assertNotIn("realized_gap_ns", Run(self).build().score()["cells"]["final-forced"])
+
 
 class Compiled(unittest.TestCase):
     EVENTS = ("   1657  427 % !   3       io.netty.channel.epoll.EpollEventLoop::run @ 0 (235 bytes)\n"
@@ -204,12 +225,19 @@ class Compiled(unittest.TestCase):
         return h6.compile_events(path)
 
     def test_the_parser(self):
-        self.assertEqual(self.events(), [(1657, 3, True, False), (2000, 3, True, True), (2100, 4, True, False)])
+        self.assertEqual(self.events(), [(1657, 427, 3, True, False), (2000, 427, 3, True, True),
+                                         (2100, 440, 4, True, False)])
 
     def test_compiled_code_in_use(self):
         e = self.events()
         self.assertEqual([h6.compiled_at(e, ms) for ms in (1000, 1800, 2050, 2200)], [False, True, False, True])
         self.assertIsNone(h6.compiled_at(e, None))
+
+    def test_only_osr_code_counts_and_ids_retire_it(self):
+        # The desktop's check-final-forced.out: OSR 432 made not entrant and not redone; non-OSR 429 stays.
+        e = [(1657, 427, 3, True, False), (1667, 429, 3, False, False), (1941, 432, 4, True, False),
+             (1950, 427, 3, True, True), (2267, 432, 4, True, True)]
+        self.assertEqual([h6.compiled_at(e, ms) for ms in (1950, 2300, 4000)], [True, False, False])
 
     def test_a_process_without_compiled_run_is_reported_and_kept(self):
         r = Run(self).build({"cr7-natural-p0": {"out": ""}}).score()
@@ -225,16 +253,37 @@ class Gate(unittest.TestCase):
     def test_a_red_record_is_refused(self):
         with self.assertRaises(h6.Refusal) as e:
             Run(self).build(record={"green": False}).score()
-        self.assertIn("not a green record", str(e.exception))
+        self.assertIn("may not gate this run", str(e.exception))
 
     def test_a_record_of_another_commit_is_refused(self):
         with self.assertRaises(h6.Refusal) as e:
             Run(self).build(record={"commit": "e" * 40}).score()
-        self.assertIn("another commit", str(e.exception))
+        self.assertIn("may not gate this run", str(e.exception))
 
     def test_a_record_without_a_lab_job_is_refused(self):
         with self.assertRaises(h6.Refusal):
             Run(self).build(record={"lab_job": None}).score()
+
+    def test_a_desktop_or_off_laptop_record_is_refused(self):
+        for change in ({"desktop_check": True}, {"host": "94c04692be81"}, {"jdk": "another JDK"}):
+            with self.assertRaises(h6.Refusal):
+                Run(self).build(record=change).score()
+
+    def test_a_run_off_the_laptop_or_on_other_cpus_is_refused(self):
+        with self.assertRaises(h6.Refusal) as e:
+            Run(self).build(fields={"h6 host": "desktop"}).score()
+        self.assertIn("host", str(e.exception))
+        with self.assertRaises(h6.Refusal) as e:
+            Run(self).build(fields={"cpus": "0,2,4"}).score()
+        self.assertIn("CPUs", str(e.exception))
+
+    def test_an_unfinished_run_is_refused(self):
+        with self.assertRaises(h6.Refusal) as e:
+            Run(self).build(ended=False).score()
+        self.assertIn("did not end", str(e.exception))
+        with self.assertRaises(h6.Refusal) as e:
+            Run(self).build(missing_done=("cr7-forced-p9",)).score()
+        self.assertIn("no .done file", str(e.exception))
 
     def test_draft_turns_refusals_into_warnings(self):
         r = Run(self).build(gate=False).score(draft=True)

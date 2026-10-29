@@ -1,24 +1,30 @@
 """H6's runner (hypotheses-v2-h6.md, frozen 2026-10-29): builds H6Probe against both jars, checks the
 H6 gate (decision 37: bench/coverage-h6.json), and runs the 40 processes of section 3.
 
-  python run_h6.py --functional --jdk DIR --netty-dir DIR --out-dir DIR [--cpus 0,2,14]
-  python run_h6.py --jdk DIR --netty-dir DIR --out-dir DIR --records DIR [--cpus 0,2,14] [--dry-run]
+  python run_h6.py --functional --jdk DIR --netty-dir DIR --out-dir DIR
+  python run_h6.py --jdk DIR --netty-dir DIR --out-dir DIR --records DIR [--dry-run | --resume]
+  python run_h6.py --functional --desktop-check --cpus 0,2,4 ...   (the desktop's own check)
 
---functional is the stand-in for a sanitizer record (decision 37): at a clean commit whose H6 inputs
-match bench/coverage-h6.json, it builds against both jars, loads both native libraries without a
-post (H6Probe --epoll-only), and runs both protocols against 4.1.0.Final in check mode, which
-writes no time (section 6). It writes h6-functional-<commit>-L-<utc>.json, green when every step
-passed. Only a record made by a lab job (LAB_JOB set) can gate a timed run.
+Both modes run only on the laptop's Arch (host alex-laptop, as bench/gate_lib.py's LAB_HOSTS), need
+a clean commit whose H6 inputs match bench/coverage-h6.json, both jars at their sha256, and the
+pinned JDK (1.8.0_504-b01).
 
-A timed run (needs LAB_JOB) refuses unless the tree is clean, every input matches
-bench/coverage-h6.json, both jars match their sha256, and --records holds a green functional record
-of this commit and these inputs. It then builds, writes plan.txt (the 40 processes in the order of
-section 3, shuffled with seed 20261026) and run.txt (the gate lines), and runs each process under
-`taskset -c <cpus>` with the JVM flags of section 2. A process that fails (exit not 0, or its
-timeout) is run once more into <id>-rerun.*; <id>.done records both exits (section 5).
+--functional is the stand-in for a sanitizer record (decision 37): it builds against both jars,
+loads both native libraries without a post (H6Probe --epoll-only), and runs both protocols against
+4.1.0.Final in check mode, which writes no time (section 6). It writes
+h6-functional-<commit>-L-<utc>.json, green when every step passed. With --desktop-check it runs off
+the laptop too, and its record says so and can never gate a run.
 
-CPUs: --cpus REST,POSTER,LOOP, default 0,2,14 (section 2). Other values are for the desktop's check
-runs only.
+A timed run (needs LAB_JOB) also needs, in --records, a green functional record made by a lab job
+on the laptop at this commit, these inputs and this JDK. It builds, writes plan.txt (the 40
+processes in the order of section 3, shuffled with seed 20261026) and run.txt (the gate lines),
+and runs each process under `taskset -c 0,2,14` with the JVM flags of section 2. A process that
+fails (exit not 0, or its timeout) is run once more into <id>-rerun.*; <id>.done records both exits
+(section 5). --resume continues an interrupted run in its folder: the gate must give the same lines
+and the build the same class files; processes with a .done file are kept, and the files of one
+without are set aside as <name>.void-<utc> (a void run, never a failed run).
+
+CPUs: --cpus REST,POSTER,LOOP, default 0,2,14 (section 2); a timed run refuses any other.
 
 Exit: 0 every process good (or the functional record green), 1 a process failed twice (or a
 functional step failed), 2 refused before anything ran.
@@ -40,6 +46,8 @@ sys.path.insert(0, os.path.join(REPO, "analysis", "v2"))
 import rng  # noqa: E402
 
 COVERAGE = "bench/coverage-h6.json"
+LAB_HOST = "alex-laptop"  # bench/gate_lib.py LAB_HOSTS["L"]: the laptop's Arch (test_run_h6.py checks they agree)
+JDK_BUILD = "1.8.0_504-b01"  # Temurin 8u504-b01 (hypotheses-v2-h6.md section 1)
 ARMS = {"cr7": "4.1.0.CR7", "final": "4.1.0.Final"}
 PROTOCOLS = ("forced", "natural")
 PROCESSES_PER_CELL = 10
@@ -52,7 +60,7 @@ RECORD_PREFIX = "h6-functional-"
 FUNCTIONAL_SIZES = ("--trials", "2", "--warmup-s", "2", "--warmup-posts", "2", "--slot-ms", "50")
 # The fields H6Probe fills with a time, or a count made from times; --check leaves them null.
 TIME_KEYS = ("delay_ns", "x_delay_ns", "hook_held_ns", "y_after_hook_ns", "realized_gap_ns", "gc_time_ms",
-             "first_measured_uptime_ms", "max_delay_ns", "warmup_natural_over_half_b")
+             "first_measured_uptime_ms", "max_delay_ns", "warmup_natural_posts", "warmup_natural_over_half_b")
 
 
 class Refusal(Exception):
@@ -129,8 +137,20 @@ def clean_commit(repo=REPO):
     return head
 
 
-def matching_record(records_dir, commit, digest):
-    """(name, sha256) of a green functional record made by a lab job at this commit and these inputs; else None."""
+def is_lab_host(name):
+    return bool(name) and name.casefold() == LAB_HOST.casefold()
+
+
+def record_gates(rec, commit, digest, jdk):
+    """True when a functional record may gate a run: green, made by a lab job on the laptop (not a desktop
+    check), at this commit, these inputs and this JDK."""
+    return (rec.get("green") is True and bool(rec.get("lab_job")) and is_lab_host(rec.get("host"))
+            and not rec.get("desktop_check") and rec.get("commit") == commit and rec.get("inputs_hash") == digest
+            and rec.get("jdk") == jdk)
+
+
+def matching_record(records_dir, commit, digest, jdk):
+    """(name, sha256) of a record that may gate this run (record_gates); else None."""
     if not records_dir or not os.path.isdir(records_dir):
         return None
     for name in sorted(os.listdir(records_dir)):
@@ -142,8 +162,7 @@ def matching_record(records_dir, commit, digest):
                 rec = json.load(f)
         except (OSError, ValueError):
             continue
-        if (rec.get("green") is True and rec.get("commit") == commit and rec.get("inputs_hash") == digest
-                and rec.get("lab_job")):
+        if isinstance(rec, dict) and record_gates(rec, commit, digest, jdk):
             return name, sha256_file(path)
     return None
 
@@ -235,14 +254,20 @@ def jdk_version(jdk):
     return " / ".join(l.strip() for l in done.stderr.splitlines() if l.strip())
 
 
-def checked_inputs(netty_dir):
-    """The coverage file, the clean commit and the inputs' hash; Refusal if the inputs or jars differ."""
+def checked_inputs(netty_dir, jdk, anywhere=False):
+    """The coverage file, the clean commit, the inputs' hash and the JDK's version text. Refusal off the laptop
+    (unless anywhere), or if the inputs, the jars or the JDK differ from what is declared."""
+    if not anywhere and not is_lab_host(platform.node()):
+        raise Refusal("this host is %r: H6 runs only on the laptop's Arch (%s)" % (platform.node(), LAB_HOST))
     coverage = load_coverage()
     commit = clean_commit()
     problems = input_problems(coverage) + jar_problems(coverage, netty_dir)
+    version = jdk_version(jdk)
+    if JDK_BUILD not in version:
+        problems.append("the JDK is %r, not %s" % (version, JDK_BUILD))
     if problems:
         raise Refusal("; ".join(problems))
-    return coverage, commit, inputs_hash(coverage["inputs"])
+    return coverage, commit, inputs_hash(coverage["inputs"]), version
 
 
 # ---------------------------------------------------------------------------------------------
@@ -256,7 +281,7 @@ FUNCTIONAL_STEPS = (("cr7-epoll-only", "cr7", ("--epoll-only",)),
 
 
 def functional(a, run=run_one):
-    coverage, commit, digest = checked_inputs(a.netty_dir)
+    coverage, commit, digest, version = checked_inputs(a.netty_dir, a.jdk, anywhere=a.desktop_check)
     os.makedirs(a.out_dir, exist_ok=True)
     classes, hashes = build(a.jdk, a.netty_dir, a.out_dir)
     native = os.path.join(a.out_dir, "native")
@@ -273,8 +298,9 @@ def functional(a, run=run_one):
         steps.append({"step": name, "exit": rc, "good": good, "passed": rc == 0 and good and null_times(lines),
                       "problems": (s or {}).get("problems")})
     record = {"kind": "h6-functional", "green": all(st["passed"] for st in steps), "dry_run": False,
-              "commit": commit, "inputs_hash": digest, "lab_job": os.environ.get("LAB_JOB"),
-              "host": platform.node(), "kernel": platform.release(), "jdk": jdk_version(a.jdk),
+              "desktop_check": bool(a.desktop_check), "commit": commit, "inputs_hash": digest,
+              "lab_job": None if a.desktop_check else os.environ.get("LAB_JOB"),
+              "host": platform.node(), "kernel": platform.release(), "jdk": version,
               "class_sha256": hashes, "cpus": list(a.cpus), "steps": steps, "made_utc": utc_now()}
     name = "%s%s-L-%s.json" % (RECORD_PREFIX, commit[:9], record["made_utc"])
     with open(os.path.join(a.out_dir, name), "w", encoding="utf-8", newline="\n") as f:
@@ -291,41 +317,94 @@ def functional(a, run=run_one):
 
 def gate(a):
     """The H6 gate (decision 37). Returns the run.txt lines; Refusal when it does not pass."""
-    coverage, commit, digest = checked_inputs(a.netty_dir)
-    record = matching_record(a.records, commit, digest)
+    coverage, commit, digest, version = checked_inputs(a.netty_dir, a.jdk, anywhere=a.dry_run)
+    record = matching_record(a.records, commit, digest, version)
     if record is None:
-        raise Refusal("no green functional record of commit %s and inputs %s, made by a lab job, in %s"
-                      % (commit, digest, a.records))
-    return [("h6 gate", "passed"), ("h6 commit", commit), ("h6 inputs hash", digest),
+        raise Refusal("no functional record in %s may gate this run: none is green, made by a lab job on %s, at "
+                      "commit %s, inputs %s and this JDK" % (a.records, LAB_HOST, commit, digest))
+    return [("h6 gate", "passed"), ("h6 host", platform.node()), ("h6 commit", commit), ("h6 inputs hash", digest),
             ("h6 coverage sha256", sha256_lf(os.path.join(REPO, COVERAGE))),
             ("h6 functional record", "%s %s" % record),
-            ("h6 jars", "; ".join("%s %s" % (jar_name(arm), coverage["third_party"][jar_name(arm)]) for arm in ARMS))]
+            ("h6 jars", "; ".join("%s %s" % (jar_name(arm), coverage["third_party"][jar_name(arm)]) for arm in ARMS)),
+            ("jdk", version)]
+
+
+# Every process's sizes, as section 3 sets them; the scorer checks them in each summary's args.
+SIZES = ("--trials", str(TRIALS), "--posts", str(POSTS), "--warmup-s", str(WARMUP_S), "--warmup-posts",
+         str(WARMUP_POSTS), "--slot-ms", str(SLOT_MS), "--limit-ms", str(LIMIT_MS), "--hook-wait-ms", str(HOOK_WAIT_MS))
+GATE_KEYS = ("h6 gate", "h6 host", "h6 commit", "h6 inputs hash", "h6 coverage sha256", "h6 functional record",
+             "h6 jars", "jdk")
+
+
+def read_fields(path):
+    """The 'key: value' lines of a run.txt, the first of each key."""
+    fields = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f.read().splitlines():
+            key, sep, value = line.partition(": ")
+            if sep:
+                fields.setdefault(key, value)
+    return fields
+
+
+def resume_problems(a, order, gate_lines, hashes):
+    """Why the folder cannot be resumed: another plan, another gate or other class files (empty if it can)."""
+    found = []
+    try:
+        with open(os.path.join(a.out_dir, "plan.txt"), encoding="utf-8") as f:
+            entries = [json.loads(l) for l in f.read().splitlines() if l.strip() and not l.startswith("#")]
+        fields = read_fields(os.path.join(a.out_dir, "run.txt"))
+    except (OSError, ValueError) as e:
+        return ["the folder has no readable plan.txt and run.txt: %s" % e]
+    if entries != order:
+        found.append("plan.txt is not this plan")
+    for key, value in gate_lines:
+        if key != "h6 host" and fields.get(key) != value:
+            found.append("run.txt's %r is %r, the gate now gives %r" % (key, fields.get(key), value))
+    if fields.get("class sha256") != json.dumps(hashes, sort_keys=True):
+        found.append("the class files differ from run.txt's")
+    return found
+
+
+def set_aside(out_dir, pid, stamp):
+    """Renames the files of an attempt that has no .done file to <name>.void-<stamp> (section 8: a void run)."""
+    for name in sorted(os.listdir(out_dir)):
+        if name.startswith(pid + ".") or name.startswith(pid + "-rerun."):
+            os.rename(os.path.join(out_dir, name), os.path.join(out_dir, "%s.void-%s" % (name, stamp)))
 
 
 def timed(a, run=run_one):
     if not a.dry_run and not os.environ.get("LAB_JOB"):
         raise Refusal("a timed run needs LAB_JOB (the lab runner sets it on the laptop); use --dry-run to check")
+    if not a.dry_run and tuple(a.cpus) != CPUS:
+        raise Refusal("a timed run uses CPUs %s (section 2), not %s" % (CPUS, tuple(a.cpus)))
     gate_lines = gate(a)
     order = plan()
     os.makedirs(a.out_dir, exist_ok=True)
-    if any(n.endswith(".jsonl") for n in os.listdir(a.out_dir)):
-        raise Refusal("%s already holds outputs" % a.out_dir)
+    if not a.resume and any(n.endswith(".jsonl") for n in os.listdir(a.out_dir)):
+        raise Refusal("%s already holds outputs; --resume continues an interrupted run" % a.out_dir)
     classes, hashes = build(a.jdk, a.netty_dir, a.out_dir)
     native = os.path.join(a.out_dir, "native")
     os.makedirs(native, exist_ok=True)
-    with open(os.path.join(a.out_dir, "plan.txt"), "w", encoding="utf-8", newline="\n") as f:
-        f.write("# H6 plan: %d processes, order seed %d\n" % (len(order), ORDER_SEED))
-        for e in order:
-            f.write(json.dumps(e, sort_keys=True) + "\n")
-    sizes = ["--trials", str(TRIALS), "--posts", str(POSTS), "--warmup-s", str(WARMUP_S), "--warmup-posts",
-             str(WARMUP_POSTS), "--slot-ms", str(SLOT_MS), "--limit-ms", str(LIMIT_MS), "--hook-wait-ms",
-             str(HOOK_WAIT_MS)]
-    with open(os.path.join(a.out_dir, "run.txt"), "w", encoding="utf-8", newline="\n") as f:
-        for key, value in gate_lines + [("jdk", jdk_version(a.jdk)), ("lab job", os.environ.get("LAB_JOB")),
-                                        ("cpus", ",".join(map(str, a.cpus))), ("jvm flags", " ".join(JVM_FLAGS)),
-                                        ("class sha256", json.dumps(hashes, sort_keys=True)),
-                                        ("started utc", utc_now())]:
-            f.write("%s: %s\n" % (key, value))
+    stamp = utc_now()
+    if a.resume:
+        problems = resume_problems(a, order, gate_lines, hashes)
+        if problems:
+            raise Refusal("cannot resume: " + "; ".join(problems))
+        with open(os.path.join(a.out_dir, "run.txt"), "a", encoding="utf-8", newline="\n") as f:
+            f.write("resumed utc: %s\nresume lab job: %s\n" % (stamp, os.environ.get("LAB_JOB")))
+    else:
+        with open(os.path.join(a.out_dir, "plan.txt"), "w", encoding="utf-8", newline="\n") as f:
+            f.write("# H6 plan: %d processes, order seed %d\n" % (len(order), ORDER_SEED))
+            for e in order:
+                f.write(json.dumps(e, sort_keys=True) + "\n")
+        with open(os.path.join(a.out_dir, "run.txt"), "w", encoding="utf-8", newline="\n") as f:
+            for key, value in gate_lines + [("lab job", os.environ.get("LAB_JOB")), ("cpus", ",".join(map(str, a.cpus))),
+                                            ("jvm flags", " ".join(JVM_FLAGS)),
+                                            ("class sha256", json.dumps(hashes, sort_keys=True)),
+                                            ("started utc", stamp)]:
+                f.write("%s: %s\n" % (key, value))
+    sizes = list(SIZES)
     if a.dry_run:
         for e in order:
             print(" ".join(probe_command(a.jdk, a.netty_dir, classes, e["arm"], a.cpus, native,
@@ -333,6 +412,12 @@ def timed(a, run=run_one):
         return 0
     failed = 0
     for n, e in enumerate(order, 1):
+        done = os.path.join(a.out_dir, e["id"] + ".done")
+        if os.path.exists(done):
+            with open(done, encoding="ascii") as f:
+                failed += f.read().splitlines()[-1].split()[-1] != "0"
+            continue
+        set_aside(a.out_dir, e["id"], stamp)
         exits = []
         for suffix in ("", "-rerun"):
             stem = os.path.join(a.out_dir, e["id"] + suffix)
@@ -361,8 +446,14 @@ def main(argv=None):
     ap.add_argument("--records", help="the folder that holds the H6 functional records (timed runs)")
     ap.add_argument("--cpus", type=parse_cpus, default=CPUS, help="REST,POSTER,LOOP (default 0,2,14)")
     ap.add_argument("--functional", action="store_true")
-    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--desktop-check", action="store_true",
+                    help="with --functional: run off the laptop; the record says so and never gates a run")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--resume", action="store_true")
     a = ap.parse_args(argv)
+    if a.desktop_check and not a.functional:
+        ap.error("--desktop-check goes with --functional")
     try:
         return functional(a) if a.functional else timed(a)
     except Refusal as e:

@@ -25,6 +25,8 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.util.IntSupplier;
 import io.netty.util.Version;
 
+import com.sun.management.GarbageCollectionNotificationInfo;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -50,6 +52,11 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import javax.management.ListenerNotFoundException;
+import javax.management.Notification;
+import javax.management.NotificationEmitter;
+import javax.management.NotificationListener;
+import javax.management.openmbean.CompositeData;
 
 public final class H6Probe {
     static final long B_NS = TimeUnit.SECONDS.toNanos(1);  // the loop's bound with no scheduled task
@@ -165,6 +172,38 @@ public final class H6Probe {
         volatile Integer wakenUpAtHook;
     }
 
+    /** GC events by JMX notification, so that no GC reading falls between two measured posts (section 5). */
+    static final class GcLog implements NotificationListener {
+        final List<long[]> events = Collections.synchronizedList(new ArrayList<long[]>());  // {start ms, duration ms}
+        final List<NotificationEmitter> emitters = new ArrayList<NotificationEmitter>();
+
+        void start() {
+            for (GarbageCollectorMXBean b : ManagementFactory.getGarbageCollectorMXBeans()) {
+                if (b instanceof NotificationEmitter) {
+                    ((NotificationEmitter) b).addNotificationListener(this, null, null);
+                    emitters.add((NotificationEmitter) b);
+                }
+            }
+        }
+
+        void stop() {
+            for (NotificationEmitter e : emitters) {
+                try {
+                    e.removeNotificationListener(this);
+                } catch (ListenerNotFoundException ignored) {
+                    // already gone
+                }
+            }
+        }
+
+        @Override
+        public void handleNotification(Notification n, Object handback) {
+            if (!GarbageCollectionNotificationInfo.GARBAGE_COLLECTION_NOTIFICATION.equals(n.getType())) return;
+            GarbageCollectionNotificationInfo info = GarbageCollectionNotificationInfo.from((CompositeData) n.getUserData());
+            events.add(new long[] {info.getGcInfo().getStartTime(), info.getGcInfo().getDuration()});
+        }
+    }
+
     // ---------------------------------------------------------------------------- the forced hook
 
     static final class ForcedStrategy implements SelectStrategy {
@@ -219,6 +258,7 @@ public final class H6Probe {
     final List<String> lines = new ArrayList<String>();
     final Map<String, Object> summary = new LinkedHashMap<String, Object>();
     final Thread main = Thread.currentThread();
+    final GcLog gcLog = new GcLog();
     EpollEventLoopGroup group;
     EventLoop loop;
     ForcedStrategy strategy;
@@ -274,9 +314,11 @@ public final class H6Probe {
         }, factory);
         loop = group.next();
         startThreads();
+        gcLog.start();  // before pinning, so any thread it needs is pinned with the rest
         pin();
         warmUp();
         measure();
+        gcLog.stop();
         checkPins();
         summary.put("hook_injections", strategy == null ? null : (Object) strategy.injections);
         summary.put("hook_armed_with_tasks", strategy == null ? null : (Object) strategy.armedWithTasks);
@@ -451,9 +493,8 @@ public final class H6Probe {
 
     // ---------------------------------------------------------------------------- warm-up and trials
 
-    /** One back-to-back natural post from this thread: post, spin until it ran (section 3). */
-    Task naturalPost() {
-        Task t = new Task(null, null);
+    /** One back-to-back natural post of a task made beforehand: post, spin until it ran (section 3). */
+    Task naturalPost(Task t) {
         t.submit = System.nanoTime();
         loop.execute(t);
         long limit = TimeUnit.MILLISECONDS.toNanos(o.limitMs);
@@ -496,35 +537,55 @@ public final class H6Probe {
         long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(o.warmupS);
         long posts = 0, overHalfB = 0;
         while (System.nanoTime() < end) {
-            Task t = naturalPost();
+            Task t = naturalPost(new Task(null, null));
             posts++;
             if (t.ran - t.submit > HALF_B_NS) overHalfB++;
         }
-        summary.put("warmup_natural_posts", posts);
+        summary.put("warmup_natural_posts", o.check ? null : (Object) posts);  // a count over a fixed time
         summary.put("warmup_natural_over_half_b", o.check ? null : (Object) overHalfB);
         for (int i = 0; i < o.warmupPosts; i++) {
             if (strategy != null) forcedPost();
-            else naturalPost();
+            else naturalPost(new Task(null, null));
         }
         summary.put("warmup_own_posts", o.warmupPosts);
     }
 
-    void measure() {
-        List<GarbageCollectorMXBean> gcs = ManagementFactory.getGarbageCollectorMXBeans();
-        long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
-        summary.put("first_measured_uptime_ms", o.check ? null : (Object) uptime);
-        long prevRun = 0;
+    /**
+     * The measured posts. The natural tasks are made before the first post and every time stays in memory
+     * until the last post has run, so nothing but the post itself falls between two posts (section 3).
+     */
+    void measure() throws InterruptedException {
+        int n = o.trials * o.posts;
+        long gcCount0 = gcCount();
+        long anchorNs = System.nanoTime();
+        long anchorMs = ManagementFactory.getRuntimeMXBean().getUptime();
+        summary.put("first_measured_uptime_ms", o.check ? null : (Object) anchorMs);
+        Forced[] forced = strategy != null ? new Forced[n] : null;
+        Task[] natural = strategy == null ? new Task[n] : null;
+        if (forced != null) {
+            for (int k = 0; k < n; k++) forced[k] = forcedPost();
+        } else {
+            for (int k = 0; k < n; k++) natural[k] = new Task(null, null);
+            for (int k = 0; k < n; k++) naturalPost(natural[k]);
+        }
+        long gcDuring = gcCount() - gcCount0;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);  // notifications arrive after the GC
+        while (gcLog.events.size() < gcDuring && System.nanoTime() < deadline) Thread.sleep(10);
+        summary.put("gc_count_measured", gcDuring);
         for (int trial = 0; trial < o.trials; trial++) {
-            long gcCount0 = gcCount(gcs), gcTime0 = gcTime(gcs);
+            long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
             for (int i = 0; i < o.posts; i++) {
+                int k = trial * o.posts + i;
                 Map<String, Object> line = new LinkedHashMap<String, Object>();
                 line.put("kind", "post");
                 line.put("trial", trial);
                 line.put("index", i);
-                long delay;
-                if (strategy != null) {
-                    Forced p = forcedPost();
+                long delay, start, end;
+                if (forced != null) {
+                    Forced p = forced[k];
                     delay = p.y.ran - p.y.submit;
+                    start = p.x.submit;
+                    end = p.y.ran;
                     line.put("delay_ns", time(delay));
                     line.put("x_delay_ns", time(p.x.ran - p.x.submit));
                     line.put("wakenup_at_hook", p.wakenUpAtHook);
@@ -532,33 +593,41 @@ public final class H6Probe {
                     line.put("hook_held_ns", time(p.hookOut - p.hookIn));
                     line.put("y_after_hook_ns", time(p.y.ran - p.hookOut));
                 } else {
-                    Task t = naturalPost();
+                    Task t = natural[k];
                     delay = t.ran - t.submit;
+                    start = t.submit;
+                    end = t.ran;
                     line.put("delay_ns", time(delay));
-                    line.put("realized_gap_ns", prevRun == 0 ? null : time(t.submit - prevRun));
-                    prevRun = t.ran;
+                    line.put("realized_gap_ns", k == 0 ? null : time(t.submit - natural[k - 1].ran));
                 }
+                first = Math.min(first, start);
+                last = Math.max(last, end);
                 maxDelay = Math.max(maxDelay, delay);
                 lines.add(json(line));
+            }
+            // GC events whose start falls in the trial, from the trial's first post to its last run.
+            long fromMs = anchorMs + (first - anchorNs) / 1000000L, toMs = anchorMs + (last - anchorNs) / 1000000L;
+            long count = 0, ms = 0;
+            synchronized (gcLog.events) {
+                for (long[] e : gcLog.events) {
+                    if (e[0] >= fromMs && e[0] <= toMs) {
+                        count++;
+                        ms += e[1];
+                    }
+                }
             }
             Map<String, Object> t = new LinkedHashMap<String, Object>();
             t.put("kind", "trial");
             t.put("trial", trial);
-            t.put("gc_count", gcCount(gcs) - gcCount0);
-            t.put("gc_time_ms", o.check ? null : (Object) (gcTime(gcs) - gcTime0));
+            t.put("gc_count", count);
+            t.put("gc_time_ms", o.check ? null : (Object) ms);
             lines.add(json(t));
         }
     }
 
-    static long gcCount(List<GarbageCollectorMXBean> gcs) {
+    static long gcCount() {
         long n = 0;
-        for (GarbageCollectorMXBean b : gcs) n += Math.max(0, b.getCollectionCount());
-        return n;
-    }
-
-    static long gcTime(List<GarbageCollectorMXBean> gcs) {
-        long n = 0;
-        for (GarbageCollectorMXBean b : gcs) n += Math.max(0, b.getCollectionTime());
+        for (GarbageCollectorMXBean b : ManagementFactory.getGarbageCollectorMXBeans()) n += Math.max(0, b.getCollectionCount());
         return n;
     }
 

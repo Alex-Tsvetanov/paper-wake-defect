@@ -9,10 +9,10 @@ DIR is the output folder of historical/netty/run_h6.py: plan.txt, run.txt and pe
 
 Rules, from the addendum:
 - A process is good (section 5) when its used run exited 0, its summary says good, it matches its plan
-  line (arm, Netty version, protocol, process), and it has every measured post: 15 trials of 21, each
-  with a delay; a forced process also has one hook injection per forced post. The used run is the rerun
-  when there is one. A cell is complete with 10 good processes; an incomplete cell stays in F6's m and
-  is not rejected.
+  line (arm, Netty version, protocol, process) and the planned sizes and CPUs (its args), and it has
+  every measured post: 15 trials of 21, each with a delay; a forced process also has one hook injection
+  per forced post. The used run is the rerun when there is one. A cell is complete with 10 good
+  processes; an incomplete cell stays in F6's m and is not rejected.
 - T_med flags a trial when the median of its 21 delays exceeds B / 5 = 200 ms; T_count when one exceeds
   B / 2 = 500 ms (section 2, B_eff = B = 1 s).
 - H6a: CR7 forced, the exact one-sided test of power <= 0.95; Final forced, of a false-positive rate
@@ -22,12 +22,16 @@ Rules, from the addendum:
   exact interval and one-sided upper bound, listed by trial; T_count; and the predictions' outcomes.
 - Diagnostics (section 5): per forced cell the distributions of X's delay, of Y's run time after the
   hook returned and of the hook's hold, the values of wakenUp at the hook and the latch outcomes; per
-  process the warm-up counts, GC, the largest delay, lost wakes and whether EpollEventLoop.run() had
-  compiled code in use at the first measured post (from PrintCompilation).
+  natural cell the realized gaps (section 3); per process the warm-up counts, GC, the largest delay,
+  lost wakes and whether EpollEventLoop.run() had OSR-compiled code at the first measured post. run()
+  is entered once, so only an OSR compile (PrintCompilation's %) can be in use; one counts from its
+  line, which JDK 8 prints when the compile starts, until a "made not entrant" line of its compile id.
 
 Provenance: the commit of a clean tree, as score.py. The scoring is refused when plan.txt is not
-run_h6.py's plan, when run.txt lacks a passing H6 gate, or when the functional record it names is not in
---records with that sha256, green, made by a lab job, at run.txt's commit and inputs. --draft turns
+run_h6.py's plan; when run.txt lacks a passing H6 gate on the laptop's host with CPUs 0, 2 and 14;
+when the functional record it names is not in --records with that sha256 or may not gate the run
+(run_h6.record_gates: green, a lab job's on the laptop, at run.txt's commit, inputs and JDK); or when
+the run did not end (no "ended utc" line, or a planned process without a .done file). --draft turns
 these into warnings for tests and dry runs.
 
 Output: one JSON file.
@@ -55,7 +59,7 @@ B_NS = 1000000000
 T_MED_NS = B_NS // 5
 T_COUNT_NS = B_NS // 2
 # A PrintCompilation line: uptime ms, compile id, flags (% is an OSR compile), tier, method, the rest.
-COMPILE_LINE = re.compile(r"^\s*(\d+)\s+\d+\s+([%sbn! ]*?)\s*(\d)\s+(\S+)(.*)$")
+COMPILE_LINE = re.compile(r"^\s*(\d+)\s+(\d+)\s+([%sbn! ]*?)\s*(\d)\s+(\S+)(.*)$")
 RUN_METHOD = "io.netty.channel.epoll.EpollEventLoop::run"
 
 
@@ -90,19 +94,31 @@ def gate_problems(fields, records_dir):
     """Why run.txt does not show a passing H6 gate with its functional record in records_dir (empty if it does)."""
     if fields.get("h6 gate") != "passed":
         return ["run.txt has no 'h6 gate: passed' line"]
+    found = []
+    if not run_h6.is_lab_host(fields.get("h6 host")):
+        found.append("run.txt's host is %r, not the laptop's %s" % (fields.get("h6 host"), run_h6.LAB_HOST))
+    if fields.get("cpus") != ",".join(map(str, run_h6.CPUS)):
+        found.append("run.txt's CPUs are %r, not %s" % (fields.get("cpus"), ",".join(map(str, run_h6.CPUS))))
     name, _, sha = (fields.get("h6 functional record") or "").partition(" ")
     path = os.path.join(records_dir or "", name)
     if not name or not os.path.isfile(path):
-        return ["the functional record %r that run.txt names is not in %s" % (name, records_dir)]
+        return found + ["the functional record %r that run.txt names is not in %s" % (name, records_dir)]
     if run_h6.sha256_file(path) != sha:
-        return ["the functional record %s has another sha256 than run.txt records" % name]
+        return found + ["the functional record %s has another sha256 than run.txt records" % name]
     with open(path, encoding="utf-8") as f:
         rec = json.load(f)
-    found = []
-    if rec.get("green") is not True or not rec.get("lab_job"):
-        found.append("the functional record %s is not a green record of a lab job" % name)
-    if rec.get("commit") != fields.get("h6 commit") or rec.get("inputs_hash") != fields.get("h6 inputs hash"):
-        found.append("the functional record %s is of another commit or other inputs than the run" % name)
+    if not run_h6.record_gates(rec, fields.get("h6 commit"), fields.get("h6 inputs hash"), fields.get("jdk")):
+        found.append("the functional record %s may not gate this run (green, a lab job's on %s, at run.txt's commit, "
+                     "inputs and JDK)" % (name, run_h6.LAB_HOST))
+    return found
+
+
+def end_problems(fields, run_dir, entries):
+    """Why the run did not end: no 'ended utc' line, or planned processes without a .done file."""
+    found = [] if fields.get("ended utc") else ["run.txt has no 'ended utc' line: the run did not end"]
+    missing = [e["id"] for e in entries if not os.path.exists(os.path.join(run_dir, e["id"] + ".done"))]
+    if missing:
+        found.append("%d planned processes have no .done file, e.g. %s" % (len(missing), ", ".join(missing[:3])))
     return found
 
 
@@ -116,7 +132,7 @@ def read_done(run_dir, pid):
 
 
 def compile_events(out_path):
-    """EpollEventLoop.run()'s PrintCompilation events: (ms, tier, osr, made_not_entrant), in file order."""
+    """EpollEventLoop.run()'s PrintCompilation events: (ms, compile id, tier, osr, made_not_entrant), in file order."""
     events = []
     try:
         with open(out_path, encoding="utf-8", errors="replace") as f:
@@ -124,27 +140,29 @@ def compile_events(out_path):
                 if RUN_METHOD not in line:
                     continue
                 m = COMPILE_LINE.match(line)
-                if m and m.group(4) == RUN_METHOD:
-                    events.append((int(m.group(1)), int(m.group(3)), "%" in m.group(2),
-                                   "made not entrant" in m.group(5)))
+                if m and m.group(5) == RUN_METHOD:
+                    events.append((int(m.group(1)), int(m.group(2)), int(m.group(4)), "%" in m.group(3),
+                                   "made not entrant" in m.group(6)))
     except OSError:
         pass
     return events
 
 
 def compiled_at(events, uptime_ms):
-    """True when run() had compiled code in use at uptime_ms: a compile at or before it whose code was not
-    made not entrant by then. None when the time is not known."""
+    """True when run() had OSR code at uptime_ms: an OSR compile started at or before it whose compile id was not
+    made not entrant by then (module text). None when the time is not known."""
     if uptime_ms is None:
         return None
     live = set()
-    for ms, tier, osr, dead in events:
+    for ms, cid, tier, osr, dead in events:
         if ms > uptime_ms:
             break
+        if not osr:
+            continue
         if dead:
-            live.discard((tier, osr))
+            live.discard(cid)
         else:
-            live.add((tier, osr))
+            live.add(cid)
     return bool(live)
 
 
@@ -164,6 +182,14 @@ def problem_of(entry, lines, exit_code):
     for k, v in want.items():
         if s.get(k) != v:
             return "summary %s is %r, the plan asks %r" % (k, s.get(k), v)
+    args = s.get("args") or []
+    rest, poster, loop = run_h6.CPUS
+    planned_args = list(zip(run_h6.SIZES[0::2], run_h6.SIZES[1::2])) + [
+        ("--loop-cpu", str(loop)), ("--poster-cpu", str(poster)), ("--rest-cpu", str(rest))]
+    for flag, value in planned_args:
+        given = [args[i + 1] for i, a in enumerate(args[:-1]) if a == flag]
+        if given != [value]:
+            return "args give %s %s, the plan asks %s" % (flag, given, value)
     planned = run_h6.TRIALS * run_h6.POSTS
     posts = [l for l in lines if l.get("kind") == "post"]
     timed = sum(isinstance(p.get("delay_ns"), int) for p in posts)
@@ -265,6 +291,9 @@ def score_cell(arm, protocol, procs):
             "wakenup_at_hook": dict(Counter(str(l.get("wakenup_at_hook")) for l in lines)),
             "latch_ok": dict(Counter(str(l.get("latch_ok")) for l in lines)),
             "armed_with_tasks": sum(p["summary"].get("hook_armed_with_tasks") or 0 for p in good)}
+    else:
+        cell["realized_gap_ns"] = spread(l.get("realized_gap_ns") for p in good for l in p["lines"]
+                                         if l.get("kind") == "post")
     return cell
 
 
@@ -297,7 +326,7 @@ def h6b(cells):
 def score(run_dir, records_dir, generated_by, draft=False):
     entries = read_plan(run_dir)
     fields = read_run_txt(run_dir)
-    problems = gate_problems(fields, records_dir)
+    problems = gate_problems(fields, records_dir) + end_problems(fields, run_dir, entries)
     if problems and not draft:
         raise Refusal("; ".join(problems))
     procs = defaultdict(list)
