@@ -365,3 +365,29 @@ The scoring:
 
 Desktop check of steps 2 and 3, nothing new read: with the campaign's own files of the 40
 processes standing in for the extra run's, the output is byte for byte `results/v2/score.json`.
+
+### 2026-10-29: the extra run goes ahead with the timer's source unknown (Alex, decision 32)
+
+The entry of 2026-10-28 runs the extra run once the lab has found and stopped the timer's
+source. The lab looked twice on the laptop's Windows, with `powercfg /energy`: for 60 s at
+00:26, 34 s after boot, and for 1 h from 00:28, 2 min after boot. Both reports list no timer
+request, and both show the default resolution, 156250 in 100 ns units. So the source is not
+known. It may appear only under load.
+
+Alex chose to run the extra run now (decision 32). Its rules are unchanged: the run line exits 7
+before any run if the timer is finer than the default, a process that reads a finer timer is not
+good, and a cell without 10 good processes stays incomplete and is reported so. This entry is
+written before the extra run's data exist.
+
+What the campaign's own readings show (every Windows process reads the resolution at its start,
+at gaps and at its end, and the runner starts one process at a time; none of them asks for a
+timer):
+- The process that started at 13:47:37 read the default at its start and at all five gaps, and
+  10 ms at its end (13:47:46). The process that started at 13:47:49 read 10 ms at its start and
+  gaps, and the default at its end (13:48:05). The processes just before and after read the
+  default throughout.
+- So the request began after 13:47:37 and before 13:47:46, and it ended after 13:47:49 and
+  before 13:48:05. The entry of 2026-10-28 put it "from 13:47:37 to 13:47:49", the start times
+  of the first and the last process that read it; these are the bounds.
+- It spanned four separate wakeprobe processes, and a timer request ends when its process exits,
+  so no wakeprobe process held it.
