@@ -391,3 +391,65 @@ timer):
   of the first and the last process that read it; these are the bounds.
 - It spanned four separate wakeprobe processes, and a timer request ends when its process exits,
   so no wakeprobe process held it.
+
+### 2026-10-29: H5's scorer, before any H5 value is read (Alex, decision 30)
+
+Both H5 runs are done at 796b71f (chain A16), each gated by the four D5 records:
+- Linux: `gap37-a-q2-p1-h5-a143a1dd/p1-h5-l.tar.gz`, sha256
+  ad8ddab9d7ffc1c7a2c3e6963f4b2aeaf96fa49e799e47eff326c1e6c1b0b6d1. 140 of 140 cells exited 0.
+- Windows: `gap37-w-q2-p1-h5-cb30a602/p1-h5-w.tar.gz`, sha256
+  ff8971fe63317de23b475b4d56d023d05ca0150e311259b1c7e0e86c20552bd5. 136 of 136 cells exited 0.
+
+Section 3 scores H5 with the 2026-09 criteria, and the 2026-09 code that computes them is
+`analysis/summarize.py`. It cannot read v2's runs as they are. It takes a run's arm from the
+build (`defect_active`), and in v2's one binary H5's fixed arm, `plain_wake`, is a defect
+variant. So every fixed-arm run is refused, the whole bound sweep among them. This was found by
+loading the runs and printing only the loader's refusals and the record keys; no value was
+printed.
+
+`analysis/v2/h5.py` (this commit, with `test_h5.py`) scores H5 with summarize.py's own loader,
+tables and limits. Its module text is the rule; in short:
+- The arm comes from H5's mapping (`plain_wake` fixed; `absent_wake` on epoll and IOCP,
+  `unobserved_primitive` on io_uring defect). Every run must match its plan.txt line field by
+  field and the mapping.
+- plan.txt must hold the runners' design (120, 8 and 12 cells on Linux, 120, 8 and 8 on
+  Windows; 51 posts and 5 warm-up, 21 and 3 in the gap sweep), and every run one worker pinned
+  to CPU 14 with the poster on CPU 2.
+- Runs follow section 8's rules for lost units, as readers.py states them for the campaign. A
+  run fails when it left no output, has no summary, reports an error, lost a unit, delivered
+  fewer measured units than planned, or is not a Release build from a clean tree. A rerun
+  replaces the first run, and both are reported. A cell whose used run failed is incomplete,
+  and a lost unit in a fixed cell is reported as a lost wake.
+- The records gate in each folder's gate.txt is checked as score.py checks run.txt, against the
+  records folders, and the wakeprobe sha256 in plan.txt must be the one the gate hashed.
+- Delay-model fit per configuration (system, timer setting, B): it fails when a cell fails; it
+  passes when no cell is incomplete, at least one has a verdict and every verdict passes;
+  otherwise it has none. A bimodal cell has no verdict, as in 2026-09, and neither has a
+  gap-sweep cell with an incomplete step. Bound independence per (system, backend, timer
+  setting); a group with an incomplete run fails if the rest fails and has no verdict otherwise.
+
+The reading's rule, fixed here before any H5 value is read:
+- part 1 recurs when the failing delay-model configurations are exactly Windows, 1 ms timer,
+  B = 1 ms;
+- part 2 recurs when every Linux group fails and every Windows group passes;
+- (a) both parts recur, (b) neither recurs, (c) exactly one recurs. This is section 3's wording
+  read literally: "neither part of the split recurs" covers failures in new places too, as long
+  as neither 2026-09 pattern is seen again.
+- A part is undetermined when configurations or groups without a verdict could still decide it
+  either way, and then so is the outcome.
+
+Also reported, with no verdict: Windows runs whose timer readings differ from what they asked
+for, and Linux runs that asked for 1 ns of slack and did not get it.
+
+Desktop checks: 41 tests on synthetic folders in both runners' plan formats, among them the
+reading against an oracle that tries every completion of the verdicts that are missing, and the
+whole `analysis/v2` suite (346 tests) on Windows and in the Linux image. Two Opus reviews. The
+first found two HIGH issues (a run that lost a unit was scored as complete; an unscored key
+configuration read as not recurring) and five MEDIUM ones. The second found no CRITICAL or HIGH
+issue and four MEDIUM ones (a run that left no output; plan.txt not checked against the
+runners' design; pinning not checked; an empty group list read as not recurring) and two LOW.
+All are fixed here. On the real folders only the structure was checked: every plan line, run
+and gate passes, all 140 and 136 cells are complete, and nothing was scored.
+
+This code is written after the H5 data arrived, which is disclosed here. ANALYSIS_COMMIT for H1
+to H4 stays cf4c3d8: nothing it ran changes, and their scoring is done (f3bd9ec).
