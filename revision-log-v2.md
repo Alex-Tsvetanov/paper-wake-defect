@@ -568,3 +568,79 @@ commit stand in for a record. The existing coverage file and gate lines stay unc
   The freeze commit changes only the status line.
 - Decision 39: the freeze is pushed with the commits before it.
 - No run of Netty 4.1.0.CR7 was made before the freeze, on any machine.
+
+### 2026-10-30: H6 run and scored
+
+The H6 code was committed at 5170eeb and fixed after two Opus reviews (e90d147, then a7bb33e).
+a7bb33e was pushed with Alex's yes (decision 40) and is the measured commit. The lab ran it as
+chain A25 on the laptop's Arch. Both jobs exited 0. The archives' sha256 were checked here:
+- `p1-h6-functional-l.tar.gz`, fa7bf0215ded7ce7feca92617d22fe660fa6119f3e3c92029c564f264c96eb4a.
+  Its record `h6-functional-a7bb33e74-L-20261029t220132.json`, sha256
+  abc0db2e81648016489c22dcaadbee3951fa75f7dadfac4f3d0d4a83ea8fd236, is green: host
+  alex-laptop, lab job set, kernel 7.2.6-arch2-1, all four steps passed. So section 7 holds: the
+  native library of each jar loads on the laptop's Arch.
+- `p1-h6-l.tar.gz`, b5cf14fedb1e8cfef2fba9d79d3813e95cceca5b515ac9c96c99745fbde4130e. Its
+  `run.txt`: gate passed, host alex-laptop, the commit, the record above, both jars and the JDK
+  as pinned, 0 incomplete processes. All 40 processes are good at their first run, and every
+  `.err` file is empty. No resume, no void file.
+- The run took 2 h 9 min 37 s (22:04:15 to 00:13:52 UTC). Section 8's 3 h had no measured
+  basis; this is now the measured basis for a run of this shape.
+
+H6 was scored at a7bb33e, on a clean tree, after that commit was pushed:
+
+    python analysis/v2/h6.py --run <run>/out/h6 --records <functional>/out/functional
+        --out results/v2/h6.json
+
+- `<run>` and `<functional>` are the two archives' job folders. No refusal, no warning. All four
+  cells are complete, with 10 of 10 good processes each. A second scoring gave the same bytes.
+- `results/v2/h6.json`, sha256
+  23b6f62898e35673a8d92b76bdb0c1d7637763449dfdfcd2173ec92dba57b03b, is committed with this
+  entry byte for byte as made. Its summary line says that 2 of 2 F6 cells are rejected and no
+  cell is incomplete; it prints each p as an exact fraction.
+
+H6a holds (family F6, Holm, m = 2, alpha 0.025):
+- CR7 forced: T_med flags 150 of 150 trials. p = 0.95^150 = 4.56e-4, rejected at the first step
+  (0.0125).
+- Final forced: T_med flags 0 of 150 trials. p = 4.56e-4, rejected at the second step (0.025).
+- Section 5's diagnostics over all 6,300 forced posts: the hook read `wakenUp` 1 at every post on
+  both arms, as predicted; no task was pending when it ran; every latch was counted down in
+  time. On CR7, Y's delay after the hook returned has median 1.0013 s (range 1.0001 to
+  1.0045 s), as section 3 derives. On Final its median is 6.9 us, and its largest 61.6 us. X's
+  own delay has median 71 us on CR7 and 68 us on Final. Final's largest forced delay is 224 us.
+
+H6b (exploratory, no test). Every prediction holds:
+- T_med is blind on both natural arms: 0 of 150 trials each (exact 95% interval 0 to 0.0243).
+- Posts delayed by more than B / 2: 318 of 3,150 on CR7 (0.101; exact 95% interval 0.0906 to
+  0.1120); 0 of 3,150 on Final (one-sided upper 95% bound 9.5e-4). Final's largest natural delay
+  is 13.2 us.
+- T_count flags 71 of 150 CR7 trials (0.473; exact 95% interval 0.391 to 0.556; clustered 0.293
+  to 0.667) and 0 of 150 Final trials. The CR7 cell is overdispersed (index 6.33 against the
+  threshold 2.31).
+- CR7's hits by process, 0 to 9: 86, 71, 11, 29, 0, 22, 1, 26, 29, 43. Process 4 had none (its
+  largest delay is 0.21 ms). By trial index within the process, 0 to 14: 19, 23, 28, 33, 22, 23,
+  34, 29, 28, 9, 19, 19, 6, 10, 16. Every hit is listed in the JSON.
+- Realized gaps: median 150 ns on CR7 (largest 15.6 us), 131 ns on Final (largest 4.5 us).
+- No post passed the hard limit on either arm, so there is no lost wake. The largest delay of
+  the run is 1.0045 s (CR7 forced).
+
+Reported as sections 4 and 5 ask:
+- `EpollEventLoop::run` has no PrintCompilation line in any of the 20 CR7 processes. Each of them
+  has 45 to 60 `io.netty` compile lines, so the lines are read. So all CR7 data, forced and
+  natural, come from an interpreted loop. Nothing is excluded. A likely reason, derived from the
+  counts and not tested: each CR7 hit costs about 1 s, so the 10 s warm-up makes only 529 to
+  2,123 posts, against 3.44 to 3.83 million on Final.
+- Final natural: `run()` has OSR code at the first measured post in all 10 processes. In each,
+  that tier-4 code is made not entrant 10 to 12 ms after the first measured post (process 0:
+  10,214 and 10,226 ms). The two times come from different JVM clocks (RuntimeMXBean uptime
+  and PrintCompilation's stamp), and the posts carry no uptime, so whether this falls inside or
+  after the measured posts is not known.
+- Final forced: `run()` has no OSR code at the first measured post in any process. Its tier-4
+  OSR code is made not entrant at 10,211 to 10,216 ms, after the natural warm-up, at about the
+  time the hook's armed branch first runs (section 3 foresaw this). The first measured post is at
+  15,714 to 15,722 ms. A tier-3 OSR compile comes at about 291.8 s in each process. H6a does
+  not depend on it.
+- Warm-up (descriptive): every CR7 process made exactly 10 warm-up posts delayed by more than
+  B / 2. That is a ceiling set by the 10 s warm-up at about 1 s per hit, not a rate. No Final
+  process made any.
+- No GC fell in any measured trial of any process, and none was ambiguous. Timer slack is
+  50,000 ns on the loop and main threads of every process.
