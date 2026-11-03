@@ -433,7 +433,7 @@ def fixcost_figure(rows):
         draw_fix_panel(axes[0], rows, left_keys, left_ys, left_labels, left_x, [0.98, 0.99, 1.0, 1.01, 1.02], "%.2f")
         draw_fix_panel(axes[1], rows, right_keys, right_ys, right_labels, right_x, [0.0, 0.5, 1.0], "%.1f")
         axes[0].set_title(r"confirmatory (N = 1, 10, 100 %s)" % unit, loc="left", fontsize=7.5)
-        axes[1].set_title("N = 0, outside the confirmatory family", loc="right", fontsize=7.5)
+        axes[1].set_title("N = 0,\noutside the family", loc="left", fontsize=7.5)
         fig.text((FIX_LEFT + FIX_W - FIX_EDGE) / 2 / FIX_W, (FIX_FOOT - 0.34) / height,
                  "throughput ratio, fixed loop over absent wake", ha="center", va="top", fontsize=8)
         handles = [Line2D([], [], linestyle="none", marker="o", markersize=FIX_MARKER, color=BLUE),

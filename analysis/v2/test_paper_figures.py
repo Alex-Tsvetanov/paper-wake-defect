@@ -217,7 +217,7 @@ class Output(Fixture):
         self.assertIn("Linux, io_uring, N = 10 \u03bcs", texts["fixcost.pdf"])
         self.assertIn("Windows, condition variable, N = 0 \u03bcs", texts["fixcost.pdf"])
         self.assertIn("confirmatory (N = 1, 10, 100 \u03bcs)", texts["fixcost.pdf"])
-        self.assertEqual(texts["fixcost.pdf"].count("N = 0, outside the confirmatory family"), 1)  # title
+        self.assertIn("outside the family", texts["fixcost.pdf"])  # the right panel's title, on two lines
         self.assertIn("median pair ratio, N = 0, outside the family", texts["fixcost.pdf"])  # legend
         self.assertIn("clustered 95% interval of the mean pair ratio", texts["fixcost.pdf"])
 

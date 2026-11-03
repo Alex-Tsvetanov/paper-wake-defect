@@ -710,3 +710,6 @@ manuscript checker with no hit. The review's points on wording and disclosure ar
 suite's run on the release build at the campaign commit as the evidence for the functional verdicts,
 and no such run was archived; the evidence is the suite's runs under the four sanitizer builds of the
 same inputs, on the laptop, and the pack says so.
+- Later the same day: the right panel's title of `figures/fixcost.pdf` ran past the figure's edge; it
+  now takes two lines. No data or other figure changed. `figures/fixcost.pdf` is now
+  bed41f450dd4a1c8f579aa20e3ca79cb4d61f8f09ab317ba439a3db37804b2f8, the same from two runs.
