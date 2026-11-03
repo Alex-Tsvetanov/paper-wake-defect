@@ -1,0 +1,92 @@
+{
+ "laptop": {
+  "bios": "G513QM.331",
+  "cores": 8,
+  "cpu": "AMD Ryzen 7 5800H",
+  "logical_cpus": 16,
+  "model": "ASUS ROG Strix G513QM",
+  "read_on": "2026-10-22"
+ },
+ "linux": {
+  "bench_commit": "796b71fd8fd88ab57654bd27eafe6c4ea0d408d4",
+  "code_commit": "d9e0ef77a32f59d7afc57ec32ac1a59ad375adea",
+  "compiler": "Clang 22.1.8",
+  "kernel": "7.2.6-arch2-1",
+  "kernel_read_at": "2026-10-28T18:10:56+02:00"
+ },
+ "records": [
+  {
+   "code_commit": "d9e0ef77a32f59d7afc57ec32ac1a59ad375adea",
+   "commit": "c651e31d4cc15ef2ba947f9db3b27736a99a5ee9",
+   "compiler": "Clang 22.1.8",
+   "file": "wakeloop2-c651e31d4-L-asan-20261027t210947.json",
+   "sanitizer": "asan",
+   "sanitizer_reports": 0,
+   "sha256": "a057b50763df4ca9d66078e3df8cbd222f73d67ace2e6e644d5901a6f25c101e",
+   "smoke_failed": 0,
+   "smoke_ran": 129,
+   "system": "linux",
+   "tests_failed": 0,
+   "tests_total": 759
+  },
+  {
+   "code_commit": "d9e0ef77a32f59d7afc57ec32ac1a59ad375adea",
+   "commit": "c651e31d4cc15ef2ba947f9db3b27736a99a5ee9",
+   "compiler": "Clang 22.1.8",
+   "file": "wakeloop2-c651e31d4-L-msan-20261028t081116.json",
+   "sanitizer": "msan",
+   "sanitizer_reports": 0,
+   "sha256": "ca48e668d4bd2297253ef28cc961a814b00e2a6bea3f226d52aceb6424f7f48c",
+   "smoke_failed": 0,
+   "smoke_ran": 129,
+   "system": "linux",
+   "tests_failed": 0,
+   "tests_total": 759
+  },
+  {
+   "code_commit": "d9e0ef77a32f59d7afc57ec32ac1a59ad375adea",
+   "commit": "c651e31d4cc15ef2ba947f9db3b27736a99a5ee9",
+   "compiler": "Clang 22.1.8",
+   "file": "wakeloop2-c651e31d4-L-tsan-20261028t080114.json",
+   "sanitizer": "tsan",
+   "sanitizer_reports": 0,
+   "sha256": "b81aed41728f2f56ae1843ccaed884d615dc7d865d262bda1cb03f950dd3de4c",
+   "smoke_failed": 0,
+   "smoke_ran": 129,
+   "system": "linux",
+   "tests_failed": 0,
+   "tests_total": 759
+  },
+  {
+   "code_commit": "d9e0ef77a32f59d7afc57ec32ac1a59ad375adea",
+   "commit": "c651e31d4cc15ef2ba947f9db3b27736a99a5ee9",
+   "compiler": "MSVC 19.51.36248",
+   "file": "wakeloop2-c651e31d4-W-asan-20261027t212034.json",
+   "sanitizer": "asan",
+   "sanitizer_reports": 0,
+   "sha256": "54d3c5e4995fa4fe7ad64da5a14a96248c02a74c0e486a6c105d16e3f1faf26d",
+   "smoke_failed": 0,
+   "smoke_ran": 82,
+   "system": "windows",
+   "tests_failed": 0,
+   "tests_total": 487
+  }
+ ],
+ "sources": {
+  "build_log_linux": "397d76a7333bef76cc0872a9840830a695772bbf3bfbe983e2fd8983b58a9f15",
+  "build_log_windows": "343f45ed5b169a12a7b31ca49f3fa11ebbfc9d72b42a7aecedec77bd81072254",
+  "hypotheses": "b82d845d24188041fa0a52ea71363ce7476a38dff83cd50f9fbeeff0e84f8a88",
+  "kernel": "afe7bd9767fea75b7ab897f36a2c87332a4b51ba2a83b74398f40270abf198a8",
+  "wakeloop2-c651e31d4-L-asan-20261027t210947.json": "a057b50763df4ca9d66078e3df8cbd222f73d67ace2e6e644d5901a6f25c101e",
+  "wakeloop2-c651e31d4-L-msan-20261028t081116.json": "ca48e668d4bd2297253ef28cc961a814b00e2a6bea3f226d52aceb6424f7f48c",
+  "wakeloop2-c651e31d4-L-tsan-20261028t080114.json": "b81aed41728f2f56ae1843ccaed884d615dc7d865d262bda1cb03f950dd3de4c",
+  "wakeloop2-c651e31d4-W-asan-20261027t212034.json": "54d3c5e4995fa4fe7ad64da5a14a96248c02a74c0e486a6c105d16e3f1faf26d"
+ },
+ "windows": {
+  "bench_commit": "796b71fd8fd88ab57654bd27eafe6c4ea0d408d4",
+  "build": "26200.6584",
+  "build_read_on": "2026-10-22",
+  "code_commit": "d9e0ef77a32f59d7afc57ec32ac1a59ad375adea",
+  "compiler": "MSVC 19.51.36248.0"
+ }
+}
