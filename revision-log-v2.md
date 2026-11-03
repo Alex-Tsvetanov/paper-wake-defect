@@ -644,3 +644,50 @@ Reported as sections 4 and 5 ask:
   process made any.
 - No GC fell in any measured trial of any process, and none was ambiguous. Timer slack is
   50,000 ns on the loop and main threads of every process.
+
+### 2026-11-03: the paper's macros, tables and figures
+
+The paper pipeline (Alex, 2026-11-03) gives the writing pack to this session. Its numbers come from
+new generators under `analysis/v2/`, committed in 55e085d after every scoring; they score nothing
+again.
+- `paper_words.py` (wording, macro names, number formats), `paper_setup.py` (testbed facts from the
+  run records), `paper_macros.py` (every number as a TeX macro), `paper_tables.py` (table bodies),
+  `sweep_csv.py` (the phase sweep's posts, for the delay figure) and `paper_figures.py` (three
+  figures), with `test_paper.py` and `test_paper_figures.py`.
+- They read only committed outputs (`score.json`, `h5.json`, `h6.json`, `score-extra-w.json`,
+  `pilot-h4.json`) and, for constants, `tests/CMakeLists.txt`, `tests/wake_tests.cpp`,
+  `loop/include/wakeloop/defect.hpp` and `bench/wakeprobe.cpp`. `tests/`, `loop/` and
+  `bench/wakeprobe.cpp` are unchanged since the measured code commit d9e0ef7. `score.py`, `h5.py`,
+  `h6.py`, `pilot.py`, `readers.py` and `grid.py` are unchanged.
+- `results/v2/setup.json` comes from the Linux campaign job's `run.kernel.json` and `build.log`, the
+  Windows job's `build.log` (from `p1-campaign-l.tar.gz` and `p1-campaign-w.tar.gz`, extracted into
+  new folders after their sha256 matched the entry of 2026-10-29), the four D5 records of c651e31
+  (Linux ASan, TSan and MSan, Windows ASan) and the frozen testbed paragraph, which alone gives the
+  laptop, the BIOS and the Windows build. Each input's sha256 is in the file.
+- `results/v2/h3-sweep.csv` comes from the same two archives through the committed plans: 6,300
+  posts. Each sweep's median of |residual| / B_eff, recomputed from the rows, equals H3's value in
+  `score.json` exactly; the extractor refuses otherwise.
+- The A/A pilot ran at c651e31, which differs from 796b71f only in the run plans, `pilot-h4.json`,
+  `.gitattributes` and this log; the macro `PilotCommit` names it.
+- One reading rule is the generator's, not the frozen file's: an N = 0 prediction holds when
+  `score.py`'s median position (below 0.98, within the margins, above 1.02) is the predicted one. By
+  it, 3 of the 4 predictions hold; IOCP's (below 0.98) does not, at 0.9955.
+- An Opus review found 2 HIGH issues: rates at two places printed 299 of 300 as 1.00, and the plain
+  wake's range macros included N = 0 while the fixed loop's did not. It also found 5 MEDIUM: the
+  delay-model table showed the cells' B_eff, not the sweep's own; the name of the underpowered count
+  read as confirmatory; macro values were not checked; the extra run's and the pilot's commits were
+  not checked; tests could not catch swapped values. All were fixed before 55e085d: rates use three
+  places, and a share strictly between 0 and 1 never prints as either; the N = 0 and confirmatory
+  ranges are separate macros; the table shows both B_eff; values must be integers or safe TeX; the
+  extra run's commit is checked and the pilot's named; tests compare a regeneration with the
+  committed outputs byte for byte. Its LOW items were fixed too, or are stated in the modules.
+- A render of every macro, table body and figure passes `lab/bin/check_manuscript_terms.py` with no
+  hit. 49 tests of the new modules pass.
+- Outputs (sha256): `results/v2/macros.tex`
+  afca5a0e5d177f30cecec3b1203e839bc73ec9684f88624e871c3a0475873145; `results/v2/setup.json`
+  048b656b594c8373f30a4ee57870d62c85c39323c593b3501e14ab84a7bda489; `results/v2/h3-sweep.csv`
+  d6a0ca9cf482041e6842fda4054c7aae0eff88825c29f5126b35c2e5ffbac3c8; `figures/sawtooth.pdf`
+  55a0b9c33723327ff3afaa03ea80799551e7d621c92ff90a1eacae1cfca1d0ca; `figures/detection.pdf`
+  0b5074cc20ac74045ea75b99532f91696b4d4b849945b1f05e93cc2472280fc0; `figures/fixcost.pdf`
+  cc174ae639fae3f3f9249e32dbc28a06587053b0673f57e63329f8daf17f6036; the nine table bodies under
+  `results/v2/tables/` as committed.
