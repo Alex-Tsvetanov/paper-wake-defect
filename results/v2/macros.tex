@@ -45,6 +45,7 @@
 % ---- the undrained edge's budget and the batch round (defect.hpp, wakeprobe.cpp)
 \newcommand{\BatchPassTasks}{64}  % tasks a worker runs per pass under the undrained edge
 \newcommand{\BatchTasks}{192}  % tasks posted behind the gate in one batch round
+\newcommand{\HardLimitSeconds}{10}  % a unit not delivered within it is lost
 % ---- design constants of the fix's cost (grid.py)
 \newcommand{\FixMarginLow}{0.98}
 \newcommand{\FixMarginHigh}{1.02}
@@ -111,7 +112,16 @@
 \newcommand{\LazyMostHits}{85}
 \newcommand{\LazyMostHitsUnits}{6{,}300}
 \newcommand{\LazyMostHitsCell}{Windows, IOCP, lazy-wake race, widened, single posts, 2 workers, $B = 10$~ms}
-\newcommand{\LazyZeroUpper}{\ensuremath{4.75 \times 10^{-4}}}  % one-sided 95% upper bound with no hit in a cell
+\newcommand{\LazyZeroUpper}{\ensuremath{4.75 \times 10^{-4}}}  % one-sided 95% upper bound with no hit in a complete cell
+\newcommand{\LazyNaturalCells}{40}
+\newcommand{\LazyNaturalCellsWithHits}{4}
+\newcommand{\LazyNaturalMostHits}{2}
+\newcommand{\LazyWideCells}{40}
+\newcommand{\LazyWideCellsWithHits}{28}
+\newcommand{\LazyWideMostHits}{85}
+\newcommand{\CorrectOverHalfUnits}{8}
+\newcommand{\CorrectOverHalfCells}{7}
+\newcommand{\CorrectOverHalfMost}{2}
 % ---- runs, processes and lost units
 \newcommand{\ProcessesPlannedLinux}{2{,}328}
 \newcommand{\ProcessesGoodLinux}{2{,}328}
@@ -123,6 +133,24 @@
 \newcommand{\CellsScored}{316}
 \newcommand{\CellsOverdispersed}{0}  % cells overdispersed in the test or the tail statistic
 \newcommand{\CellsMixedFlags}{8}  % cells whose test flagged some but not all trials
+\newcommand{\CellsDispersionDefined}{8}  % cells where the test's dispersion index is defined (some but not all trials flagged)
+% ---- realized gaps of single posts, as multiples of B
+\newcommand{\GapLinuxOneMsMin}{0.11}
+\newcommand{\GapLinuxOneMsMax}{3.85}
+\newcommand{\GapLinuxOneMsMedianLow}{1.58}
+\newcommand{\GapLinuxOneMsMedianHigh}{1.73}
+\newcommand{\GapLinuxTenMsMin}{0.10}
+\newcommand{\GapLinuxTenMsMax}{3.12}
+\newcommand{\GapLinuxTenMsMedianLow}{1.60}
+\newcommand{\GapLinuxTenMsMedianHigh}{1.61}
+\newcommand{\GapWindowsOneMsMin}{0.23}
+\newcommand{\GapWindowsOneMsMax}{4.98}
+\newcommand{\GapWindowsOneMsMedianLow}{2.03}
+\newcommand{\GapWindowsOneMsMedianHigh}{2.41}
+\newcommand{\GapWindowsTenMsMin}{0.12}
+\newcommand{\GapWindowsTenMsMax}{3.17}
+\newcommand{\GapWindowsTenMsMedianLow}{1.62}
+\newcommand{\GapWindowsTenMsMedianHigh}{1.64}
 % ---- the effective bound B_eff per backend, system and bound (ms)
 \newcommand{\BeffLinuxCondvarOneMs}{1.007}
 \newcommand{\BeffLinuxCondvarTenMs}{10.313}
@@ -294,6 +322,11 @@
 \newcommand{\PlainRatioHighest}{1.0001}  % N = 1, 10, 100 us only
 \newcommand{\PlainZeroRatioLowest}{0.1147}  % N = 0 only
 \newcommand{\PlainZeroRatioHighest}{1.0037}  % N = 0 only
+\newcommand{\PlainZeroRatioLinuxCondvarNZero}{1.0037}
+\newcommand{\PlainZeroRatioLinuxEpollNZero}{0.3951}
+\newcommand{\PlainZeroRatioLinuxIoUringNZero}{0.1147}
+\newcommand{\PlainZeroRatioWindowsCondvarNZero}{1.0027}
+\newcommand{\PlainZeroRatioWindowsIocpNZero}{0.9600}
 % ---- the A/A pilot that set each comparison's pairs
 \newcommand{\PilotCommit}{\texttt{c651e31}}  % the pilot's commit; no code differs from the measured one
 \newcommand{\PilotCells}{20}

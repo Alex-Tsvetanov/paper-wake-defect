@@ -691,3 +691,22 @@ again.
   0b5074cc20ac74045ea75b99532f91696b4d4b849945b1f05e93cc2472280fc0; `figures/fixcost.pdf`
   cc174ae639fae3f3f9249e32dbc28a06587053b0673f57e63329f8daf17f6036; the nine table bodies under
   `results/v2/tables/` as committed.
+
+### 2026-11-03: macros added after the review of the writing pack
+
+An Opus review of the writing pack against the frozen files and the results (4 HIGH, 11 MEDIUM, no
+CRITICAL; every macro value it checked matched) asked for numbers the pack had no macro for. Added
+to `paper_macros.py`, read from the same inputs: the hard limit (`kHardLimit` in
+`bench/wakeprobe.cpp`); plain wake's ratio per cell at N = 0; the lazy-wake cells with posts above
+B_eff / 2, split into the natural and the widened race, and the same count in the correct loops'
+cells as their background; the realized gaps of single posts per system and bound; the number of
+cells whose dispersion index is defined. The functional table's column words no longer spell a count.
+No value already in the macros changed. `results/v2/macros.tex` is now
+24d226bd633a22f893c8b204caae8b7b1c870e65857cc93b2ed326409014cb47 (435 macros) and
+`results/v2/tables/functional.tex`
+6a9352a97c935b2cde90bcf89e0e44a486f9b4ac5897f02f6e2c29aa5ca2abfa. The render passes the
+manuscript checker with no hit. The review's points on wording and disclosure are fixed in the pack
+(in the Papers repository), not here. One finding is recorded here: the design named the test
+suite's run on the release build at the campaign commit as the evidence for the functional verdicts,
+and no such run was archived; the evidence is the suite's runs under the four sanitizer builds of the
+same inputs, on the laptop, and the pack says so.

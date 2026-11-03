@@ -48,7 +48,7 @@ VERDICT_WORDS = {"D": "caught", "P": "passes", "A": "either"}
 DETECTORS = ("detect_blocking_single", "detect_blocking_burst", "detect_blocking_producers",
              "detect_self_post_blocking", "detect_blocking_sequence", "detect_batch_blocking",
              "detect_lazy_forced", "detect_latency21", "detect_latency_batch", "detect_latency_forced")
-DETECTOR_WORDS = ("one post", "a burst of posts", "four producers", "a task posts a task", "posts in sequence",
+DETECTOR_WORDS = ("one post", "a burst of posts", "several producers", "a task posts a task", "posts in sequence",
                   "posts behind a gate", "forced park interleaving", "the test: 21 posts",
                   "the test: batch rounds", "the test: forced interleavings")
 H5_SETTING_WORDS = {"timer=1ms": "1~ms timer period", "timer=default": "default timer period",

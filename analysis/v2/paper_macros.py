@@ -285,7 +285,34 @@ def blind_spots(m, s):
     m.add("LazyMostHits", top["over_half_b_eff"])
     m.add("LazyMostHitsUnits", pw.thousands(top["units"]))
     m.add("LazyMostHitsCell", pw.cell_words(top["cell"]))
-    m.add("LazyZeroUpper", pw.sci(zero_upper.pop(), 3), "one-sided 95% upper bound with no hit in a cell")
+    m.add("LazyZeroUpper", pw.sci(zero_upper.pop(), 3), "one-sided 95% upper bound with no hit in a complete cell")
+    for tag, variant in (("LazyNatural", "lazy_wake_race"), ("LazyWide", "lazy_wake_wide")):
+        rows = [c for c in lazy if pw.cell_parts(c["cell"])["variant"] == variant]
+        m.add(tag + "Cells", len(rows))
+        m.add(tag + "CellsWithHits", sum(1 for c in rows if c["over_half_b_eff"]))
+        m.add(tag + "MostHits", max(c["over_half_b_eff"] for c in rows))
+    # The background: units above B_eff / 2 in the correct loops' cells (the false-positive family).
+    correct = [s["cells"][k] for k in s["H2"]["tests"]]
+    m.add("CorrectOverHalfUnits", sum(c["units_over_half_b_eff"] for c in correct))
+    m.add("CorrectOverHalfCells", sum(1 for c in correct if c["units_over_half_b_eff"]))
+    m.add("CorrectOverHalfMost", max(c["units_over_half_b_eff"] for c in correct))
+
+
+def realized_gaps(m, s):
+    """Section 8: gaps as realized, over B, for the single-post cells of each system and bound."""
+    m.section("realized gaps of single posts, as multiples of B")
+    for system in grid.SYSTEMS:
+        for bound_us in grid.BOUNDS_US:
+            gaps = [c["realized_gap_over_b"] for k, c in s["cells"].items()
+                    if pw.cell_parts(k)["system"] == system and pw.cell_parts(k)["protocol"] == "S"
+                    and pw.cell_parts(k)["bound_us"] == bound_us]
+            need(gaps and all(g and None not in (g.get("min"), g.get("median"), g.get("max")) for g in gaps),
+                 "%s %s: a single-post cell without realized gaps" % (system, bound_us))
+            tag = "Gap" + system_key(system) + pw.bound_key(bound_us)
+            m.add(tag + "Min", pw.fixed(min(g["min"] for g in gaps), 2))
+            m.add(tag + "Max", pw.fixed(max(g["max"] for g in gaps), 2))
+            m.add(tag + "MedianLow", pw.fixed(min(g["median"] for g in gaps), 2))
+            m.add(tag + "MedianHigh", pw.fixed(max(g["median"] for g in gaps), 2))
 
 
 def runs(m, s, setup):
@@ -310,6 +337,8 @@ def runs(m, s, setup):
           "cells overdispersed in the test or the tail statistic")
     m.add("CellsMixedFlags", sum(1 for c in cells if 0 < c["t_med"]["flags"] < c["t_med"]["trials"]),
           "cells whose test flagged some but not all trials")
+    m.add("CellsDispersionDefined", sum(1 for c in cells if c["t_med"].get("overdispersion", {}).get("defined")),
+          "cells where the test's dispersion index is defined (some but not all trials flagged)")
 
 
 def beff(m, s):
@@ -430,6 +459,8 @@ def fix_cost(m, s):
     m.add("PlainRatioHighest", pw.fixed(max(r["median_ratio"] for r in plain_conf), 4), "N = 1, 10, 100 us only")
     m.add("PlainZeroRatioLowest", pw.fixed(min(r["median_ratio"] for r in plain_zero), 4), "N = 0 only")
     m.add("PlainZeroRatioHighest", pw.fixed(max(r["median_ratio"] for r in plain_zero), 4), "N = 0 only")
+    for r in plain_zero:
+        m.add(h4_name("PlainZeroRatio", r["key"]), pw.fixed(r["median_ratio"], 4))
 
 
 def pilot(m, p, setup):
@@ -491,6 +522,7 @@ def prior(m, h5, setup):
 
 DETECTOR_BOUND = re.compile(r"// (D5|D9|D10):.*?constexpr auto kBound = (\d+)ms;", re.S)
 UNDRAINED_BUDGET = re.compile(r"inline constexpr unsigned kUndrainedBudget = (\d+);")
+HARD_LIMIT = re.compile(r"constexpr auto kHardLimit = std::chrono::seconds\((\d+)\);")
 BATCH_TASKS = re.compile(r"constexpr int kBatchTasks = (\d+) \* static_cast<int>\(wakeloop::kUndrainedBudget\);")
 
 
@@ -512,6 +544,9 @@ def batch(m, defect_text, wakeprobe_text):
     need(len(budget) == 1 and len(times) == 1, "defect.hpp or wakeprobe.cpp: no single budget or batch size")
     m.add("BatchPassTasks", int(budget[0]), "tasks a worker runs per pass under the undrained edge")
     m.add("BatchTasks", int(times[0]) * int(budget[0]), "tasks posted behind the gate in one batch round")
+    limit = HARD_LIMIT.findall(wakeprobe_text)
+    need(len(limit) == 1, "wakeprobe.cpp: no single kHardLimit")
+    m.add("HardLimitSeconds", int(limit[0]), "a unit not delivered within it is lost")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -694,6 +729,7 @@ def build(inputs, sources):
     replications(m, s)
     blind_spots(m, s)
     runs(m, s, setup)
+    realized_gaps(m, s)
     beff(m, s)
     incomplete(m, s, inputs["extra"], setup)
     delay_model(m, s)
