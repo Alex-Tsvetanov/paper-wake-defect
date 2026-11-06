@@ -50,7 +50,7 @@ def copy(obj):
 def committed_inputs():
     return {n: load(f) for n, f in (("score", "score.json"), ("h5", "h5.json"), ("h6", "h6.json"),
                                     ("extra", "score-extra-w.json"), ("pilot", "pilot-h4.json"),
-                                    ("setup", "setup.json"))}
+                                    ("setup", "setup.json"), ("raw", "raw-facts.json"))}
 
 
 def committed_sources():
@@ -204,11 +204,12 @@ class Macros(unittest.TestCase):
         m.add("Gamma", r"io\_uring")
 
     @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "pilot-h4.json",
-                                         "setup.json", "macros.tex"), "committed results not present")
+                                         "setup.json", "raw-facts.json", "h3-sweep.csv", "macros.tex"),
+                         "committed results not present")
     def test_the_committed_results(self):
         inputs = committed_inputs()
         sources = committed_sources()
-        text = paper_macros.build(inputs, sources)
+        text = paper_macros.build(inputs, sources, committed_sweep())
         with open(os.path.join(RESULTS, "macros.tex"), encoding="utf-8", newline="") as f:
             self.assertEqual(text, f.read(), "results/v2/macros.tex is not what the generator makes now")
         names = re.findall(r"\\newcommand\{\\([A-Za-z]+)\}", text)
@@ -219,17 +220,18 @@ class Macros(unittest.TestCase):
             self.assertIsNone(FORBIDDEN.search(v), v)
         for line in ("\\newcommand{\\PowerCells}{102}", "\\newcommand{\\NettyForcedBuggyFlags}{150}",
                      "\\newcommand{\\DetectorBoundMs}{200}", "\\newcommand{\\BatchTasks}{192}",
-                     "\\newcommand{\\PowerLowestRate}{0.990}"):
+                     "\\newcommand{\\PowerLowestRate}{0.990}", "\\newcommand{\\SemanticsTests}{12}",
+                     "\\newcommand{\\BatchTimedWaits}{2}", "\\newcommand{\\LazyTailMostFlags}{77}"):
             self.assertIn(line, text)
 
     @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "pilot-h4.json",
-                                         "setup.json"), "committed results not present")
+                                         "setup.json", "raw-facts.json", "h3-sweep.csv"), "committed results not present")
     def test_refusals_on_the_committed_results(self):
-        inputs, sources = committed_inputs(), committed_sources()
+        inputs, sources, sweep = committed_inputs(), committed_sources(), committed_sweep()
 
-        def refused(**changed):
+        def refused(sweep_rows=None, **changed):
             with self.assertRaises(paper_macros.Refusal):
-                paper_macros.build(dict(inputs, **changed), sources)
+                paper_macros.build(dict(inputs, **changed), sources, sweep if sweep_rows is None else sweep_rows)
 
         refused(h6=dict(inputs["h6"], draft=True))
         bad = copy(inputs["score"])
@@ -253,6 +255,29 @@ class Macros(unittest.TestCase):
         h6 = copy(inputs["h6"])
         h6["cells"]["cr7-forced"]["diagnostics"]["wakenup_at_hook"] = {"0": 1, "1": 3149}
         refused(h6=h6)
+        raw = copy(inputs["raw"])
+        key = sorted(k for k, v in raw["processes"].items() if v["family"] == "F1")[0]
+        raw["processes"][key]["flags"][0] -= 1
+        refused(raw=raw)
+        raw = copy(inputs["raw"])
+        raw["prior_bound"] = raw["prior_bound"][1:]
+        refused(raw=raw)
+        first = (sweep[0]["system"], sweep[0]["backend"], sweep[0]["bound_us"])
+        moved = [dict(r, residual_ns=str(3 * int(r["residual_ns"])))
+                 if (r["system"], r["backend"], r["bound_us"]) == first else r for r in sweep]
+        refused(sweep_rows=moved)
+        whole = [dict(r) for r in sweep]
+        whole[0]["phase_target"] = "1.00"
+        refused(sweep_rows=whole)
+
+    def test_a_semantics_constant_not_found_is_refused(self):
+        with open(CMAKE, encoding="utf-8") as f:
+            cmake = f.read()
+        with open(WAKE_TESTS, encoding="utf-8") as f:
+            tests = f.read()
+        paper_macros.semantics(paper_macros.Macros(), cmake, tests)
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.semantics(paper_macros.Macros(), cmake, tests.replace("// S10:", "// S10 gone:"))
 
     def test_the_detectors_must_share_one_bound(self):
         text = ("// D5: a\nconstexpr auto kBound = 200ms;\n// D9: b\nconstexpr auto kBound = 200ms;\n"
@@ -280,13 +305,13 @@ class Tables(unittest.TestCase):
         with self.assertRaises(paper_tables.Refusal):
             paper_tables.body(["a", "b"], [["only one"]])
 
-    @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "h3-sweep.csv"),
-                         "committed results not present")
+    @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "h3-sweep.csv",
+                                         "raw-facts.json"), "committed results not present")
     def test_the_committed_results(self):
         inputs = {"score": load("score.json"), "h5": load("h5.json"), "h6": load("h6.json"),
-                  "extra": load("score-extra-w.json")}
+                  "extra": load("score-extra-w.json"), "raw": load("raw-facts.json")}
         tables = paper_tables.build(inputs, self.cmake(), committed_sweep())
-        self.assertEqual(len(tables), 9)
+        self.assertEqual(len(tables), 14)
         for name, text in tables.items():
             with open(os.path.join(RESULTS, "tables", name + ".tex"), encoding="utf-8", newline="") as f:
                 self.assertEqual(text, f.read(), "results/v2/tables/%s.tex is not what the generator makes" % name)

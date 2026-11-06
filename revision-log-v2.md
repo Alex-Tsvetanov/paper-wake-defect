@@ -713,3 +713,48 @@ same inputs, on the laptop, and the pack says so.
 - Later the same day: the right panel's title of `figures/fixcost.pdf` ran past the figure's edge; it
   now takes two lines. No data or other figure changed. `figures/fixcost.pdf` is now
   bed41f450dd4a1c8f579aa20e3ca79cb4d61f8f09ab317ba439a3db37804b2f8, the same from two runs.
+
+### 2026-11-07: macros and table bodies for the writer's fact requests
+
+The paper's writer asked for numbers the generated outputs did not hold. Added, and nothing that
+existed changed: the first 435 macro lines of `results/v2/macros.tex` and the nine table bodies
+committed at 141c4a5 are byte for byte as before. No scorer changed: `score.py`, `h5.py`,
+`readers.py`, `grid.py`, `plan.py` and the code under `bench/`, `loop/` and `tests/` are as they
+were, and `score.json` and `h5.json` were not regenerated.
+- `analysis/v2/raw_facts.py` (new) reads the raw outputs with `score.py`'s and `h5.py`'s own
+  functions, unchanged, and writes `results/v2/raw-facts.json`: per good process of each power and
+  false-positive cell, its trials flagged by the test (score_process against the cell's B_eff from
+  `score.json`); the median round delay of the undrained-edge batch cells; and the correct arm's
+  median delay per bound of the prior study's bound sweep (h5.py's read path with the records gate,
+  2026-09's bound_sweep_tables). Every sum is checked against `score.json` and every group's
+  smallest, largest and ratio against `h5.json`, or nothing is written. Inputs: the campaign and
+  H5 archives, each verified against its .sha256 before use: `p1-campaign-l.tar.gz`
+  239784122130b3bf6f855849faad1a55f3eeb139d3b8d3665037a828aa1e331a, `p1-campaign-w.tar.gz`
+  9048d6ab407b635edc28020f3e25243cd866ad3577404b2ddfa772f64ecceedc, `p1-h5-l.tar.gz`
+  ad8ddab9d7ffc1c7a2c3e6963f4b2aeaf96fa49e799e47eff326c1e6c1b0b6d1, `p1-h5-w.tar.gz`
+  ff8971fe63317de23b475b4d56d023d05ca0150e311259b1c7e0e86c20552bd5; plans `plans/plan-*.jsonl`.
+- `paper_macros.py` takes `--raw` and `--sweep` and adds 154 macros: interval ends over the power
+  and false-positive cells and over the incomplete blind cells; process-level counts; the tail
+  statistic per trial in the lazy-wake cells and the lazy-wake cells with no post over B_eff / 2 by
+  backend and system; the phase sweep's median |residual| / B_eff per period of the phase target
+  (from `h3-sweep.csv`, each pooled median checked against H3); the semantics tests' count and
+  constants (`tests/CMakeLists.txt`, `tests/wake_tests.cpp`); the constants of wakeprobe's
+  calibrate(); the passes and full bounded waits of a batch round under undrained edge
+  (`defect.hpp`, `wakeprobe.cpp`) with the measured round delay over B_eff; the prior study's
+  correct-arm median per bound.
+- `paper_tables.py` takes `--raw` and adds five bodies: the exact and the clustered 95% interval of
+  each detection cell, for single posts and batch rounds, in the rows and columns of the rate
+  tables; and the process-level counts per power and false-positive cell.
+- A disclosed observation, not explained here: the undrained-edge rounds took a median of about two
+  B_eff on Linux, as the code predicts (two full bounded waits per round), and somewhat less on
+  Windows.
+- Outputs (sha256): `results/v2/macros.tex` (589 macros)
+  5721c4b6ea39d69f88b331715dda9e69a58a93ac4ce2d085d0130cf4bf7d97fe; `results/v2/raw-facts.json`
+  5306e84ca5d2ca5189647115c80505f769bc78c78260bfade3af2cb1ade3b66f; new table bodies
+  `detection-single-exact.tex` a942a9a37eebec2adcec807e57df05cf91992675b7e101010435bd42572d431b,
+  `detection-batch-exact.tex` 14d15c42ba3cdb5cbefa4c534889a63ebb8ded4123eb2424ab9e634c6a7f25e6,
+  `detection-single-clustered.tex` f39b2fa4aa30999934dc4834e2ac3c6fb759de5314abeea6cbdfeb2ccff085a1,
+  `detection-batch-clustered.tex` bde5d3b83aba067e3fd1ad496ff3198f95c245684acb6213d4b3275a27b524c6,
+  `process-counts.tex` 06f090ea4895035fe18b4fea72eb0c91b73953aed5768d25f5fe973157b34b38. Two
+  regenerations give the same bytes. A render of every macro and the new bodies passes
+  `lab/bin/check_manuscript_terms.py --paper p1` with no hit. All tests under `analysis/v2` pass.

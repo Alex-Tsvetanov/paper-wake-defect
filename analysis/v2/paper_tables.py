@@ -1,7 +1,8 @@
 """The paper's table bodies, generated from the scored results and the functional tests' verdict table.
 
   python paper_tables.py --score score.json --h5 h5.json --h6 h6.json --extra score-extra-w.json
-                         --verdicts tests/CMakeLists.txt --sweep h3-sweep.csv --out-dir DIR
+                         --raw raw-facts.json --verdicts tests/CMakeLists.txt --sweep h3-sweep.csv
+                         --out-dir DIR
 
 Each table is one file DIR/<name>.tex holding only the rows of a tabular (the manuscript writes the
 tabular, its header and its caption), preceded by comment lines that name its columns. Wording is
@@ -23,6 +24,13 @@ paper_words'; numbers are formatted as in paper_macros.py. Nothing is measured o
   prior-bound        the prior study's bound-independence check measured again, per group
   netty              the historical case: the four cells
   incomplete         the incomplete cells and what the disclosed extra run gave
+  detection-single-exact, detection-batch-exact
+                     the rows and columns of detection-single and detection-batch, each entry the
+                     two-sided exact 95% interval of the flag rate ("inc." for an incomplete cell)
+  detection-single-clustered, detection-batch-clustered
+                     the same with the clustered 95% interval
+  process-counts     per power and false-positive cell: its good processes, those whose trials all
+                     flag and those with no trial flagged (raw_facts.py's per-process counts)
 """
 
 import os
@@ -223,6 +231,48 @@ def incomplete(score, extra):
                  "trials flagged in the extra run"], rows)
 
 
+def detection_intervals(score, protocol, kind):
+    """The same rows and columns as detection(), each entry the cell's exact or clustered 95% interval
+    of the test's flag rate, four places."""
+    by = {}
+    for key, c in score["cells"].items():
+        p = pw.cell_parts(key)
+        if p["protocol"] == protocol:
+            by[(p["variant"], p["workers"], p["system"], p["backend"], p["bound_us"])] = c
+    rows = []
+    for variant in pw.VARIANT_ORDER:
+        for workers in sorted({k[1] for k in by if k[0] == variant}):
+            cells = []
+            for system, backend, bound in column_keys():
+                c = by.get((variant, workers, system, backend, bound))
+                if c is None:
+                    cells.append("")
+                elif not c["complete"]:
+                    cells.append("inc.")
+                else:
+                    lo, hi = c["t_med"][kind]
+                    cells.append("%s to %s" % (pw.rate_text(lo, 4), pw.rate_text(hi, 4)))
+            label = "%s, %d worker%s" % (pw.VARIANT_WORDS[variant], workers, "" if workers == 1 else "s")
+            rows.append([label] + cells)
+    return body(["variant and workers"] + column_words(), rows)
+
+
+def process_counts(score, raw):
+    """Per power and false-positive cell: good processes, those whose trials all flag, those with none
+    flagged (raw_facts.py)."""
+    rows = []
+    for fam, word in (("H1", "power"), ("H2", "false positive")):
+        for key in sorted(score[fam]["tests"]):
+            p = raw["processes"][key]
+            if sum(p["flags"]) != score["cells"][key]["t_med"]["flags"]:
+                raise Refusal("%s: raw facts and score.json differ" % key)
+            allf = sum(1 for f, t in zip(p["flags"], p["trials"]) if t and f == t)
+            none = sum(1 for f in p["flags"] if f == 0)
+            rows.append([word, pw.cell_words(key), len(p["flags"]), allf, none])
+    return body(["family", "cell", "good processes", "processes whose trials all flag",
+                 "processes with no trial flagged"], rows)
+
+
 def build(inputs, cmake_text, sweep_rows):
     for name, data in inputs.items():
         if data.get("draft"):
@@ -231,17 +281,22 @@ def build(inputs, cmake_text, sweep_rows):
     return {"detection-single": detection(s, "S"), "detection-batch": detection(s, "Bt"),
             "functional": functional(cmake_text), "delay-model": delay_model(s, sweep_rows), "fixcost": fixcost(s),
             "prior-delay": prior_delay(inputs["h5"]), "prior-bound": prior_bound(inputs["h5"]),
-            "netty": netty(inputs["h6"]), "incomplete": incomplete(s, inputs["extra"])}
+            "netty": netty(inputs["h6"]), "incomplete": incomplete(s, inputs["extra"]),
+            "detection-single-exact": detection_intervals(s, "S", "exact_95"),
+            "detection-batch-exact": detection_intervals(s, "Bt", "exact_95"),
+            "detection-single-clustered": detection_intervals(s, "S", "clustered_95"),
+            "detection-batch-clustered": detection_intervals(s, "Bt", "clustered_95"),
+            "process-counts": process_counts(s, inputs["raw"])}
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    for name in ("score", "h5", "h6", "extra", "verdicts", "sweep"):
+    for name in ("score", "h5", "h6", "extra", "raw", "verdicts", "sweep"):
         ap.add_argument("--" + name, required=True)
     ap.add_argument("--out-dir", required=True)
     args = ap.parse_args(argv)
     inputs = {}
-    for name in ("score", "h5", "h6", "extra"):
+    for name in ("score", "h5", "h6", "extra", "raw"):
         with open(getattr(args, name), encoding="utf-8") as f:
             inputs[name] = json.load(f)
     with open(args.verdicts, encoding="utf-8") as f:

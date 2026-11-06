@@ -456,3 +456,165 @@
 \newcommand{\SmokeShapesWindows}{82}
 \newcommand{\RecordsWindows}{1}
 \newcommand{\SanitizerReports}{0}
+% ---- interval ends over the power and false-positive cells
+\newcommand{\PowerLowestExactLower}{0.9711}  % complete power cells
+\newcommand{\PowerLowestClusteredLower}{0.9800}  % complete power cells
+\newcommand{\FalseHighestExactUpper}{0.0122}
+\newcommand{\FalseHighestClusteredUpper}{0.0000}
+\newcommand{\BlindIncompleteHighestUpper}{0.014}  % the largest upper end of a two-sided exact 95% interval, incomplete blind cells only
+% ---- process-level counts of the power and false-positive cells (raw_facts.py)
+\newcommand{\PowerProcessesGood}{1{,}019}
+\newcommand{\PowerProcessesAllFlagged}{1{,}009}
+\newcommand{\PowerProcessesNoneFlagged}{0}
+\newcommand{\PowerCellsEveryProcessAllFlagged}{94}
+\newcommand{\PowerCellsEveryProcessNoneFlagged}{0}
+\newcommand{\PowerProcessesAllFlaggedFewest}{7}  % the fewest in one cell
+\newcommand{\PowerProcessesNoneFlaggedFewest}{0}  % the fewest in one cell
+\newcommand{\PowerProcessesMixedMost}{3}  % the most processes in one cell with some but not all trials flagged
+\newcommand{\FalseProcessesGood}{800}
+\newcommand{\FalseProcessesAllFlagged}{0}
+\newcommand{\FalseProcessesNoneFlagged}{800}
+\newcommand{\FalseCellsEveryProcessAllFlagged}{0}
+\newcommand{\FalseCellsEveryProcessNoneFlagged}{80}
+\newcommand{\FalseProcessesAllFlaggedFewest}{0}  % the fewest in one cell
+\newcommand{\FalseProcessesNoneFlaggedFewest}{10}  % the fewest in one cell
+\newcommand{\FalseProcessesMixedMost}{0}  % the most processes in one cell with some but not all trials flagged
+% ---- the lazy-wake cells: the tail statistic per trial, and the cells with no post over B_eff / 2
+\newcommand{\LazyTestFlaggedCells}{0}  % lazy-wake cells in which the test flagged any trial
+\newcommand{\LazyTailFlaggedCells}{32}
+\newcommand{\LazyNaturalTailFlaggedCells}{4}
+\newcommand{\LazyWideTailFlaggedCells}{28}
+\newcommand{\LazyTailMostFlags}{77}
+\newcommand{\LazyTailMostFlagsTrials}{300}
+\newcommand{\LazyTailMostFlagsCell}{Windows, IOCP, lazy-wake race, widened, single posts, 2 workers, $B = 10$~ms}
+\newcommand{\LazyTailLinuxMostFlags}{18}
+\newcommand{\LazyTailLinuxMostFlagsCell}{Linux, condition variable, lazy-wake race, widened, single posts, 2 workers, $B = 1$~ms}
+\newcommand{\LazyTailWindowsMostFlags}{77}
+\newcommand{\LazyTailWindowsMostFlagsCell}{Windows, IOCP, lazy-wake race, widened, single posts, 2 workers, $B = 10$~ms}
+\newcommand{\LazyZeroCells}{48}  % lazy-wake cells with no post (round) over B_eff / 2
+\newcommand{\LazyZeroIncomplete}{1}  % of them incomplete; LazyZeroUpper does not apply to these
+\newcommand{\LazyCellsLinuxEpoll}{16}
+\newcommand{\LazyNaturalCellsLinuxEpoll}{8}
+\newcommand{\LazyNaturalZeroLinuxEpoll}{6}
+\newcommand{\LazyWideCellsLinuxEpoll}{8}
+\newcommand{\LazyWideZeroLinuxEpoll}{3}
+\newcommand{\LazyCellsLinuxIoUring}{16}
+\newcommand{\LazyNaturalCellsLinuxIoUring}{8}
+\newcommand{\LazyNaturalZeroLinuxIoUring}{7}
+\newcommand{\LazyWideCellsLinuxIoUring}{8}
+\newcommand{\LazyWideZeroLinuxIoUring}{2}
+\newcommand{\LazyCellsLinuxCondvar}{16}
+\newcommand{\LazyNaturalCellsLinuxCondvar}{8}
+\newcommand{\LazyNaturalZeroLinuxCondvar}{8}
+\newcommand{\LazyWideCellsLinuxCondvar}{8}
+\newcommand{\LazyWideZeroLinuxCondvar}{2}
+\newcommand{\LazyCellsWindowsIocp}{16}
+\newcommand{\LazyNaturalCellsWindowsIocp}{8}
+\newcommand{\LazyNaturalZeroWindowsIocp}{8}
+\newcommand{\LazyWideCellsWindowsIocp}{8}
+\newcommand{\LazyWideZeroWindowsIocp}{2}
+\newcommand{\LazyCellsWindowsCondvar}{16}
+\newcommand{\LazyNaturalCellsWindowsCondvar}{8}
+\newcommand{\LazyNaturalZeroWindowsCondvar}{7}
+\newcommand{\LazyWideCellsWindowsCondvar}{8}
+\newcommand{\LazyWideZeroWindowsCondvar}{3}
+% ---- the phase sweep by period of the phase target (h3-sweep.csv)
+\newcommand{\DelayPeriodBelowLinuxEpollOneMs}{0.0003}
+\newcommand{\DelayPeriodBelowPostsLinuxEpollOneMs}{210}
+\newcommand{\DelayPeriodSecondLinuxEpollOneMs}{0.0016}
+\newcommand{\DelayPeriodSecondPostsLinuxEpollOneMs}{210}
+\newcommand{\DelayPeriodThirdLinuxEpollOneMs}{0.0035}
+\newcommand{\DelayPeriodThirdPostsLinuxEpollOneMs}{210}
+\newcommand{\DelayPeriodBelowLinuxEpollTenMs}{0.0033}
+\newcommand{\DelayPeriodBelowPostsLinuxEpollTenMs}{210}
+\newcommand{\DelayPeriodSecondLinuxEpollTenMs}{0.0063}
+\newcommand{\DelayPeriodSecondPostsLinuxEpollTenMs}{210}
+\newcommand{\DelayPeriodThirdLinuxEpollTenMs}{0.0075}
+\newcommand{\DelayPeriodThirdPostsLinuxEpollTenMs}{210}
+\newcommand{\DelayPeriodBelowLinuxIoUringOneMs}{0.0003}
+\newcommand{\DelayPeriodBelowPostsLinuxIoUringOneMs}{210}
+\newcommand{\DelayPeriodSecondLinuxIoUringOneMs}{0.0017}
+\newcommand{\DelayPeriodSecondPostsLinuxIoUringOneMs}{210}
+\newcommand{\DelayPeriodThirdLinuxIoUringOneMs}{0.0026}
+\newcommand{\DelayPeriodThirdPostsLinuxIoUringOneMs}{210}
+\newcommand{\DelayPeriodBelowLinuxIoUringTenMs}{0.0026}
+\newcommand{\DelayPeriodBelowPostsLinuxIoUringTenMs}{210}
+\newcommand{\DelayPeriodSecondLinuxIoUringTenMs}{0.0063}
+\newcommand{\DelayPeriodSecondPostsLinuxIoUringTenMs}{210}
+\newcommand{\DelayPeriodThirdLinuxIoUringTenMs}{0.0074}
+\newcommand{\DelayPeriodThirdPostsLinuxIoUringTenMs}{210}
+\newcommand{\DelayPeriodBelowLinuxCondvarOneMs}{0.0003}
+\newcommand{\DelayPeriodBelowPostsLinuxCondvarOneMs}{210}
+\newcommand{\DelayPeriodSecondLinuxCondvarOneMs}{0.0015}
+\newcommand{\DelayPeriodSecondPostsLinuxCondvarOneMs}{210}
+\newcommand{\DelayPeriodThirdLinuxCondvarOneMs}{0.0022}
+\newcommand{\DelayPeriodThirdPostsLinuxCondvarOneMs}{210}
+\newcommand{\DelayPeriodBelowLinuxCondvarTenMs}{0.0025}
+\newcommand{\DelayPeriodBelowPostsLinuxCondvarTenMs}{210}
+\newcommand{\DelayPeriodSecondLinuxCondvarTenMs}{0.0046}
+\newcommand{\DelayPeriodSecondPostsLinuxCondvarTenMs}{210}
+\newcommand{\DelayPeriodThirdLinuxCondvarTenMs}{0.0074}
+\newcommand{\DelayPeriodThirdPostsLinuxCondvarTenMs}{210}
+\newcommand{\DelayPeriodBelowWindowsIocpOneMs}{0.0119}
+\newcommand{\DelayPeriodBelowPostsWindowsIocpOneMs}{210}
+\newcommand{\DelayPeriodSecondWindowsIocpOneMs}{0.0150}
+\newcommand{\DelayPeriodSecondPostsWindowsIocpOneMs}{210}
+\newcommand{\DelayPeriodThirdWindowsIocpOneMs}{0.0128}
+\newcommand{\DelayPeriodThirdPostsWindowsIocpOneMs}{210}
+\newcommand{\DelayPeriodBelowWindowsIocpTenMs}{0.0047}
+\newcommand{\DelayPeriodBelowPostsWindowsIocpTenMs}{210}
+\newcommand{\DelayPeriodSecondWindowsIocpTenMs}{0.0067}
+\newcommand{\DelayPeriodSecondPostsWindowsIocpTenMs}{210}
+\newcommand{\DelayPeriodThirdWindowsIocpTenMs}{0.0084}
+\newcommand{\DelayPeriodThirdPostsWindowsIocpTenMs}{210}
+\newcommand{\DelayPeriodBelowWindowsCondvarOneMs}{0.0114}
+\newcommand{\DelayPeriodBelowPostsWindowsCondvarOneMs}{210}
+\newcommand{\DelayPeriodSecondWindowsCondvarOneMs}{0.0154}
+\newcommand{\DelayPeriodSecondPostsWindowsCondvarOneMs}{210}
+\newcommand{\DelayPeriodThirdWindowsCondvarOneMs}{0.0154}
+\newcommand{\DelayPeriodThirdPostsWindowsCondvarOneMs}{210}
+\newcommand{\DelayPeriodBelowWindowsCondvarTenMs}{0.0069}
+\newcommand{\DelayPeriodBelowPostsWindowsCondvarTenMs}{210}
+\newcommand{\DelayPeriodSecondWindowsCondvarTenMs}{0.0088}
+\newcommand{\DelayPeriodSecondPostsWindowsCondvarTenMs}{210}
+\newcommand{\DelayPeriodThirdWindowsCondvarTenMs}{0.0087}
+\newcommand{\DelayPeriodThirdPostsWindowsCondvarTenMs}{210}
+% ---- the loop's semantics tests (tests/CMakeLists.txt, tests/wake_tests.cpp)
+\newcommand{\SemanticsTests}{12}
+\newcommand{\SemanticsBoundMs}{5}
+\newcommand{\SemanticsOrderPosts}{1{,}000}
+\newcommand{\SemanticsStallSeconds}{5}
+\newcommand{\SemanticsProducers}{4}
+\newcommand{\SemanticsPostsPerProducer}{10{,}000}
+\newcommand{\SemanticsIdleBoundMs}{10}
+\newcommand{\SemanticsDelayBoundMs}{20}
+% ---- one process's calibrated B_eff (bench/wakeprobe.cpp, calibrate)
+\newcommand{\CalibrationGapDivisor}{10}  % each calibration post is sent B / CalibrationGapDivisor after a delivery
+\newcommand{\CalibrationDropDivisor}{2}  % an interval below the first median / CalibrationDropDivisor is dropped
+\newcommand{\CalibrationFloorDivisor}{2}  % an interval below B / CalibrationFloorDivisor is dropped
+% ---- a batch round under the undrained edge (defect.hpp, wakeprobe.cpp, raw_facts.py)
+\newcommand{\BatchPassesPerRound}{3}  % passes of BatchPassTasks tasks that run one round's tasks
+\newcommand{\BatchTimedWaits}{2}  % of them, the passes reached only after a full bounded wait
+\newcommand{\UndrainedRoundOverBeffLinuxLow}{2.00}
+\newcommand{\UndrainedRoundOverBeffLinuxHigh}{2.01}
+\newcommand{\UndrainedRoundCellsLinux}{6}
+\newcommand{\UndrainedRoundOverBeffWindowsLow}{1.81}
+\newcommand{\UndrainedRoundOverBeffWindowsHigh}{1.87}
+\newcommand{\UndrainedRoundCellsWindows}{4}
+% ---- the prior study's bound sweep: the correct loop's median delay per bound, us (raw_facts.py)
+\newcommand{\PriorMedianLinuxEpollSlackOneNsBlocking}{35.8}
+\newcommand{\PriorMedianLinuxEpollSlackOneNsOneMs}{6.4}
+\newcommand{\PriorMedianLinuxEpollSlackOneNsTenMs}{36.3}
+\newcommand{\PriorMedianLinuxEpollSlackOneNsHundredMs}{36.0}
+\newcommand{\PriorMedianLinuxIoUringSlackOneNsBlocking}{35.3}
+\newcommand{\PriorMedianLinuxIoUringSlackOneNsOneMs}{6.1}
+\newcommand{\PriorMedianLinuxIoUringSlackOneNsTenMs}{35.4}
+\newcommand{\PriorMedianLinuxIoUringSlackOneNsHundredMs}{36.0}
+\newcommand{\PriorMedianWindowsIocpTimerOneMsBlocking}{42.5}
+\newcommand{\PriorMedianWindowsIocpTimerOneMsOneMs}{9.1}
+\newcommand{\PriorMedianWindowsIocpTimerOneMsTenMs}{35.4}
+\newcommand{\PriorMedianWindowsIocpTimerOneMsHundredMs}{36.2}
+\newcommand{\PriorMedianWindowsIocpTimerDefaultBlocking}{58.7}
+\newcommand{\PriorMedianWindowsIocpTimerDefaultOneMs}{48.7}
+\newcommand{\PriorMedianWindowsIocpTimerDefaultTenMs}{50.8}
+\newcommand{\PriorMedianWindowsIocpTimerDefaultHundredMs}{59.9}

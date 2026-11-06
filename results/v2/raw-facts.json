@@ -1,0 +1,5293 @@
+{
+ "draft": false,
+ "generated_by": "analysis/v2/raw_facts.py",
+ "prior_bound": [
+  {
+   "arm": "fixed",
+   "backend": "epoll",
+   "median_us": 35.755,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 0
+  },
+  {
+   "arm": "fixed",
+   "backend": "epoll",
+   "median_us": 6.399,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 1000
+  },
+  {
+   "arm": "fixed",
+   "backend": "epoll",
+   "median_us": 36.338,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 10000
+  },
+  {
+   "arm": "fixed",
+   "backend": "epoll",
+   "median_us": 36.001,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 100000
+  },
+  {
+   "arm": "fixed",
+   "backend": "io_uring",
+   "median_us": 35.297,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 0
+  },
+  {
+   "arm": "fixed",
+   "backend": "io_uring",
+   "median_us": 6.146,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 1000
+  },
+  {
+   "arm": "fixed",
+   "backend": "io_uring",
+   "median_us": 35.439,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 10000
+  },
+  {
+   "arm": "fixed",
+   "backend": "io_uring",
+   "median_us": 36.007,
+   "system": "linux",
+   "variant": "slack=1ns",
+   "wait_us": 100000
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 42.5,
+   "system": "windows",
+   "variant": "timer=1ms",
+   "wait_us": 0
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 9.1,
+   "system": "windows",
+   "variant": "timer=1ms",
+   "wait_us": 1000
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 35.4,
+   "system": "windows",
+   "variant": "timer=1ms",
+   "wait_us": 10000
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 36.2,
+   "system": "windows",
+   "variant": "timer=1ms",
+   "wait_us": 100000
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 58.7,
+   "system": "windows",
+   "variant": "timer=default",
+   "wait_us": 0
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 48.7,
+   "system": "windows",
+   "variant": "timer=default",
+   "wait_us": 1000
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 50.8,
+   "system": "windows",
+   "variant": "timer=default",
+   "wait_us": 10000
+  },
+  {
+   "arm": "fixed",
+   "backend": "iocp",
+   "median_us": 59.9,
+   "system": "windows",
+   "variant": "timer=default",
+   "wait_us": 100000
+  }
+ ],
+ "processes": {
+  "linux:Bt-condvar-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-condvar-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-condvar-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-condvar-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-condvar-undrained_edge-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-condvar-undrained_edge-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-epoll-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-epoll-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-epoll-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-epoll-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-epoll-undrained_edge-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-epoll-undrained_edge-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-io_uring-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-io_uring-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-io_uring-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-io_uring-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-io_uring-undrained_edge-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:Bt-io_uring-undrained_edge-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-absent_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-absent_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-absent_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-absent_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    29,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-absent_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-absent_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-none-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-none-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-none-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-none-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-plain_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-plain_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-plain_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-plain_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-unobserved_primitive-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-unobserved_primitive-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-unobserved_primitive-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-unobserved_primitive-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-unobserved_primitive-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-unobserved_primitive-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-wrong_worker-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-wrong_worker-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-wrong_worker-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-condvar-wrong_worker-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    29,
+    29,
+    29,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-absent_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-absent_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-absent_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-absent_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    29,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-absent_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-absent_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-no_retrigger-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-no_retrigger-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-no_retrigger-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-no_retrigger-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-no_retrigger-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-no_retrigger-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    29,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-none-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-none-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-none-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-none-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-plain_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-plain_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-plain_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-plain_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-unobserved_primitive-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-unobserved_primitive-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-unobserved_primitive-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-unobserved_primitive-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-unobserved_primitive-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    29,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-unobserved_primitive-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-wrong_worker-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-wrong_worker-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    29,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-wrong_worker-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-epoll-wrong_worker-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-absent_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-absent_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-absent_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-absent_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-absent_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-absent_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-no_retrigger-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-no_retrigger-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-no_retrigger-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-no_retrigger-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    29,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-no_retrigger-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-no_retrigger-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-none-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-none-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-none-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-none-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-plain_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-plain_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-plain_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-plain_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-unobserved_primitive-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-unobserved_primitive-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-unobserved_primitive-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-unobserved_primitive-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-unobserved_primitive-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-unobserved_primitive-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-wrong_worker-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-wrong_worker-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-wrong_worker-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "linux:S-io_uring-wrong_worker-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    29,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-condvar-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-condvar-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-condvar-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-condvar-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-condvar-undrained_edge-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-condvar-undrained_edge-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-iocp-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-iocp-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-iocp-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-iocp-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-iocp-undrained_edge-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:Bt-iocp-undrained_edge-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-absent_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-absent_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-absent_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-absent_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-absent_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-absent_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-none-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-none-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-none-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-none-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-plain_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-plain_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-plain_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-plain_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-unobserved_primitive-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-unobserved_primitive-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-unobserved_primitive-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-unobserved_primitive-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-unobserved_primitive-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-unobserved_primitive-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-wrong_worker-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-wrong_worker-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-wrong_worker-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-condvar-wrong_worker-W4-B1ms": {
+   "complete": false,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-absent_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-absent_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-absent_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-absent_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-absent_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-absent_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-none-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-none-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-none-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-none-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-none-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-none-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-plain_wake-W1-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-plain_wake-W1-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-plain_wake-W2-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-plain_wake-W2-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-plain_wake-W4-B10ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-plain_wake-W4-B1ms": {
+   "complete": true,
+   "family": "F2",
+   "flags": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-unobserved_primitive-W1-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-unobserved_primitive-W1-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-unobserved_primitive-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-unobserved_primitive-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-unobserved_primitive-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-unobserved_primitive-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-wrong_worker-W2-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-wrong_worker-W2-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-wrong_worker-W4-B10ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  },
+  "windows:S-iocp-wrong_worker-W4-B1ms": {
+   "complete": true,
+   "family": "F1",
+   "flags": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "trials": [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+   ]
+  }
+ },
+ "processes_per_cell": 10,
+ "undrained_rounds": {
+  "linux:Bt-condvar-undrained_edge-W1-B10ms": {
+   "b_eff_ns": 10313052.0,
+   "complete": true,
+   "median_delay_ns": 20621394.0,
+   "rounds": 6300
+  },
+  "linux:Bt-condvar-undrained_edge-W1-B1ms": {
+   "b_eff_ns": 1007312.5,
+   "complete": true,
+   "median_delay_ns": 2024329.0,
+   "rounds": 6300
+  },
+  "linux:Bt-epoll-undrained_edge-W1-B10ms": {
+   "b_eff_ns": 10324181.5,
+   "complete": true,
+   "median_delay_ns": 20639237.0,
+   "rounds": 6300
+  },
+  "linux:Bt-epoll-undrained_edge-W1-B1ms": {
+   "b_eff_ns": 1007815.5,
+   "complete": true,
+   "median_delay_ns": 2025497.0,
+   "rounds": 6300
+  },
+  "linux:Bt-io_uring-undrained_edge-W1-B10ms": {
+   "b_eff_ns": 10315753.5,
+   "complete": true,
+   "median_delay_ns": 20619933.0,
+   "rounds": 6300
+  },
+  "linux:Bt-io_uring-undrained_edge-W1-B1ms": {
+   "b_eff_ns": 1006809.0,
+   "complete": true,
+   "median_delay_ns": 2022965.0,
+   "rounds": 6300
+  },
+  "windows:Bt-condvar-undrained_edge-W1-B10ms": {
+   "b_eff_ns": 16179700.0,
+   "complete": true,
+   "median_delay_ns": 29312600.0,
+   "rounds": 6300
+  },
+  "windows:Bt-condvar-undrained_edge-W1-B1ms": {
+   "b_eff_ns": 16044200.0,
+   "complete": true,
+   "median_delay_ns": 29948100.0,
+   "rounds": 6300
+  },
+  "windows:Bt-iocp-undrained_edge-W1-B10ms": {
+   "b_eff_ns": 16151150.0,
+   "complete": true,
+   "median_delay_ns": 29216000.0,
+   "rounds": 6300
+  },
+  "windows:Bt-iocp-undrained_edge-W1-B1ms": {
+   "b_eff_ns": 16076650.0,
+   "complete": true,
+   "median_delay_ns": 29819700.0,
+   "rounds": 6300
+  }
+ }
+}
