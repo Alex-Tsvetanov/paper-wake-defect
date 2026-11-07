@@ -467,6 +467,41 @@ class Macros(unittest.TestCase):
         with self.assertRaises(paper_macros.Refusal):
             paper_macros.median_intervals(bad["score"], bad["raw"])
 
+    @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "pilot-h4.json",
+                                         "setup.json", "raw-facts.json", "h3-sweep.csv"), "committed results not present")
+    def test_round_ten_on_the_committed_results(self):
+        inputs = committed_inputs()
+        text = paper_macros.build(inputs, committed_sources(), committed_sweep())
+        val = dict(re.findall(r"\\newcommand\{\\([A-Za-z]+)\}\{([^}]*)\}", text))
+        # Request 39: the largest holding row of the delay-model table, by a second route from its body.
+        body = paper_tables.prior_delay(inputs["h5"])
+        rows = [r.rstrip(" \\").split(" & ") for r in body.splitlines() if not r.startswith("%")]
+        self.assertEqual(val["PriorDelayWorstHolding"], max((r[4] for r in rows if r[5] == "holds"), key=float))
+        self.assertEqual(val["PriorDelayWorstPassingCriterion"], "fails")
+        self.assertGreater(float(val["PriorDelayWorstPassing"]), float(val["PriorDelayWorstHolding"]))
+        # Request 41: each table's group counts sum to its rows; the varied bodies hold the rest.
+        n = lambda name: int(val[name])  # noqa: E731
+        tables = paper_tables.build(dict((k, inputs[k]) for k in ("score", "h5", "h6", "extra", "raw")),
+                                    open(CMAKE, encoding="utf-8").read(),
+                                    committed_sweep())
+        body_rows = lambda name: [x for x in tables[name].splitlines() if not x.startswith("%")]  # noqa: E731
+        for name, full, varied in (("ClusteredSingle", None, "detection-single-clustered-varied"),
+                                   ("ClusteredBatch", None, "detection-batch-clustered-varied"),
+                                   ("ProcessFlags", "process-flags", "process-flags-varied")):
+            parts = {sk: sum(n(name + gk + sk) for _w, gk in paper_macros.UNIFORM_GROUPS)
+                     for _s, sk in paper_macros.UNIFORM_STATES}
+            self.assertEqual(sum(parts.values()), n(name + "Cells"))
+            self.assertEqual(len(body_rows(varied)), parts["Varied"] + parts["Incomplete"])
+            if full:
+                self.assertEqual(len(body_rows(full)), n(name + "Cells"))
+        self.assertEqual(n("ClusteredSingleCells") + n("ClusteredBatchCells"), n("ProcessFlagsCells"))
+        bad = copy(inputs)
+        key = next(k for k, c in bad["score"]["cells"].items()
+                   if c["complete"] and c["t_med"]["clustered_95"] == [1.0, 1.0])
+        bad["score"]["cells"][key]["t_med"]["clustered_95"] = [0.99, 1.0]
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.uniform_groups(paper_macros.Macros(), bad["score"], bad["raw"])
+
     def test_sawtooth_counts_on_a_small_sweep(self):
         rows = []
         for system, backend in pw.COLUMNS:
@@ -526,7 +561,7 @@ class Tables(unittest.TestCase):
         inputs = {"score": load("score.json"), "h5": load("h5.json"), "h6": load("h6.json"),
                   "extra": load("score-extra-w.json"), "raw": load("raw-facts.json")}
         tables = paper_tables.build(inputs, self.cmake(), committed_sweep())
-        self.assertEqual(len(tables), 25)
+        self.assertEqual(len(tables), 28)
         for name, text in tables.items():
             with open(os.path.join(RESULTS, "tables", name + ".tex"), encoding="utf-8", newline="") as f:
                 self.assertEqual(text, f.read(), "results/v2/tables/%s.tex is not what the generator makes" % name)

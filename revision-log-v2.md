@@ -1000,3 +1000,51 @@ other divisor or threshold.
   dc1b4590af0a5e6df83894377a5ff69e63ba2f8dd8ade5455fb3d25c2758c59b, `idle-bound.tex`
   9391f0d8e871a796faabe1f6ae1c20b7477c69443d6583940752c2f7dd902497. Two regenerations, each from
   the archives, give the same bytes. All 437 tests under `analysis/v2` pass.
+
+### 2026-11-07: macros and table bodies for the writer's round 10 requests (39 and 41)
+
+The writer asked two things of the stored data, no run. Request 39: whether `PriorDelayWorstPassing`
+in the text and the largest value of the delay-model table that holds are the same quantity. Request
+41 (decision d013, option F): the counts of the uniform cells, by group, of the clustered-interval
+tables and the process-flag table, as macros, so that the other cells are printed in full and the
+uniform ones as one line per group. Added, and nothing that existed changed in value: the first 862
+macros of `results/v2/macros.tex` are byte for byte its whole earlier text (sha256
+98f0105364d8fb63db6ca5d6329c526a1cc7d3a11d42bd7acaa9788a9bf98515), and every earlier table body and
+figure is as before. No scorer changed: `score.py`, `h5.py`, `h6.py`, `readers.py`, `grid.py`,
+`plan.py`, `stats.py`, `raw_facts.py` and the code under `bench/`, `loop/` and `tests/` are as they
+were, and no JSON result was regenerated. The inputs are the committed results, whose sha256 match
+the earlier entries: `score.json` ecb624940338508ee7ced13b1243ecd137eaed273c17d85e7b6a8aaae9b51242,
+`raw-facts.json` b541701c7630f73c90fdca6dcde8ff67327f88e216601e7fe89bf60af37258dd, `h5.json`
+022b41bf7f7168a22315f471d3bf586669d27ffd0320a7c1cbbdb88e5debf9dd (unchanged since 9d0d942). Only the
+paper generators under `analysis/v2` changed. All of it is descriptive and outside the families.
+- Request 39, read from `h5.json`: the two are different quantities. `PriorDelayWorstPassing` is the
+  largest median |residual| / B_eff over the cells that pass one by one (17 of 18). The table gives
+  per configuration the largest value of its cells. The largest passing cell is the Windows matrix
+  cell at the 1 ms timer period and B = 1 ms, whose configuration fails because its gap-sweep cell
+  fails (`h5.py`: a configuration fails when any of its cells fails). `paper_macros.py` adds 6
+  macros: `PriorDelayWorstHolding` (the largest table value among the configurations that hold,
+  computed as `paper_tables.prior_delay` computes the table) and that cell's system, timer setting,
+  bound, design and the criterion of its configuration.
+- Request 41: a cell's state is all (every good process flags every trial), none (no good process
+  flags any), varied or incomplete. It is read twice from stored values, from the clustered interval
+  in `score.json` (all when it is the single point 1, none when it is the single point 0) and from the
+  per-process flags of `raw-facts.json`; the two must agree on every cell, every uniform cell must
+  have 10 good processes of 30 trials, and each table's counts must sum to its cells, or nothing is
+  written. Groups are the process-flag table's: power, false positive, predicted blind spot; every
+  scored cell is in exactly one. `paper_macros.py` adds 39 macros: per table (`ClusteredSingle`,
+  `ClusteredBatch`, `ProcessFlags`) its cells and per group the four counts. `paper_tables.py` adds
+  three bodies with the cells that are varied or incomplete: `detection-single-clustered-varied.tex`
+  and `detection-batch-clustered-varied.tex` (group, cell, clustered interval or "inc.") and
+  `process-flags-varied.tex` (the rows of `process-flags.tex` for those cells).
+- `test_paper.py` adds one test (request 39 by a second route from the table body; each table's
+  counts against its full and varied bodies; a refusal when the clustered interval and the process
+  flags disagree) and expects 28 bodies.
+- Outputs (sha256): `results/v2/macros.tex` (907 macros)
+  de24c9887807942820ec795eb36eda61338bf867e52aaee5da36b63096aaf789;
+  `detection-single-clustered-varied.tex`
+  b8a7479678b6077f20eca3f0e83eb8b37ee52234da3b78f763667fcbd0307a4c,
+  `detection-batch-clustered-varied.tex`
+  20b5086074e883fff3e5528e06067cc08960f347a207787d46c56ce154b575f4, `process-flags-varied.tex`
+  98d8706d704b2ef60c6365e42cf1b7079ac8412d026bbaf7d6df06dd60a70ea7. Two regenerations give the same
+  bytes. A render of the new macros and the three new bodies passes
+  `lab/bin/check_manuscript_terms.py --paper p1` with no hit. All 438 tests under `analysis/v2` pass.

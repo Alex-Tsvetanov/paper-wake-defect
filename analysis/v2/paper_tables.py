@@ -70,6 +70,15 @@ paper_words'; numbers are formatted as in paper_macros.py. Nothing is measured o
                      cells' trials and their T_med and T_count flags with the frozen B_eff and with
                      the fixed loop's idle value of the added bound run (raw_facts.py's
                      idle_bound_flags), and the cells whose counts differ; descriptive, no test
+  detection-single-clustered-varied, detection-batch-clustered-varied
+                     added 2026-11-07 (round 10, request 41, decision d013 option F): the cells of
+                     detection-single-clustered and detection-batch-clustered that are not uniform
+                     (their processes do not all flag every trial or all flag none) or are
+                     incomplete, one row each with its group and interval; the uniform cells are
+                     counted by group in paper_macros' ClusteredSingle and ClusteredBatch macros
+  process-flags-varied
+                     added 2026-11-07 (round 10, request 41): the rows of process-flags for the same
+                     cells; the uniform cells are counted by group in the ProcessFlags macros
 """
 
 import os
@@ -99,9 +108,8 @@ DETECTORS = ("detect_blocking_single", "detect_blocking_burst", "detect_blocking
 DETECTOR_WORDS = ("one post", "a burst of posts", "several producers", "a task posts a task", "posts in sequence",
                   "posts behind a gate", "forced park interleaving", "the test: 21 posts",
                   "the test: batch rounds", "the test: forced interleavings")
-H5_SETTING_WORDS = {"timer=1ms": "1~ms timer period", "timer=default": "default timer period",
-                    "slack=1ns": "1~ns timer slack", "slack=default": "default timer slack"}
-VERDICT_OF_CRITERION = {"pass": "holds", "fail": "fails"}
+H5_SETTING_WORDS = pm.H5_SETTING_WORDS
+VERDICT_OF_CRITERION = pm.VERDICT_OF_CRITERION
 
 
 class Refusal(Exception):
@@ -413,12 +421,15 @@ def appendix_cells(score):
     return out + [("blind spot", k) for k in blind]
 
 
-def process_flags(score, raw):
+def process_flags(score, raw, keep=None):
     """Process-level appendix: per power, false-positive and blind-spot cell, each good process's
-    flagged trials, smallest first (raw_facts.py's trial_medians, the sum checked against score.json)."""
+    flagged trials, smallest first (raw_facts.py's trial_medians, the sum checked against score.json).
+    keep, when given, is the set of cell keys to print (process-flags-varied)."""
     rows = []
     n = grid.PROCESSES_PER_CELL
     for word, key in appendix_cells(score):
+        if keep is not None and key not in keep:
+            continue
         t, c = raw["trial_medians"][key], score["cells"][key]
         procs = t["processes"]
         if len(procs) != c["processes_good"] or len(procs) > n:
@@ -433,6 +444,30 @@ def process_flags(score, raw):
                     + flags + [""] * (n - len(flags)))
     return body(["group", "cell", "complete", "trials of each process", "good processes"]
                 + ["flagged trials of process %d (smallest first)" % (i + 1) for i in range(n)], rows)
+
+
+def varied_cells(score, raw):
+    """Round 10, request 41: the appendix cells that are not uniform (paper_macros.uniform_states: the
+    processes do not all flag every trial or all flag none) or are incomplete."""
+    return {k for k, (_w, state) in pm.uniform_states(score, raw).items() if state in ("varied", "incomplete")}
+
+
+def clustered_varied(score, raw, protocol):
+    """Round 10, request 41: the cells of detection-<protocol>-clustered that are not uniform or are
+    incomplete, one row each: group, cell, clustered 95% interval ("inc." for an incomplete cell)."""
+    keep = varied_cells(score, raw)
+    rows = []
+    for word, key in appendix_cells(score):
+        c = score["cells"][key]
+        if key not in keep or c["protocol"] != protocol:
+            continue
+        if c["complete"]:
+            lo, hi = c["t_med"]["clustered_95"]
+            interval = "%s to %s" % (pw.rate_text(lo, 4), pw.rate_text(hi, 4))
+        else:
+            interval = "inc."
+        rows.append([word, pw.cell_words(key), interval])
+    return body(["group", "cell", "clustered 95% interval of the flag rate"], rows)
 
 
 def blind_trial_medians(score, raw):
@@ -581,7 +616,10 @@ def build(inputs, cmake_text, sweep_rows):
             "throughput-processes": throughput_processes(s, inputs["raw"]),
             "fixcost-median": fixcost_median(s, inputs["raw"]),
             "divisor-recount": divisor_recount(s, inputs["raw"]),
-            "idle-bound": idle_bound(s, inputs["raw"])}
+            "idle-bound": idle_bound(s, inputs["raw"]),
+            "detection-single-clustered-varied": clustered_varied(s, inputs["raw"], "S"),
+            "detection-batch-clustered-varied": clustered_varied(s, inputs["raw"], "Bt"),
+            "process-flags-varied": process_flags(s, inputs["raw"], varied_cells(s, inputs["raw"]))}
 
 
 def main(argv=None):

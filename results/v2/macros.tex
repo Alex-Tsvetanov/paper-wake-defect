@@ -907,3 +907,50 @@
 \newcommand{\IdleBoundWindowsCondvarTenMs}{15.685}  % the fixed loop's idle value used, ms
 \newcommand{\IdleBoundWindowsIocpOneMs}{15.686}  % the fixed loop's idle value used, ms
 \newcommand{\IdleBoundWindowsIocpTenMs}{15.682}  % the fixed loop's idle value used, ms
+% ---- the delay-model check: largest value per configuration that holds, and the largest passing cell (round 10, request 39)
+\newcommand{\PriorDelayWorstHolding}{0.0213}  % largest per-configuration value among the configurations whose criterion holds
+\newcommand{\PriorDelayWorstPassingSystem}{Windows}  % the cell of PriorDelayWorstPassing
+\newcommand{\PriorDelayWorstPassingSetting}{1~ms timer period}
+\newcommand{\PriorDelayWorstPassingBoundMs}{1}
+\newcommand{\PriorDelayWorstPassingDesign}{matrix}
+\newcommand{\PriorDelayWorstPassingCriterion}{fails}  % the criterion of that cell's configuration
+% ---- uniform cells by group in the clustered-interval and process-flag tables (round 10, request 41, layout)
+\newcommand{\ClusteredSingleCells}{242}  % cells of the table
+\newcommand{\ClusteredSinglePowerAll}{83}
+\newcommand{\ClusteredSinglePowerNone}{0}
+\newcommand{\ClusteredSinglePowerVaried}{8}
+\newcommand{\ClusteredSinglePowerIncomplete}{1}
+\newcommand{\ClusteredSingleFalseAll}{0}
+\newcommand{\ClusteredSingleFalseNone}{60}
+\newcommand{\ClusteredSingleFalseVaried}{0}
+\newcommand{\ClusteredSingleFalseIncomplete}{0}
+\newcommand{\ClusteredSingleBlindAll}{0}
+\newcommand{\ClusteredSingleBlindNone}{89}
+\newcommand{\ClusteredSingleBlindVaried}{0}
+\newcommand{\ClusteredSingleBlindIncomplete}{1}
+\newcommand{\ClusteredBatchCells}{74}  % cells of the table
+\newcommand{\ClusteredBatchPowerAll}{10}
+\newcommand{\ClusteredBatchPowerNone}{0}
+\newcommand{\ClusteredBatchPowerVaried}{0}
+\newcommand{\ClusteredBatchPowerIncomplete}{0}
+\newcommand{\ClusteredBatchFalseAll}{0}
+\newcommand{\ClusteredBatchFalseNone}{20}
+\newcommand{\ClusteredBatchFalseVaried}{0}
+\newcommand{\ClusteredBatchFalseIncomplete}{0}
+\newcommand{\ClusteredBatchBlindAll}{0}
+\newcommand{\ClusteredBatchBlindNone}{42}
+\newcommand{\ClusteredBatchBlindVaried}{0}
+\newcommand{\ClusteredBatchBlindIncomplete}{2}
+\newcommand{\ProcessFlagsCells}{316}  % cells of the table
+\newcommand{\ProcessFlagsPowerAll}{93}
+\newcommand{\ProcessFlagsPowerNone}{0}
+\newcommand{\ProcessFlagsPowerVaried}{8}
+\newcommand{\ProcessFlagsPowerIncomplete}{1}
+\newcommand{\ProcessFlagsFalseAll}{0}
+\newcommand{\ProcessFlagsFalseNone}{80}
+\newcommand{\ProcessFlagsFalseVaried}{0}
+\newcommand{\ProcessFlagsFalseIncomplete}{0}
+\newcommand{\ProcessFlagsBlindAll}{0}
+\newcommand{\ProcessFlagsBlindNone}{131}
+\newcommand{\ProcessFlagsBlindVaried}{0}
+\newcommand{\ProcessFlagsBlindIncomplete}{3}

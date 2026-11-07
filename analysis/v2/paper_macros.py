@@ -1512,6 +1512,120 @@ def idle_bound(m, s, raw):
               pw.ms(b_idle, 3), "the fixed loop's idle value used, ms")
 
 
+PRIOR_DESIGN_WORDS = {"matrix": "matrix", "gap-sweep": "gap sweep"}
+
+
+def prior_delay_holding(m, h5):
+    """Round 10, request 39: the table of the delay-model check gives, per configuration, the largest
+    median |residual| / B_eff of its cells (paper_tables.prior_delay). PriorDelayWorstPassing is the
+    largest over the single cells that pass, which need not sit in a configuration that holds. These
+    macros name that cell and give the largest table value among the configurations that hold."""
+    m.section("the delay-model check: largest value per configuration that holds, and the largest passing cell (round 10, request 39)")
+    worst = {}
+    for c in h5["delay_model"]["cells"]:
+        key = (c["system"], c["variant"], c["wait_us"])
+        worst[key] = max(worst.get(key, 0), c["median_abs_residual_over_beff"])
+    verdict = {(c["system"], c["variant"], c["wait_us"]): c["verdict"] for c in h5["delay_model"]["configurations"]}
+    need(set(worst) == set(verdict), "H5: cells and configurations differ")
+    holding = [worst[k] for k, v in verdict.items() if v == "pass"]
+    need(holding, "H5: no configuration holds")
+    m.add("PriorDelayWorstHolding", pw.fixed(max(holding), 4),
+          "largest per-configuration value among the configurations whose criterion holds")
+    passing = [c for c in h5["delay_model"]["cells"] if c["h1_pass"]]
+    top = max(passing, key=lambda c: c["median_abs_residual_over_beff"])
+    key = (top["system"], top["variant"], top["wait_us"])
+    need(pw.fixed(top["median_abs_residual_over_beff"], 4) == pw.fixed(max(c["median_abs_residual_over_beff"] for c in passing), 4),
+         "H5: the largest passing cell is not unique in value")
+    m.add("PriorDelayWorstPassingSystem", pw.SYSTEM_WORDS[top["system"]], "the cell of PriorDelayWorstPassing")
+    m.add("PriorDelayWorstPassingSetting", H5_SETTING_WORDS[top["variant"]])
+    m.add("PriorDelayWorstPassingBoundMs", top["wait_us"] // 1000)
+    m.add("PriorDelayWorstPassingDesign", PRIOR_DESIGN_WORDS[top["design"]])
+    m.add("PriorDelayWorstPassingCriterion", VERDICT_OF_CRITERION[verdict[key]],
+          "the criterion of that cell's configuration")
+
+
+H5_SETTING_WORDS = {"timer=1ms": "1~ms timer period", "timer=default": "default timer period",
+                    "slack=1ns": "1~ns timer slack", "slack=default": "default timer slack"}
+VERDICT_OF_CRITERION = {"pass": "holds", "fail": "fails"}
+UNIFORM_GROUPS = (("power", "Power"), ("false positive", "False"), ("blind spot", "Blind"))
+UNIFORM_STATES = (("all", "All"), ("none", "None"), ("varied", "Varied"), ("incomplete", "Incomplete"))
+UNIFORM_TABLES = (("ClusteredSingle", "S"), ("ClusteredBatch", "Bt"), ("ProcessFlags", None))
+
+
+def appendix_groups(s):
+    """Cell key -> group word (power, false positive, blind spot) of every power, false-positive and
+    predicted blind-spot cell; a cell in two groups is refused."""
+    blind = sorted(k for k, c in s["cells"].items() if c["blind_spot"])
+    need(len(blind) == len(s["blind_spots"]["cells"]), "blind-spot cells differ")
+    out = {}
+    for word, keys in (("power", s["H1"]["tests"]), ("false positive", s["H2"]["tests"]), ("blind spot", blind)):
+        for k in keys:
+            need(k not in out, "%s is in two groups" % k)
+            out[k] = word
+    return out
+
+
+def clustered_state(c):
+    """all, none, varied or incomplete from the stored clustered interval: all when it is the single
+    point 1, none when it is the single point 0."""
+    if not c["complete"]:
+        return "incomplete"
+    lo, hi = c["t_med"]["clustered_95"]
+    if lo == hi == 1:
+        return "all"
+    if lo == hi == 0:
+        return "none"
+    return "varied"
+
+
+def process_state(s, raw, key):
+    """all, none, varied or incomplete from the stored per-process flags: all when every good process
+    flags every one of its trials, none when no good process flags any."""
+    if not s["cells"][key]["complete"]:
+        return "incomplete"
+    procs = process_flags(s, raw["trial_medians"], key)
+    if all(f == t for f, t in procs):
+        return "all"
+    if all(f == 0 for f, _t in procs):
+        return "none"
+    return "varied"
+
+
+def uniform_states(s, raw):
+    """Cell key -> (group word, state) for every appendix cell. The two definitions of the state (the
+    clustered interval, the process flags) must agree on every cell, or nothing is written."""
+    out = {}
+    for key, word in appendix_groups(s).items():
+        a, b = clustered_state(s["cells"][key]), process_state(s, raw, key)
+        need(a == b, "%s: the clustered interval says %s, the process flags say %s" % (key, a, b))
+        out[key] = (word, a)
+    return out
+
+
+def uniform_groups(m, s, raw):
+    """Round 10, request 41 (decision d013 option F): per appendix table (the clustered intervals under
+    single posts and under batch rounds, the process flags) and group, the cells whose processes all
+    flag every trial, all flag none, vary, or are incomplete. Layout only, descriptive."""
+    m.section("uniform cells by group in the clustered-interval and process-flag tables (round 10, request 41, layout)")
+    states = uniform_states(s, raw)
+    need(set(states) == set(s["cells"]), "a scored cell is in no appendix group")
+    for key, (_w, state) in states.items():
+        if state in ("all", "none"):
+            procs = process_flags(s, raw["trial_medians"], key)
+            need(len(procs) == grid.PROCESSES_PER_CELL and all(t == grid.TRIALS_PER_PROCESS for _f, t in procs),
+                 "%s: a uniform cell without ProcessesPerCell processes of TrialsPerProcess trials" % key)
+    for name, protocol in UNIFORM_TABLES:
+        keys = [k for k in states if protocol is None or s["cells"][k]["protocol"] == protocol]
+        m.add(name + "Cells", len(keys), "cells of the table")
+        total = 0
+        for word, gk in UNIFORM_GROUPS:
+            for state, sk in UNIFORM_STATES:
+                n = sum(1 for k in keys if states[k] == (word, state))
+                total += n
+                m.add(name + gk + sk, n)
+        need(total == len(keys), "%s: the group counts do not sum to the table's cells" % name)
+
+
 SOURCES = {"wake_tests": "tests/wake_tests.cpp", "defects": "loop/include/wakeloop/defect.hpp",
            "wakeprobe": "bench/wakeprobe.cpp", "cmake": "tests/CMakeLists.txt"}
 
@@ -1570,6 +1684,8 @@ def build(inputs, sources, sweep_rows):
     uniform_phase(m)
     calibrated_split(m, raw)
     idle_bound(m, s, raw)
+    prior_delay_holding(m, inputs["h5"])
+    uniform_groups(m, s, raw)
     return m.text()
 
 
