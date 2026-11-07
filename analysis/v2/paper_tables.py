@@ -44,6 +44,18 @@ paper_words'; numbers are formatted as in paper_macros.py. Nothing is measured o
                      its trials' median delays over the cell's B_eff, then each good process's median
                      of its trials' median delays over B_eff, smallest first (raw_facts.py's
                      trial_medians); an incomplete cell has fewer process values and says so
+  seen-cells         added 2026-11-07 (round 7): the cells seen before the freeze (score.json's
+                     replications), how each was seen, its family, its flagged trials and trials,
+                     and whether its family's frozen test rejected it
+  process-flags      added 2026-11-07 (round 7, the process-level appendix of decision d012): per
+                     power, false-positive and predicted blind-spot cell, each good process's flagged
+                     trials, smallest first (raw_facts.py's trial_medians); descriptive, no test
+  blind-trial-medians
+                     added 2026-11-07 (round 7): as trial-medians, for the predicted blind-spot cells
+  throughput-processes
+                     added 2026-11-07 (round 7): per row of fixcost and comparison, each good
+                     process's ratio, the median of its pair ratios (raw_facts.py's
+                     h4_process_ratios), smallest first; descriptive, no test
 """
 
 import os
@@ -353,6 +365,108 @@ def trial_medians(score, raw):
                 + ["process value %d / B_eff (smallest first)" % (i + 1) for i in range(n)], rows)
 
 
+SEEN_WORDS = {"R": "results seen in the earlier study", "Rd": "seen through run durations only"}
+FAMILY_WORDS = {"F1": "power", "F2": "false positive"}
+
+
+def seen_cells(score):
+    """Round 7, request 4: the cells seen before the freeze, how each was seen, its family, and its own
+    flags and trials as the frozen test counted them, with whether the whole family's test rejected it."""
+    rows = []
+    for label in ("R", "Rd"):
+        listed = sorted(score["replications"][label], key=lambda x: (x["family"], x["cell"]))
+        for x in listed:
+            c = score["cells"][x["cell"]]
+            fam = "H1" if c["family"] == "F1" else "H2"
+            if c["replication"] != label or x["family"] != c["family"] or c["family"] not in FAMILY_WORDS:
+                raise Refusal("%s: replication and cell differ" % x["cell"])
+            if x["rejected_in_family"] != score[fam]["tests"][x["cell"]]["rejected"]:
+                raise Refusal("%s: rejection differs from the family" % x["cell"])
+            rows.append([SEEN_WORDS[label], FAMILY_WORDS[c["family"]], pw.cell_words(x["cell"]),
+                         pw.thousands(c["t_med"]["flags"]), pw.thousands(c["t_med"]["trials"]),
+                         "yes" if x["rejected_in_family"] else "no"])
+    return body(["how it was seen", "family", "cell", "flagged trials", "trials", "rejected in its family"], rows)
+
+
+def appendix_cells(score):
+    """(group word, cell key) of every power, false-positive and predicted blind-spot cell, in that order."""
+    out = [("power", k) for k in sorted(score["H1"]["tests"])]
+    out += [("false positive", k) for k in sorted(score["H2"]["tests"])]
+    blind = sorted(k for k, c in score["cells"].items() if c["blind_spot"])
+    if len(blind) != len(score["blind_spots"]["cells"]):
+        raise Refusal("blind-spot cells differ")
+    return out + [("blind spot", k) for k in blind]
+
+
+def process_flags(score, raw):
+    """Process-level appendix: per power, false-positive and blind-spot cell, each good process's
+    flagged trials, smallest first (raw_facts.py's trial_medians, the sum checked against score.json)."""
+    rows = []
+    n = grid.PROCESSES_PER_CELL
+    for word, key in appendix_cells(score):
+        t, c = raw["trial_medians"][key], score["cells"][key]
+        procs = t["processes"]
+        if len(procs) != c["processes_good"] or len(procs) > n:
+            raise Refusal("%s: raw facts and score.json differ" % key)
+        if sum(p["flags_b_eff"] for p in procs) != c["t_med"]["flags"]:
+            raise Refusal("%s: flags differ from score.json" % key)
+        trials = {p["trials"] for p in procs}
+        if len(trials) != 1:
+            raise Refusal("%s: processes with different trial counts" % key)
+        flags = sorted(p["flags_b_eff"] for p in procs)
+        rows.append([word, pw.cell_words(key), "yes" if c["complete"] else "no", trials.pop(), len(procs)]
+                    + flags + [""] * (n - len(flags)))
+    return body(["group", "cell", "complete", "trials of each process", "good processes"]
+                + ["flagged trials of process %d (smallest first)" % (i + 1) for i in range(n)], rows)
+
+
+def blind_trial_medians(score, raw):
+    """Process-level appendix: as trial-medians, for the predicted blind-spot cells."""
+    rows = []
+    n = grid.PROCESSES_PER_CELL
+    for word, key in appendix_cells(score):
+        if word != "blind spot":
+            continue
+        t, c = raw["trial_medians"][key], score["cells"][key]
+        if len(t["processes"]) != c["processes_good"] or len(t["processes"]) > n:
+            raise Refusal("%s: raw facts and score.json differ" % key)
+        b = t["b_eff_ns"]
+        values = sorted(p["median_trial_median_ns"] / b for p in t["processes"])
+        rows.append([word, pw.cell_words(key), "yes" if c["complete"] else "no",
+                     pw.fixed(t["median_trial_median_ns"] / b, 4)] + [pw.fixed(v, 4) for v in values]
+                    + [""] * (n - len(values)))
+    return body(["group", "cell", "complete", "cell median of trial medians / B_eff"]
+                + ["process value %d / B_eff (smallest first)" % (i + 1) for i in range(n)], rows)
+
+
+H4_COMPARISON_WORDS = {grid.H4_ARM_A_FIX: "fixed loop over absent wake", grid.H4_ARM_A_PLAIN: "plain wake over absent wake"}
+
+
+def throughput_processes(score, raw):
+    """Process-level appendix: per system, backend, N and comparison, each good process's ratio (the median
+    of its pair ratios, raw_facts.py's h4_process_ratios, checked against score.json's pair ratios),
+    smallest first; the rows of fixcost, in its order, the fixed loop first."""
+    h4 = score["H4"]
+    order = {k: i for i, k in enumerate(pw.COLUMNS)}
+    n = grid.H4_R_MAX // grid.H4_PAIRS_PER_PROCESS
+    rows = []
+    for part, arm in (("fixed_over_absent", grid.H4_ARM_A_FIX), ("plain_over_absent", grid.H4_ARM_A_PLAIN)):
+        for r in sorted(h4[part], key=lambda r: (order[pw.h4_parts(r["key"])[:2]], pw.h4_parts(r["key"])[2])):
+            system, backend, work = pw.h4_parts(r["key"])
+            got = raw["h4_process_ratios"]["%s-%s" % (r["key"], arm)]
+            if got["arm_a"] != arm or r["arm_a"] != arm or got["arm_b"] != grid.H4_ARM_B:
+                raise Refusal("%s: arms differ" % r["key"])
+            if [x for g in got["processes"] for x in g] != r["ratios"]:
+                raise Refusal("%s: pair ratios differ from score.json" % r["key"])
+            values = sorted(stats.median(sorted(g)) for g in got["processes"])
+            if len(values) > n:
+                raise Refusal("%s: more processes than the cap" % r["key"])
+            rows.append([pw.SYSTEM_WORDS[system], pw.BACKEND_WORDS[backend], work, H4_COMPARISON_WORDS[arm],
+                         len(values)] + [pw.fixed(v, 4) for v in values] + [""] * (n - len(values)))
+    return body(["system", "backend", "N (us)", "comparison", "good processes"]
+                + ["ratio of process %d, the median of its pairs (smallest first)" % (i + 1) for i in range(n)], rows)
+
+
 def build(inputs, cmake_text, sweep_rows):
     for name, data in inputs.items():
         if data.get("draft"):
@@ -369,7 +483,10 @@ def build(inputs, cmake_text, sweep_rows):
             "process-counts": process_counts(s, inputs["raw"]), "throughput": throughput(s, inputs["raw"]),
             "detection-single-requested": detection_requested(s, inputs["raw"], "S"),
             "detection-batch-requested": detection_requested(s, inputs["raw"], "Bt"),
-            "trial-medians": trial_medians(s, inputs["raw"])}
+            "trial-medians": trial_medians(s, inputs["raw"]),
+            "seen-cells": seen_cells(s), "process-flags": process_flags(s, inputs["raw"]),
+            "blind-trial-medians": blind_trial_medians(s, inputs["raw"]),
+            "throughput-processes": throughput_processes(s, inputs["raw"])}
 
 
 def main(argv=None):

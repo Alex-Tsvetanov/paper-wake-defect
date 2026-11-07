@@ -378,6 +378,69 @@ class Macros(unittest.TestCase):
         self.assertIn("\\CalibratedHighestAll}{1.0300}", text)
         self.assertIn("\\CalibratedMissing}{1}", text)
 
+    def test_the_semantics_delay_limit_is_computed_as_the_test_computes_it(self):
+        with open(WAKE_TESTS, encoding="utf-8") as f:
+            tests = f.read()
+        m = paper_macros.Macros()
+        paper_macros.semantics_delay(m, tests)
+        text = m.text()
+        got = dict(re.findall(r"\\newcommand\{\\(SemanticsDelay[A-Za-z]+)\}\{(\d+)\}", text))
+        bound = int(re.search(r"// S11:.*?constexpr auto kBound = (\d+)ms;", tests, re.S).group(1))
+        for system in ("Linux", "Windows"):
+            tick = int(got["SemanticsDelayTick%sMs" % system])
+            self.assertEqual(int(got["SemanticsDelayLimit%sMs" % system]),
+                             int(got["SemanticsDelayPeriods"]) * -(-bound // tick) * tick)
+        for changed in (tests.replace("const auto limit = 3 *", "const auto limit = 2 + 3 *"),
+                        tests.replace("// S12:", "// S12 gone:"),
+                        tests.replace("Loop loop(cfg(20000));", "Loop loop(cfg(10000));")):
+            with self.assertRaises(paper_macros.Refusal):
+                paper_macros.semantics_delay(paper_macros.Macros(), changed)
+
+    def test_seen_cells_on_small_families(self):
+        def cell(family, replication, complete, flags, trials=10):
+            return {"family": family, "replication": replication, "complete": complete,
+                    "t_med": {"flags": flags, "trials": trials}}
+        score = {"cells": {"a": cell("F1", "R", True, 10), "b": cell("F1", None, True, 9),
+                           "c": cell("F1", None, False, 1), "d": cell("F2", "Rd", True, 0),
+                           "e": cell("F2", None, True, 1)},
+                 "H1": {"tests": {"a": {"rejected": True}, "b": {"rejected": True}, "c": {"rejected": False}}},
+                 "H2": {"tests": {"d": {"rejected": True}, "e": {"rejected": False}}},
+                 "replications": {"R": [{"cell": "a"}], "Rd": [{"cell": "d"}]}}
+        m = paper_macros.Macros()
+        paper_macros.seen_cells(m, score)
+        text = m.text()
+        for line in ("\\SeenPowerCells}{1}", "\\SeenPowerResultsCells}{1}", "\\UnseenPowerCells}{2}",
+                     "\\UnseenPowerCompleteCells}{1}", "\\UnseenPowerFlags}{9}", "\\UnseenPowerTrials}{10}",
+                     "\\UnseenPowerRejected}{1}", "\\UnseenPowerLowestRate}{0.900}", "\\SeenFalseDurationsCells}{1}",
+                     "\\UnseenFalseHighestRate}{0.100}", "\\UnseenFalseZeroCells}{0}", "\\SeenFalseZeroCells}{1}"):
+            self.assertIn(line, text)
+        score["replications"]["Rd"] = []
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.seen_cells(paper_macros.Macros(), score)
+
+    @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "pilot-h4.json",
+                                         "setup.json", "raw-facts.json", "h3-sweep.csv"), "committed results not present")
+    def test_round_seven_on_the_committed_results(self):
+        inputs = committed_inputs()
+        text = paper_macros.build(inputs, committed_sources(), committed_sweep())
+        num = dict(re.findall(r"\\newcommand\{\\([A-Za-z]+)\}\{([0-9{},]+)\}", text))
+        n = lambda name: int(num[name].replace("{,}", ""))  # noqa: E731
+        for fam in ("Power", "False"):
+            self.assertEqual(n("Seen%sCells" % fam) + n("Unseen%sCells" % fam), n("%sCells" % fam))
+        self.assertEqual(n("SeenPowerCells") + n("SeenFalseCells"), n("ReplicationsSeen") + n("ReplicationsDurations"))
+        self.assertEqual(n("DelayModelSeenCriteria") + n("DelayModelNewCriteria"), n("DelayModelCriteria"))
+        self.assertEqual(n("ByProcessPowerNotAll"), n("PowerProcessesGood") - n("PowerProcessesAllFlagged"))
+        bad = copy(inputs)
+        key = sorted(bad["raw"]["h4_process_ratios"])[0]
+        bad["raw"]["h4_process_ratios"][key]["processes"][0][0] += 1e-9
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.process_level(paper_macros.Macros(), bad["score"], bad["raw"])
+        bad = copy(inputs)
+        blind = sorted(k for k, c in bad["score"]["cells"].items() if c["blind_spot"])[0]
+        bad["raw"]["trial_medians"][blind]["processes"][0]["flags_b_eff"] += 1
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.process_level(paper_macros.Macros(), bad["score"], bad["raw"])
+
     def test_sawtooth_counts_on_a_small_sweep(self):
         rows = []
         for system, backend in pw.COLUMNS:
@@ -437,7 +500,7 @@ class Tables(unittest.TestCase):
         inputs = {"score": load("score.json"), "h5": load("h5.json"), "h6": load("h6.json"),
                   "extra": load("score-extra-w.json"), "raw": load("raw-facts.json")}
         tables = paper_tables.build(inputs, self.cmake(), committed_sweep())
-        self.assertEqual(len(tables), 18)
+        self.assertEqual(len(tables), 22)
         for name, text in tables.items():
             with open(os.path.join(RESULTS, "tables", name + ".tex"), encoding="utf-8", newline="") as f:
                 self.assertEqual(text, f.read(), "results/v2/tables/%s.tex is not what the generator makes" % name)
@@ -453,6 +516,20 @@ class Tables(unittest.TestCase):
         raw["h4_throughput"]["linux-epoll-N1us-none"]["windows"] = 13
         with self.assertRaises(paper_tables.Refusal):
             paper_tables.build(dict(inputs, raw=raw), self.cmake(), committed_sweep())
+        # Round 7: the seen cells, the process-level bodies.
+        seen = [line for line in tables["seen-cells"].splitlines() if not line.startswith("%")]
+        self.assertEqual(len(seen), len(inputs["score"]["replications"]["R"]) + len(inputs["score"]["replications"]["Rd"]))
+        flags = [line for line in tables["process-flags"].splitlines() if not line.startswith("%")]
+        self.assertEqual(len(flags), len(inputs["score"]["H1"]["tests"]) + len(inputs["score"]["H2"]["tests"])
+                         + len(inputs["score"]["blind_spots"]["cells"]))
+        raw = copy(inputs["raw"])
+        raw["h4_process_ratios"]["linux-epoll-N1us-none"]["processes"].reverse()
+        with self.assertRaises(paper_tables.Refusal):
+            paper_tables.throughput_processes(inputs["score"], raw)
+        score = copy(inputs["score"])
+        score["replications"]["R"][0]["rejected_in_family"] = False
+        with self.assertRaises(paper_tables.Refusal):
+            paper_tables.seen_cells(score)
 
     def test_a_sweep_process_with_two_beff_values_is_refused(self):
         rows = [{"system": "linux", "backend": "epoll", "bound_us": "1000", "step": "0", "b_eff_ns": "5"},

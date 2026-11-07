@@ -886,3 +886,62 @@ regenerated. Only the paper generators under `analysis/v2` changed.
   2968573ba65a53bd04d0a3c034982d6ee8cfb7d4191ee18da4d072fcde3cdc67. Two regenerations give the same
   bytes. A render of the new macros passes `lab/bin/check_manuscript_terms.py --paper p1` with no
   hit. All tests under `analysis/v2` pass.
+
+### 2026-11-07: macros and table bodies for the writer's round 7 requests and the process-level appendix
+
+The writer asked what the semantics test of delivery after a missed wake runs with and asserts,
+for the cells seen before the freeze with each family without them, for the delay criteria split
+into those seen before the freeze and the new ones, and whether the prior study's bound ratios use
+unrounded medians. The three-model vote on round 7 (decision d012 in the Papers repository, option
+B, all three ballots first) added an appendix of descriptive process-level results from the stored
+data: no new test, no run, outside the families, the frozen trial-level tests staying the stated
+decisions. Added, and nothing that existed changed in value: the first 738 macros of
+`results/v2/macros.tex` are byte for byte its whole earlier text, every earlier table body and
+figure is as before, and every earlier block of `results/v2/raw-facts.json` is equal to before. No
+scorer changed: `score.py`, `h5.py`, `h6.py`, `readers.py`, `grid.py`, `plan.py`, `stats.py` and the
+code under `bench/`, `loop/` and `tests/` are as they were, and `score.json`, `h5.json` and
+`h6.json` were not regenerated. Only the paper generators under `analysis/v2` changed. The bound
+ratio question is answered from `h5.py` (h2_ratio is the largest over the smallest of the medians
+as stored, before any rounding for print); nothing here changed for it.
+- `analysis/v2/raw_facts.py` adds one block, read in the same pass as `h4_throughput`:
+  `h4_process_ratios`, per H4 row of `score.json` and per good process in the row's order, its pair
+  ratios (`readers.pair_ratios`, unchanged); concatenated they must equal the row's ratios, and each
+  process must hold `grid.H4_PAIRS_PER_PROCESS` pairs. Inputs: the five archives of the round 5
+  entry, each verified again against its .sha256 (`p1-campaign-l.tar.gz`, `p1-campaign-w.tar.gz`,
+  `p1-h5-l.tar.gz`, `p1-h5-w.tar.gz`, `p1-h6-l.tar.gz`), and the earlier code reproduced the
+  committed `raw-facts.json` byte for byte from them before the block was added.
+- `paper_macros.py` adds 77 macros. The semantics test S11, read from `tests/wake_tests.cpp`: its
+  posts, the pause after each, the loss deadline, the limit in whole timed returns, the tick per
+  system and the limit per system, computed as the test computes it (refused if the limit line
+  changes). Each family without the cells seen before the freeze (`score.json`'s replication field):
+  cells, complete cells, flags, trials, cells rejected by the frozen test of the whole family, the
+  lowest power rate and the highest false-positive rate; descriptive, no Holm step is run again.
+  The delay criteria seen before the freeze and the new ones, with the holding count and largest
+  value of each group; the seen backends are a constant of this module, `DELAY_SEEN_BACKENDS`, from
+  `hypotheses-v2.md` section 2 (H3: "on epoll and IOCP the criterion held in 2026-09"), both bounds
+  of each, as the 2026-09 criterion was set at 1, 10 and 100 ms (`hypotheses.md`, H1). The process-
+  level appendix: the fewest flagged trials of any power process, the power processes not flagged
+  in every trial, the most flagged trials of any false-positive process, and for the predicted
+  blind spots the good processes, those with any trial flagged, the highest process median over
+  B_eff and the processes above the threshold; for H4, each good process's ratio as the median of
+  its pairs, the processes inside the equivalence margins and the lowest and highest ratio of the
+  rows with work, and at N = 0 the processes of the rows predicted below the low margin that are
+  below it. All descriptive and outside the families; no p value, sign test or binomial test.
+- `paper_tables.py` adds four bodies: `seen-cells.tex` (the cells seen before the freeze, how each
+  was seen, its family, flagged trials, trials and whether its family rejected it),
+  `process-flags.tex` (per power, false-positive and predicted blind-spot cell, each good process's
+  flagged trials, smallest first), `blind-trial-medians.tex` (as `trial-medians.tex`, for the
+  predicted blind spots) and `throughput-processes.tex` (per H4 row and comparison, each good
+  process's ratio, smallest first).
+- `test_paper.py` adds three tests (the S11 limit and its refusals, the seen-cell split on small
+  families, the round 7 sums and refusals on the committed results) and checks the new bodies.
+- Outputs (sha256): `results/v2/macros.tex` (815 macros)
+  69a07c4988683d99fdde26c697793788f7e288abb81281db2210092b30166e04; `results/v2/raw-facts.json`
+  7d84808fc6a01965e3023a512e9f42a46171ef8e46f3be3a014b3725a93b0627; `seen-cells.tex`
+  553087f8cbc98062ea62fdd8b33d7f81dbb31ceae7f38695cf49257a8fbea834, `process-flags.tex`
+  0426dc8f3d98ada877e72e31495927cee15800ff22b6a27adce63ffaf5b139ef, `blind-trial-medians.tex`
+  416e2c4f2338ae89178e2b0972a9cf9dfb2dffe769a41f0578814c8073d7f23c, `throughput-processes.tex`
+  a34c5ef9145f07a850705958bc127ca43f18b0477b89d26dd2c478893f53add2. Two regenerations, each from
+  the archives, give the same bytes. A render of the new macros and the four new bodies passes
+  `lab/bin/check_manuscript_terms.py --paper p1` with no hit. All 436 tests under `analysis/v2`
+  pass.

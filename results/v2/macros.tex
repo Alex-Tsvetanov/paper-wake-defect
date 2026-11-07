@@ -775,3 +775,84 @@
 \newcommand{\CalibratedHighestWindowsTenMs}{1.0097}
 \newcommand{\CalibratedLowestAll}{0.9840}
 \newcommand{\CalibratedHighestAll}{1.0097}
+% ---- the semantics test of delivery after a missed wake (tests/wake_tests.cpp, S11)
+\newcommand{\SemanticsDelayPosts}{5}  % posts the test makes, one at a time
+\newcommand{\SemanticsDelayPauseMs}{5}  % the pause after each delivered post
+\newcommand{\SemanticsDelayLossSeconds}{1}  % a post not delivered within this is lost and fails the test
+\newcommand{\SemanticsDelayPeriods}{3}  % the limit in whole timed returns of the bound
+\newcommand{\SemanticsDelayTickLinuxMs}{1}  % the timer tick the test assumes
+\newcommand{\SemanticsDelayLimitLinuxMs}{60}  % the largest delay a post may have
+\newcommand{\SemanticsDelayTickWindowsMs}{16}  % the timer tick the test assumes
+\newcommand{\SemanticsDelayLimitWindowsMs}{96}  % the largest delay a post may have
+% ---- the families without the cells seen before the freeze (descriptive, no new test)
+\newcommand{\SeenPowerCells}{12}  % cells of the family seen before the freeze
+\newcommand{\SeenPowerResultsCells}{4}  % of them, results seen in the earlier study
+\newcommand{\SeenPowerDurationsCells}{8}  % of them, seen through run durations only
+\newcommand{\SeenPowerCompleteCells}{12}
+\newcommand{\SeenPowerFlags}{3{,}600}  % complete cells
+\newcommand{\SeenPowerTrials}{3{,}600}  % complete cells
+\newcommand{\SeenPowerRejected}{12}  % cells rejected by the frozen test of the whole family
+\newcommand{\SeenPowerLowestRate}{1.000}
+\newcommand{\SeenPowerAllFlaggedCells}{12}
+\newcommand{\UnseenPowerCells}{90}  % cells of the family not seen before the freeze
+\newcommand{\UnseenPowerCompleteCells}{89}
+\newcommand{\UnseenPowerFlags}{26{,}690}  % complete cells
+\newcommand{\UnseenPowerTrials}{26{,}700}  % complete cells
+\newcommand{\UnseenPowerRejected}{89}  % cells rejected by the frozen test of the whole family
+\newcommand{\UnseenPowerLowestRate}{0.990}
+\newcommand{\UnseenPowerAllFlaggedCells}{81}
+\newcommand{\SeenFalseCells}{20}  % cells of the family seen before the freeze
+\newcommand{\SeenFalseResultsCells}{4}  % of them, results seen in the earlier study
+\newcommand{\SeenFalseDurationsCells}{16}  % of them, seen through run durations only
+\newcommand{\SeenFalseCompleteCells}{20}
+\newcommand{\SeenFalseFlags}{0}  % complete cells
+\newcommand{\SeenFalseTrials}{6{,}000}  % complete cells
+\newcommand{\SeenFalseRejected}{20}  % cells rejected by the frozen test of the whole family
+\newcommand{\SeenFalseHighestRate}{0.000}
+\newcommand{\SeenFalseZeroCells}{20}
+\newcommand{\UnseenFalseCells}{60}  % cells of the family not seen before the freeze
+\newcommand{\UnseenFalseCompleteCells}{60}
+\newcommand{\UnseenFalseFlags}{0}  % complete cells
+\newcommand{\UnseenFalseTrials}{18{,}000}  % complete cells
+\newcommand{\UnseenFalseRejected}{60}  % cells rejected by the frozen test of the whole family
+\newcommand{\UnseenFalseHighestRate}{0.000}
+\newcommand{\UnseenFalseZeroCells}{60}
+% ---- the delay criteria seen before the freeze and the new ones (hypotheses-v2.md section 2)
+\newcommand{\DelayModelSeenCriteria}{4}
+\newcommand{\DelayModelSeenHolding}{4}
+\newcommand{\DelayModelSeenLargest}{0.0133}
+\newcommand{\DelayModelNewCriteria}{6}
+\newcommand{\DelayModelNewHolding}{6}
+\newcommand{\DelayModelNewLargest}{0.0138}
+% ---- process-level results, power, false-positive and blind-spot cells (raw_facts.py, descriptive)
+\newcommand{\ByProcessPowerFewestFlags}{29}  % the fewest flagged trials of any good process
+\newcommand{\ByProcessPowerFewestTrials}{30}
+\newcommand{\ByProcessPowerFewestCell}{Linux, condition variable, absent wake, single posts, 2 workers, $B = 1$~ms}
+\newcommand{\ByProcessPowerNotAll}{10}  % good processes with at least one trial not flagged
+\newcommand{\ByProcessPowerNotAllCells}{8}
+\newcommand{\ByProcessPowerBelowHalf}{0}  % good processes with half or fewer of their trials flagged
+\newcommand{\ByProcessFalseMostFlags}{0}  % the most flagged trials of any good process
+\newcommand{\ByProcessFalseAny}{0}  % good processes with any trial flagged
+\newcommand{\ByProcessBlindGood}{1{,}337}  % good processes of every blind-spot cell
+\newcommand{\ByProcessBlindComplete}{1{,}310}
+\newcommand{\ByProcessBlindAny}{0}  % good processes with any trial flagged, every cell
+\newcommand{\ByProcessBlindMostFlags}{0}
+\newcommand{\ByProcessBlindHighestMedian}{0.0175}  % a process's median trial median over B_eff, complete cells
+\newcommand{\ByProcessBlindHighestMedianCell}{Windows, IOCP, undrained edge, single posts, 4 workers, $B = 1$~ms}
+\newcommand{\ByProcessBlindAbove}{0}  % processes of complete blind-spot cells above the threshold
+\newcommand{\ByProcessFixRows}{15}  % rows with work per task
+\newcommand{\ByProcessFixProcesses}{105}  % their good processes
+\newcommand{\ByProcessFixInside}{105}  % of them, with their ratio inside the equivalence margins
+\newcommand{\ByProcessFixLowest}{0.9957}
+\newcommand{\ByProcessFixHighest}{1.0025}
+\newcommand{\ByProcessFixRowsAllInside}{15}
+\newcommand{\ByProcessPlainRows}{15}  % rows with work per task
+\newcommand{\ByProcessPlainProcesses}{105}  % their good processes
+\newcommand{\ByProcessPlainInside}{105}  % of them, with their ratio inside the equivalence margins
+\newcommand{\ByProcessPlainLowest}{0.9923}
+\newcommand{\ByProcessPlainHighest}{1.0011}
+\newcommand{\ByProcessPlainRowsAllInside}{15}
+\newcommand{\ByProcessFixZeroProcesses}{45}  % good processes of the rows with no work
+\newcommand{\ByProcessFixZeroBelowRows}{3}  % rows with no work whose prediction is a ratio below the low margin
+\newcommand{\ByProcessFixZeroBelowProcesses}{31}
+\newcommand{\ByProcessFixZeroBelowHeld}{24}  % of their processes, those with a ratio below the low margin

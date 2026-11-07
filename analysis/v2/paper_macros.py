@@ -1209,6 +1209,194 @@ def calibrated_periods(m, raw):
     m.add("CalibratedHighestAll", pw.fixed(max(every), 4))
 
 
+# ---------------------------------------------------------------------------------------------
+# Round 7 of the writer's requests, and the process-level appendix (decision d012, option B)
+# ---------------------------------------------------------------------------------------------
+
+S11_TICKS = re.compile(r"#if defined\(_WIN32\)\s*\n(?:\s*//[^\n]*\n)*\s*constexpr auto kTick = (\d+)ms;\s*\n"
+                       r"#else\s*\n\s*constexpr auto kTick = (\d+)ms;\s*\n#endif")
+S11_CONSTANTS = (  # (name, regex inside the S11 test's text, from its comment to S12's)
+    ("bound_ms", re.compile(r"constexpr auto kBound = (\d+)ms;")),
+    ("periods", re.compile(r"const auto limit = (\d+) \* \(\(kBound \+ kTick - 1ns\) / kTick\) \* kTick;")),
+    ("loop_us", re.compile(r"Loop loop\(cfg\((\d+)\)\);")),
+    ("posts", re.compile(r"for \(int i = 0; i < (\d+); \+\+i\)")),
+    ("loss_s", re.compile(r"latch\.wait_for\(i \+ 1, (\d+)s\)")),
+    ("pause_ms", re.compile(r"std::this_thread::sleep_for\((\d+)ms\);")),
+)
+
+
+def semantics_delay(m, wake_tests_text):
+    """Round 7, request 29: what the semantics test 'every variant delivers each post within about one
+    period' (S11) runs with and asserts, read from tests/wake_tests.cpp; the limit is computed here
+    exactly as the test computes it."""
+    m.section("the semantics test of delivery after a missed wake (tests/wake_tests.cpp, S11)")
+    start, stop = wake_tests_text.find("// S11:"), wake_tests_text.find("// S12:")
+    need(0 <= start < stop, "tests/wake_tests.cpp: no S11 test before S12")
+    body = wake_tests_text[start:stop]
+    got = {}
+    for name, pattern in S11_CONSTANTS:
+        found = pattern.findall(body)
+        need(len(found) == 1, "tests/wake_tests.cpp, S11: %d values for %s" % (len(found), name))
+        got[name] = int(found[0])
+    need(got["loop_us"] == got["bound_ms"] * 1000, "S11: the loop's bound is not kBound")
+    ticks = S11_TICKS.findall(wake_tests_text)
+    need(len(ticks) == 1, "tests/wake_tests.cpp: no single kTick for Windows and the other systems")
+    tick = {"windows": int(ticks[0][0]), "linux": int(ticks[0][1])}
+    m.add("SemanticsDelayPosts", got["posts"], "posts the test makes, one at a time")
+    m.add("SemanticsDelayPauseMs", got["pause_ms"], "the pause after each delivered post")
+    m.add("SemanticsDelayLossSeconds", got["loss_s"], "a post not delivered within this is lost and fails the test")
+    m.add("SemanticsDelayPeriods", got["periods"], "the limit in whole timed returns of the bound")
+    for system in grid.SYSTEMS:
+        t = tick[system]
+        limit = got["periods"] * (-(-got["bound_ms"] // t)) * t  # periods x the bound rounded up to whole ticks
+        m.add("SemanticsDelayTick%sMs" % system_key(system), t, "the timer tick the test assumes")
+        m.add("SemanticsDelayLimit%sMs" % system_key(system), limit, "the largest delay a post may have")
+
+
+def seen_cells(m, s):
+    """Round 7, requests 4 and 30: the cells seen before the freeze (score.json's replication field, from
+    grid.py's section 1 rule) and each family without them; descriptive, no test is run again."""
+    m.section("the families without the cells seen before the freeze (descriptive, no new test)")
+    listed = {x["cell"] for label in ("R", "Rd") for x in s["replications"][label]}
+    for fam, prefix in (("H1", "Power"), ("H2", "False")):
+        keys = sorted(s[fam]["tests"])
+        seen = [k for k in keys if s["cells"][k]["replication"]]
+        unseen = [k for k in keys if not s["cells"][k]["replication"]]
+        need(set(seen) <= listed, "%s: a seen cell missing from the replications" % fam)
+        m.add("Seen%sCells" % prefix, len(seen), "cells of the family seen before the freeze")
+        m.add("Seen%sResultsCells" % prefix, sum(1 for k in seen if s["cells"][k]["replication"] == "R"),
+              "of them, results seen in the earlier study")
+        m.add("Seen%sDurationsCells" % prefix, sum(1 for k in seen if s["cells"][k]["replication"] == "Rd"),
+              "of them, seen through run durations only")
+        for tag, group in (("Seen", seen), ("Unseen", unseen)):
+            complete = [k for k in group if s["cells"][k]["complete"]]
+            tm = {k: s["cells"][k]["t_med"] for k in complete}
+            name = tag + prefix
+            if tag == "Unseen":
+                m.add(name + "Cells", len(group), "cells of the family not seen before the freeze")
+            m.add(name + "CompleteCells", len(complete))
+            m.add(name + "Flags", pw.thousands(sum(t["flags"] for t in tm.values())), "complete cells")
+            m.add(name + "Trials", pw.thousands(sum(t["trials"] for t in tm.values())), "complete cells")
+            m.add(name + "Rejected", sum(1 for k in group if s[fam]["tests"][k]["rejected"]),
+                  "cells rejected by the frozen test of the whole family")
+            rates = [Fraction(t["flags"], t["trials"]) for t in tm.values()]
+            if fam == "H1":
+                m.add(name + "LowestRate", pw.rate_text(float(min(rates))))
+                m.add(name + "AllFlaggedCells", sum(1 for t in tm.values() if t["flags"] == t["trials"]))
+            else:
+                m.add(name + "HighestRate", pw.rate_text(float(max(rates))))
+                m.add(name + "ZeroCells", sum(1 for t in tm.values() if t["flags"] == 0))
+    need(len(listed) == sum(1 for k in listed if s["cells"][k]["family"] in ("F1", "F2")),
+         "a replication outside the two families")
+
+
+# hypotheses-v2.md section 2 (H3), frozen: "Seen before: on epoll and IOCP the criterion held in 2026-09
+# for the same variant". The 2026-09 criterion was set at B = 1, 10 and 100 ms (hypotheses.md, H1), so
+# both bounds of each named backend count as seen. Each of these backends exists on one system only.
+DELAY_SEEN_BACKENDS = (("linux", "epoll"), ("windows", "iocp"))
+
+
+def delay_seen(m, s):
+    """Round 7, request 31: the delay criteria split into those seen before the freeze and the new ones."""
+    m.section("the delay criteria seen before the freeze and the new ones (hypotheses-v2.md section 2)")
+    results = s["H3"]["results"]
+    need(len(results) == s["H3"]["criteria"], "H3: criteria and results differ")
+    seen = [r for r in results if (r["system"], r["backend"]) in DELAY_SEEN_BACKENDS]
+    new = [r for r in results if (r["system"], r["backend"]) not in DELAY_SEEN_BACKENDS]
+    need(len(seen) == len(DELAY_SEEN_BACKENDS) * len(grid.BOUNDS_US), "H3: a seen backend without every bound")
+    for tag, group in (("Seen", seen), ("New", new)):
+        m.add("DelayModel%sCriteria" % tag, len(group))
+        m.add("DelayModel%sHolding" % tag, sum(1 for r in group if r["verdict"] == "holds"))
+        m.add("DelayModel%sLargest" % tag, pw.fixed(max(r["median_abs_residual_over_b_eff"] for r in group), 4))
+
+
+def process_flags(s, tm, key):
+    """One cell's good processes from raw_facts.py's trial_medians block: (flagged trials, trials) each,
+    the flags checked in sum against the cell's score."""
+    c, t = s["cells"][key], tm[key]
+    need(len(t["processes"]) == c["processes_good"], "%s: process counts differ" % key)
+    need(sum(p["flags_b_eff"] for p in t["processes"]) == c["t_med"]["flags"], "%s: flags differ" % key)
+    return [(p["flags_b_eff"], p["trials"]) for p in t["processes"]]
+
+
+def process_level(m, s, raw):
+    """The process-level appendix (decision d012, option B): per process, descriptive, outside the
+    families, no test. The frozen trial-level tests stay the stated decisions."""
+    m.section("process-level results, power, false-positive and blind-spot cells (raw_facts.py, descriptive)")
+    tm = raw["trial_medians"]
+    for fam, prefix in (("H1", "Power"), ("H2", "False")):
+        keys = sorted(s[fam]["tests"])
+        procs = [(k, f, t) for k in keys for f, t in process_flags(s, tm, k)]
+        if fam == "H1":
+            low = min(procs, key=lambda x: (Fraction(x[1], x[2]), x[0]))
+            m.add("ByProcessPowerFewestFlags", low[1], "the fewest flagged trials of any good process")
+            m.add("ByProcessPowerFewestTrials", low[2])
+            m.add("ByProcessPowerFewestCell", pw.cell_words(low[0]))
+            m.add("ByProcessPowerNotAll", sum(1 for _, f, t in procs if f < t),
+                  "good processes with at least one trial not flagged")
+            m.add("ByProcessPowerNotAllCells", len({k for k, f, t in procs if f < t}))
+            m.add("ByProcessPowerBelowHalf", sum(1 for _, f, t in procs if 2 * f <= t),
+                  "good processes with half or fewer of their trials flagged")
+        else:
+            m.add("ByProcessFalseMostFlags", max(f for _, f, _t in procs), "the most flagged trials of any good process")
+            m.add("ByProcessFalseAny", sum(1 for _, f, _t in procs if f), "good processes with any trial flagged")
+    blind = sorted(k for k, c in s["cells"].items() if c["blind_spot"])
+    need(len(blind) == len(s["blind_spots"]["cells"]), "blind-spot cells differ")
+    procs = [(k, f, t) for k in blind for f, t in process_flags(s, tm, k)]
+    m.add("ByProcessBlindGood", pw.thousands(len(procs)), "good processes of every blind-spot cell")
+    m.add("ByProcessBlindComplete", pw.thousands(sum(1 for k, _, _t in procs if s["cells"][k]["complete"])))
+    m.add("ByProcessBlindAny", sum(1 for _, f, _t in procs if f), "good processes with any trial flagged, every cell")
+    m.add("ByProcessBlindMostFlags", max(f for _, f, _t in procs))
+    complete = [k for k in blind if s["cells"][k]["complete"]]
+    values = [(p["median_trial_median_ns"] / tm[k]["b_eff_ns"], k) for k in complete for p in tm[k]["processes"]]
+    top = max(values)
+    m.add("ByProcessBlindHighestMedian", pw.fixed(top[0], 4), "a process's median trial median over B_eff, complete cells")
+    m.add("ByProcessBlindHighestMedianCell", pw.cell_words(top[1]))
+    m.add("ByProcessBlindAbove", sum(1 for k in complete for p in tm[k]["processes"]
+                                     if grid.T_MED_DIVISOR * p["median_trial_median_ns"] > tm[k]["b_eff_ns"]),
+          "processes of complete blind-spot cells above the threshold")
+    throughput_processes(m, s, raw)
+
+
+def h4_process_rows(s, raw):
+    """Per H4 row of score.json, both comparisons: (row, each good process's ratio), the ratio being the
+    median of its pair ratios (raw_facts.py's h4_process_ratios, checked against the row's ratios)."""
+    out = []
+    for part, arm in (("fixed_over_absent", grid.H4_ARM_A_FIX), ("plain_over_absent", grid.H4_ARM_A_PLAIN)):
+        for r in s["H4"][part]:
+            got = raw["h4_process_ratios"]["%s-%s" % (r["key"], arm)]
+            need(got["arm_a"] == r["arm_a"] == arm and got["arm_b"] == grid.H4_ARM_B, "%s: arms differ" % r["key"])
+            need([x for g in got["processes"] for x in g] == r["ratios"], "%s: pair ratios differ" % r["key"])
+            out.append((r, [stats.median(sorted(g)) for g in got["processes"]]))
+    return out
+
+
+def ratio_inside(x):
+    return grid.H4_MARGIN_LOW <= x <= grid.H4_MARGIN_HIGH
+
+
+def throughput_processes(m, s, raw):
+    rows = h4_process_rows(s, raw)
+    for arm, prefix in ((grid.H4_ARM_A_FIX, "Fix"), (grid.H4_ARM_A_PLAIN, "Plain")):
+        conf = [(r, v) for r, v in rows if r["arm_a"] == arm and r["work_us"] in grid.H4_CONFIRMATORY_WORK_US]
+        values = [x for _, v in conf for x in v]
+        name = "ByProcess" + prefix
+        m.add(name + "Rows", len(conf), "rows with work per task")
+        m.add(name + "Processes", len(values), "their good processes")
+        m.add(name + "Inside", sum(1 for x in values if ratio_inside(x)),
+              "of them, with their ratio inside the equivalence margins")
+        m.add(name + "Lowest", pw.fixed(min(values), 4))
+        m.add(name + "Highest", pw.fixed(max(values), 4))
+        m.add(name + "RowsAllInside", sum(1 for _, v in conf if all(ratio_inside(x) for x in v)))
+    zero = [(r, v) for r, v in rows if r["arm_a"] == grid.H4_ARM_A_FIX and r["work_us"] == 0]
+    below = [(r, v) for r, v in zero if grid.H4_N0_PREDICTION[(r["system"], r["backend"])] == "below 0.98"]
+    m.add("ByProcessFixZeroProcesses", sum(len(v) for _, v in zero), "good processes of the rows with no work")
+    m.add("ByProcessFixZeroBelowRows", len(below), "rows with no work whose prediction is a ratio below the low margin")
+    m.add("ByProcessFixZeroBelowProcesses", sum(len(v) for _, v in below))
+    m.add("ByProcessFixZeroBelowHeld", sum(1 for _, v in below for x in v if x < grid.H4_MARGIN_LOW),
+          "of their processes, those with a ratio below the low margin")
+
+
 SOURCES = {"wake_tests": "tests/wake_tests.cpp", "defects": "loop/include/wakeloop/defect.hpp",
            "wakeprobe": "bench/wakeprobe.cpp", "cmake": "tests/CMakeLists.txt"}
 
@@ -1259,6 +1447,10 @@ def build(inputs, sources, sweep_rows):
     requested_split(m, s, raw)
     divisor_recount(m, s, raw)
     calibrated_periods(m, raw)
+    semantics_delay(m, sources["wake_tests"])
+    seen_cells(m, s)
+    delay_seen(m, s)
+    process_level(m, s, raw)
     return m.text()
 
 

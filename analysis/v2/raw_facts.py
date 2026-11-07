@@ -58,6 +58,13 @@ Added 2026-11-07 (round 6 of the writer's requests):
                    calibration posts) with the cell's B_eff; for a B_eff source cell whose B_eff was
                    measured, their median must equal it. Every other cell must report no period.
 
+Added 2026-11-07 (round 7 of the writer's requests, the process-level appendix of decision d012):
+
+  h4_process_ratios for every H4 row of score.json, per good process score_h4 used, in the row's
+                   order: its pair ratios (readers.pair_ratios, unchanged). Concatenated they must equal
+                   the row's ratios, and each process must hold grid.H4_PAIRS_PER_PROCESS pairs.
+                   Descriptive only: the frozen sign tests count pairs.
+
 Any difference is refused and nothing is written.
 """
 
@@ -166,8 +173,9 @@ def prior_bound(h5_dirs, records, h5_json):
 def h4_throughput(systems, score_json):
     """Per H4 row of score.json (fixed loop and plain wake, each over absent wake): every abpair window's
     tasks per second of each arm (readers.throughput), from the good processes score_h4 used. The
-    pair ratios recomputed from these windows must equal the row's ratios, in order."""
-    rows = {}
+    pair ratios recomputed from these windows must equal the row's ratios, in order. Also returns
+    the h4_process_ratios block: per row, each good process's own pair ratios."""
+    rows, per_process = {}, {}
     scored = {(r["key"], r["arm_a"]): r for part in ("fixed_over_absent", "plain_over_absent")
               for r in score_json["H4"][part]}
     for plan_path, data_dir in systems:
@@ -181,8 +189,11 @@ def h4_throughput(systems, score_json):
                          and grid.h4_cell_name(r["backend"], r["work_us"], r["arm_a"]) == name]
             need(len(rows_here) == 1, "%s: %d scored H4 rows" % (name, len(rows_here)))
             row = rows_here[0]
-            ratios = [x for r in good for x in readers.pair_ratios(r.run)]
+            by_process = [readers.pair_ratios(r.run) for r in good]
+            ratios = [x for g in by_process for x in g]
             need(ratios == row["ratios"], "%s: pair ratios differ from score.json" % name)
+            need(all(len(g) == grid.H4_PAIRS_PER_PROCESS for g in by_process),
+                 "%s: a process without %d pairs" % (name, grid.H4_PAIRS_PER_PROCESS))
             sides = {"A": [], "B": []}
             for r in good:
                 for w in r.run.records:
@@ -195,8 +206,11 @@ def h4_throughput(systems, score_json):
                 "arm_a": row["arm_a"], "arm_b": row["arm_b"], "windows": row["pairs"],
                 "median_a_tasks_per_s": stats.median(sorted(sides["A"])),
                 "median_b_tasks_per_s": stats.median(sorted(sides["B"]))}
+            per_process["%s-%s" % (row["key"], row["arm_a"])] = {
+                "key": row["key"], "system": row["system"], "backend": row["backend"], "work_us": row["work_us"],
+                "arm_a": row["arm_a"], "arm_b": row["arm_b"], "processes": by_process}
     need(set(rows) == {"%s-%s" % k for k in scored}, "H4 rows scored but not read")
-    return rows
+    return rows, per_process
 
 
 def prior_design(h5_dirs):
@@ -362,7 +376,7 @@ def main(argv=None):
         need(not score_json.get("draft") and not h5_json.get("draft") and not h6_json.get("draft"), "a draft input")
         processes, rounds = campaign([tuple(a.linux), tuple(a.windows)], score_json)
         bound = prior_bound([("linux", a.h5_linux), ("windows", a.h5_windows)], a.records, h5_json)
-        throughput = h4_throughput([tuple(a.linux), tuple(a.windows)], score_json)
+        throughput, process_ratios = h4_throughput([tuple(a.linux), tuple(a.windows)], score_json)
         designs = prior_design([("linux", a.h5_linux), ("windows", a.h5_windows)])
         medians = trial_medians([tuple(a.linux), tuple(a.windows)], score_json)
         netty = netty_posts(a.h6_run, h6_json)
@@ -375,7 +389,8 @@ def main(argv=None):
            "undrained_rounds": rounds, "prior_bound": bound,
            "h4_throughput": throughput, "prior_design": designs,
            "trial_medians": medians, "netty_posts": netty,
-           "divisor_flags": recount, "calibrated_periods": periods}
+           "divisor_flags": recount, "calibrated_periods": periods,
+           "h4_process_ratios": process_ratios}
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats.jsonable(out), f, indent=1, sort_keys=True)
         f.write("\n")
