@@ -203,6 +203,64 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([u["id"] for u in job["units"]], calls)
         self.assertIn("boom", job["error"])
 
+    def test_power_start_failure_skips_only_its_block(self):
+        header, rows = rows_of("quick-L-r1")
+        rows = [dict(r, condition="quiet") if r["condition"] == "load" else r for r in rows]  # no real hog here
+
+        class FakePower:
+            calls = 0
+
+            def apply(self):
+                FakePower.calls += 1
+                if FakePower.calls == 1:
+                    raise quick_power.PowerError("did not take")
+                return {"snapshot": "s"}
+
+            def restore(self, applied):
+                return {"restored": applied["snapshot"]}
+
+        ran = []
+
+        def runner(exe, row, out):
+            ran.append(row["id"])
+            return {"id": row["id"], "rc": 0, "wall_s": 0.0}
+
+        old = quick_run.RAMP_S
+        quick_run.RAMP_S = 0
+        try:
+            job = quick_run.run_plan(header, rows, "x", Path("."), FakePower(), qc.BUDGET_S, runner)
+        finally:
+            quick_run.RAMP_S = old
+        self.assertNotIn("error", job)
+        bad = [b for b in job["blocks"] if b.get("start_error")]
+        self.assertEqual(len(bad), 1)
+        self.assertEqual((bad[0]["condition"], bad[0]["round"]), ("power", 0))
+        skipped = set(bad[0]["skipped"])
+        self.assertEqual(skipped, {r["id"] for r in rows if r["round"] == 0 and r["condition"] == "power"})
+        self.assertEqual(set(ran), {r["id"] for r in rows} - skipped)
+        self.assertEqual(job["rounds_run"], header["rounds"])
+
+    def test_power_restore_failure_ends_the_campaign(self):
+        header, rows = rows_of("quick-L-r1")
+        rows = [dict(r, condition="quiet") if r["condition"] == "load" else r for r in rows]
+
+        class BadRestore:
+            def apply(self):
+                return {"snapshot": "s"}
+
+            def restore(self, applied):
+                raise quick_power.PowerError("did not come back")
+
+        old = quick_run.RAMP_S
+        quick_run.RAMP_S = 0
+        try:
+            job = quick_run.run_plan(header, rows, "x", Path("."), BadRestore(), qc.BUDGET_S,
+                                     lambda e, r, o: {"id": r["id"], "rc": 0, "wall_s": 0.0})
+        finally:
+            quick_run.RAMP_S = old
+        self.assertIn("did not come back", job["error"])
+        self.assertLess(len(job["units"]), len(rows))
+
     def test_dry_run_runs_nothing(self):
         sha = qc.file_sha256(qc.PLANS_DIR / "quick-L-r2.jsonl")
         if quick_run.this_os() != "linux":

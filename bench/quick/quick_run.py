@@ -12,7 +12,8 @@ It then runs the rows in the plan's order. A condition block starts its conditio
 spinning process per load CPU; power: the host's own power settings), runs its rows, and stops the
 condition in a finally. Before each round after the first it stops if the time used plus the mean round
 so far would pass 600 s (the realized rounds are recorded). A wakeprobe process that fails is recorded with
-its exit code and not rerun. Output in --out-dir: units/<id>.jsonl (wakeprobe's records), units/<id>.out
+its exit code and not rerun. A condition that does not start (it sets back what it changed) skips only its
+block, which is recorded; a condition that cannot be set back ends the campaign. Output in --out-dir: units/<id>.jsonl (wakeprobe's records), units/<id>.out
 (its stdout and stderr), job.json and validate.txt. Exit 0 when every process exited 0, 3 when one did not
 (its data is kept), 2 for a refusal. --dry-run checks the plan and prints the commands, and runs nothing.
 """
@@ -137,6 +138,10 @@ class Load:
         return {"hog_exit": codes}
 
 
+class StartError(Exception):
+    """A condition that did not start; it set back what it had changed, so only its block is skipped."""
+
+
 class Condition:
     def __init__(self, name: str, header: dict, power=None):
         self.name, self.header, self.power = name, header, power
@@ -144,12 +149,15 @@ class Condition:
 
     def __enter__(self) -> dict:
         rec: dict = {"condition": self.name, "start": time.time()}
-        if self.name == "load":
-            self.load = Load(self.header["load_cpus"])
-            rec.update(self.load.start())
-        elif self.name == "power":
-            self.state = self.power.apply()
-            rec["power"] = self.state
+        try:
+            if self.name == "load":
+                self.load = Load(self.header["load_cpus"])
+                rec.update(self.load.start())
+            elif self.name == "power":
+                self.state = self.power.apply()
+                rec["power"] = self.state
+        except (RuntimeError, OSError) as e:  # PowerError is a RuntimeError; apply() and start() set back first
+            raise StartError(f"{type(e).__name__}: {e}") from e
         if self.name != "quiet":
             time.sleep(RAMP_S)
         self.rec = rec
@@ -204,9 +212,16 @@ def _run_rounds(header, rows, exe, out_dir, power, budget_s, runner, clock, job,
         for block in sorted({r["block"] for r in rrows}):
             brows = [r for r in rrows if r["block"] == block]
             cond = Condition(brows[0]["condition"], header, power)
-            with cond as rec:
-                for row in brows:
-                    job["units"].append(dict(runner(exe, row, out_dir), round=rnd, condition=cond.name))
+            try:
+                with cond:
+                    for row in brows:
+                        job["units"].append(dict(runner(exe, row, out_dir), round=rnd, condition=cond.name))
+            except StartError as e:
+                # Only this block is skipped. A failed restore is not a StartError: it ends the campaign, since
+                # later blocks would run on the wrong settings.
+                job["blocks"].append({"condition": cond.name, "round": rnd, "block": block, "start_error": str(e),
+                                      "skipped": [r["id"] for r in brows]})
+                continue
             job["blocks"].append(dict(cond.rec, round=rnd, block=block))
         round_walls.append(clock() - r0)
         job["rounds_run"] = rnd + 1
@@ -247,7 +262,8 @@ def main(argv: list[str] | None = None) -> int:
     rc = 3 if job.get("error") else 0
     job["ended"] = time.time()
     failed = [u for u in job.get("units", []) if u["rc"] != 0]
-    if failed:
+    skipped = [b for b in job.get("blocks", []) if b.get("start_error")]
+    if failed or skipped:
         rc = 3
     (a.out_dir / "job.json").write_text(json.dumps(job, indent=1), encoding="utf-8")
     lines = [f"plan {a.plan} rounds {job.get('rounds_run', 0)} of {header['rounds']}",
@@ -257,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     if job.get("error"):
         lines.append(f"error {job['error']}")
     lines += [f"failed {u['id']} rc {u['rc']}" for u in failed]
+    lines += [f"skipped block {b['condition']} round {b['round']}: {b['start_error']}" for b in skipped]
     (a.out_dir / "validate.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return rc

@@ -55,7 +55,9 @@ def job(name: str, commit: str) -> dict:
     jid = "p1q-" + name.removeprefix("quick-").lower()
     note = (f"quick-plan.md, decision d010 option B, run {spec.run}. A timed campaign of at most 600 s with its plan's "
             "sha256 pinned (--quick); the runner cuts rounds to stay inside 600 s. The build phase is untimed; exit 2 "
-            "is a refusal before anything is timed and is never rerun with labrun. Branch quick-benchmarks of "
+            "is a refusal before anything is timed and is never rerun with labrun. Exit 3 means a wakeprobe process "
+            "failed or a condition block did not start; the archive is kept and analysed, not rerun (a lost wake on a "
+            "correct loop is a finding). Branch quick-benchmarks of "
             "wake-defect is local and unpushed at the time of this request: it must be on the remote (Alex's "
             "standing yes, rule 14) before the orchestrator queues it.")
     if spec.run == "R1":
