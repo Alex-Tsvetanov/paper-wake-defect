@@ -1,4 +1,4 @@
-P1 quick runs R1 to R3: medians over processes [min, max]; descriptive only.
+P1 quick runs R1 to R4: medians over processes [min, max]; descriptive only.
 
 quick-L-r1 (R1, linux): 276 processes, 3 rounds, 446 s, lost 0, timeouts 0, timer off default 0 []
   B_eff ('load', 'condvar', 1000): 1.009 ms, measured, span 0.0004
@@ -189,3 +189,19 @@ quick-W-r3 (R3, windows): 72 processes, 6 rounds, 480 s, lost 0, timeouts 0, tim
     absent_wake: T_med 66/66, T_count 66; idle line 66, 66
     none: T_med 0/66, T_count 0; idle line 0, 0
     plain_wake: T_med 0/66, T_count 0; idle line 0, 0
+
+quick-W-r4 (R4, windows): 120 processes, 10 rounds, 469 s, lost 0, timeouts 0, timer off default 0 []
+  condvar: B_eff 16.0784 ms (measured, 10 of 10, threshold 8, span 0.0029), idle 15.6979 ms
+    none W4: T_med 0/50, T_count 0; idle line 0, 0; median delay 0.058 ms
+    absent_wake W4: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.417 ms, own 16.0893 ms, phase tenths [0.084, 0.082, 0.122, 0.09, 0.114, 0.104, 0.108, 0.106, 0.094, 0.097], over one period 1.000
+    unobserved_primitive W1: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.371 ms, own 16.0784 ms, phase tenths [0.069, 0.096, 0.11, 0.106, 0.114, 0.103, 0.107, 0.093, 0.11, 0.092], over one period 0.693
+    unobserved_primitive W4: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.422 ms, own 16.0843 ms, phase tenths [0.086, 0.078, 0.117, 0.098, 0.119, 0.098, 0.108, 0.104, 0.102, 0.09], over one period 1.000
+    wrong_worker W2: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.411 ms, own 16.0580 ms, phase tenths [0.115, 0.096, 0.094, 0.08, 0.093, 0.094, 0.091, 0.1, 0.124, 0.111], over one period 0.858
+    wrong_worker W4: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.437 ms, own 16.0777 ms, phase tenths [0.126, 0.085, 0.093, 0.083, 0.097, 0.088, 0.091, 0.102, 0.124, 0.111], over one period 0.867
+  iocp: B_eff 16.0927 ms (measured, 10 of 10, threshold 8, span 0.0061), idle 15.6880 ms
+    none W4: T_med 0/50, T_count 0; idle line 0, 0; median delay 0.057 ms
+    absent_wake W4: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.947 ms, own 16.0790 ms, phase tenths [0.075, 0.083, 0.12, 0.104, 0.101, 0.113, 0.099, 0.11, 0.1, 0.095], over one period 1.000
+    unobserved_primitive W1: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.418 ms, own 16.0927 ms, phase tenths [0.06, 0.098, 0.111, 0.116, 0.105, 0.096, 0.11, 0.095, 0.112, 0.096], over one period 0.689
+    unobserved_primitive W4: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.686 ms, own 16.0840 ms, phase tenths [0.078, 0.08, 0.13, 0.09, 0.11, 0.101, 0.11, 0.107, 0.09, 0.103], over one period 1.000
+    wrong_worker W2: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.441 ms, own 16.0598 ms, phase tenths [0.12, 0.088, 0.094, 0.075, 0.099, 0.091, 0.092, 0.106, 0.118, 0.116], over one period 0.862
+    wrong_worker W4: T_med 50/50, T_count 50; idle line 50, 50; median delay 8.692 ms, own 16.0727 ms, phase tenths [0.12, 0.087, 0.101, 0.077, 0.09, 0.09, 0.098, 0.105, 0.119, 0.112], over one period 0.872

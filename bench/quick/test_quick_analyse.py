@@ -87,7 +87,89 @@ class Rules(unittest.TestCase):
         self.assertEqual(set(A.OPT_RE.findall("clang++ -O0 -g -c b.cpp")), {"-O0"})
 
 
+R4_CELLS = (("unobserved_primitive", 1, True), ("unobserved_primitive", 4, True), ("wrong_worker", 2, True),
+            ("wrong_worker", 4, True), ("absent_wake", 4, True), ("none", 4, False))
+R4_B = 16_000_000  # synthetic B_eff in ns, not a result
+
+
+def r4_job(source_beff: dict | None = None, rounds: int = 10) -> dict:
+    """A synthetic R4 job: every delaying post waits 0.6 B_eff, every fixed-loop post 0.01 B_eff."""
+    procs = []
+    for backend in ("condvar", "iocp"):
+        for variant, workers, delaying in R4_CELLS:
+            for r in range(rounds):
+                own = (source_beff or {}).get((backend, r), R4_B) if (variant, workers) == ("unobserved_primitive", 1) \
+                    else R4_B
+                delay = int(0.6 * R4_B) if delaying else R4_B // 100
+                procs.append({
+                    "row": {"round": r, "id": f"R4-{backend}-{variant}-W{workers}-r{r}", "backend": backend,
+                            "variant": variant, "workers": workers, "wait_us": 1000},
+                    "summary": {"b_eff_ns": own if delaying else None, "b_eff_idle_ns": int(0.97 * R4_B),
+                                "delays_single_posts": delaying, "gap_unit_us": 15625, "coarsest_timer_us": 15625,
+                                "lost": 0, "timeouts": 0},
+                    "measured": [{"delay_ns": delay, "kind": "measured", "phase_ns": (i * R4_B) // 10 + 1}
+                                 for i in range(42)]})
+    return {"os": "windows", "procs": procs}
+
+
+class R4(unittest.TestCase):
+    def test_count_threshold_is_the_ceiling_of_eight_tenths(self):
+        self.assertEqual([A.r4_min_calibrated(n) for n in (10, 9, 8, 6, 5, 1)], [8, 8, 7, 5, 4, 1])
+
+    def test_rule_at_ten_processes_matches_frozen_decision_15(self):
+        for values in ([1000] * 10, [1000] * 7 + [None] * 3, [1000] * 8 + [None] * 2, [1000] * 9 + [1200]):
+            want = beff.beff_rule("windows", 1000, [summ(v) if v else {"b_eff_ns": None, "coarsest_timer_us": 15625}
+                                                    for v in values])
+            got = A.beff_rule("windows", 1000, values, 10, A.r4_min_calibrated(10), 15625)
+            self.assertEqual(got["b_eff_ns"], want["b_eff_ns"])
+
+    def test_first_line_comes_from_the_unobserved_one_worker_cell(self):
+        res = A.r4(r4_job({("iocp", r): R4_B + 1000 * r for r in range(10)}))
+        self.assertEqual(res["rows"]["iocp"]["planted_rule"]["source"], "measured")
+        self.assertEqual(res["rows"]["iocp"]["planted_rule"]["b_eff_ns"], R4_B + 4500)
+        self.assertEqual(res["rows"]["condvar"]["planted_rule"]["b_eff_ns"], R4_B)
+        self.assertEqual(res["rows"]["iocp"]["idle"]["median"], int(0.97 * R4_B))
+
+    def test_fallback_when_fewer_than_eight_calibrate(self):
+        res = A.r4(r4_job({("condvar", r): None for r in range(3)}))
+        rule = res["rows"]["condvar"]["planted_rule"]
+        self.assertEqual((rule["calibrated"], rule["min_calibrated"]), (7, 8))
+        self.assertEqual((rule["source"], rule["b_eff_ns"]), ("fallback: coarsest timer", 15_625_000))
+
+    def test_cells_flags_phase_and_no_own_beff_for_the_fixed_loop(self):
+        res = A.r4(r4_job())
+        cells = res["rows"]["iocp"]["cells"]
+        self.assertEqual(len(cells), 6)
+        fixed, wrong = cells[("none", 4)], cells[("wrong_worker", 4)]
+        self.assertFalse(fixed["delaying"])
+        self.assertNotIn("own_beff", fixed)
+        self.assertNotIn("phase", fixed)
+        self.assertEqual((fixed["planted"]["t_med_trials"], fixed["planted"]["trials"]), (0, 20))
+        self.assertEqual((wrong["planted"]["t_med_trials"], wrong["idle"]["t_count_trials"]), (20, 20))
+        self.assertEqual(wrong["phase"]["tenth_counts"], [50, 50, 40, 40, 40, 40, 40, 40, 40, 40])  # 42 posts
+        self.assertEqual(res["lost"], {"lost": 0, "timeouts": 0})
+
+    def test_mixed_delaying_flag_stops(self):
+        job = r4_job()
+        job["procs"][0]["summary"]["delays_single_posts"] = False
+        with self.assertRaises(A.AnalysisError):
+            A.r4(job)
+
+
 class Paper(unittest.TestCase):
+    def test_r4_macros_follow_every_earlier_macro(self):
+        res = A.r4(r4_job())
+        j = res | {"run": "R4", "plan": "quick-W-r4", "rounds": 10, "trials_per_process": 2, "wall_s": 1.0,
+                   "commit": "0" * 40, "timer_off_default": [], "timer_changed": [], "timer_start": {}}
+        earlier = P.Macros()
+        P.common_macros(earlier, {"quick-W-r4": j})
+        self.assertEqual(earlier.items, [])  # R4 adds nothing to the R1 to R3 block
+        text = P.macros({"quick-W-r4": j})
+        head = text.splitlines()
+        self.assertTrue(head[1].startswith("% ---- R4"))
+        self.assertIn("\\newcommand{\\QuickRFourWindowsIocpWrongWFourPlantedTmed}{20}", text)
+
+
     def test_macro_names_letters_and_once(self):
         m = P.Macros()
         m.add("QuickA", 1)

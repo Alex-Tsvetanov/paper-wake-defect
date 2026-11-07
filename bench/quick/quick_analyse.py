@@ -1,6 +1,7 @@
 # Copyright 2026 Alex Tsvetanov
 # SPDX-License-Identifier: Apache-2.0
-"""The analysis of P1's quick runs R1 to R3 (quick-plan.md, decision d010 option B): results/quick/summary.json,
+"""The analysis of P1's quick runs R1 to R3 (quick-plan.md, decision d010 option B) and R4 (quick-plan-r4.md, decision
+d013 option H): results/quick/summary.json,
 report.txt, macros.tex, table bodies and figures from the extracted laptop archives.
 
     python -I bench/quick/quick_analyse.py JOB_FOLDER [JOB_FOLDER ...] [--out results/quick]
@@ -22,6 +23,12 @@ What is computed is fixed by quick-plan.md, section "What is computed", before a
 - R3 phase coverage: wakeprobe's phase is the post time minus the worker's last wake, so a phase can exceed one
   period. The position in the wake period is phase mod B_eff, the reduction wakeprobe's own prediction uses; the
   share of posts whose phase exceeds one B_eff is reported beside it.
+- R4 (quick-plan-r4.md, decision d013 option H): per backend, the first B_eff line is decision 15's rule on the
+  unobserved-primitive, W = 1 cell (count threshold the smallest whole number at or above 0.8 times its processes,
+  8 of 10; span 10%; fallback the larger of B and coarsest_timer_us); the second line is the median of the
+  fixed-loop, W = 4 cell's b_eff_idle_ns. Both lines flag every cell. Beside them each delaying cell's own median
+  b_eff_ns and b_eff_idle_ns, the gap unit check, and phase coverage as R3 with wakeprobe's phase (which, for wrong
+  worker, already counts the latest misdirected wake of the post's worker). R4 is not pooled with R3.
 
 Refused, with nothing written (rule 1 and the plan): a plan whose sha256 is not the job's, a build level other than
 -O3 (Linux) or /O2 (Windows) in any compile_commands entry, a summary that is not Release, dirty, from another
@@ -305,6 +312,56 @@ def r3(job: dict) -> dict:
     return {"os": os_name, "coarsest_timer_us": co, "rows": out, "lost": lost(procs), "processes": len(procs)}
 
 
+# ------------------------------------------------------------------------------------------------ R4
+
+R4_BEFF_SOURCE = ("unobserved_primitive", 1)  # quick-plan-r4.md: first B_eff line, the W = 1 delaying cell
+R4_IDLE_SOURCE = ("none", 4)                  # second line: the fixed loop's idle timed returns
+R4_COUNT_SHARE = Fraction(grid.BEFF_MIN_CALIBRATED, grid.PROCESSES_PER_CELL)  # 8 of 10
+
+
+def r4_min_calibrated(processes: int) -> int:
+    """quick-plan-r4.md: the smallest whole number at or above 0.8 times the processes that ran (8 of 10)."""
+    share = R4_COUNT_SHARE * processes
+    return share.numerator // share.denominator + (share.denominator != 1)
+
+
+def r4(job: dict) -> dict:
+    """quick-plan-r4.md, "What is computed": two B_eff lines per backend, flags per cell, phase coverage."""
+    os_name, procs = job["os"], job["procs"]
+    co = coarsest(procs)
+    out = {}
+    for (backend,), ps in group(procs, "backend").items():
+        bound = {p["row"]["wait_us"] for p in ps}
+        if len(bound) != 1:
+            raise AnalysisError(f"R4 {backend}: more than one bound {sorted(bound)}")
+        bound = bound.pop()
+        cells = group(ps, "variant", "workers")
+        if R4_BEFF_SOURCE not in cells or R4_IDLE_SOURCE not in cells:
+            raise AnalysisError(f"R4 {backend}: a B_eff source cell is missing")
+        src = cells[R4_BEFF_SOURCE]
+        need = r4_min_calibrated(len(src))
+        rule = beff_rule(os_name, bound, [p["summary"].get("b_eff_ns") for p in src], len(src), need, co) | {
+            "min_calibrated": need}
+        idle = spread([p["summary"]["b_eff_idle_ns"] for p in cells[R4_IDLE_SOURCE]])
+        rows = {}
+        for (variant, workers), cps in cells.items():
+            delaying = bool(cps[0]["summary"].get("delays_single_posts"))
+            if any(bool(p["summary"].get("delays_single_posts")) != delaying for p in cps):
+                raise AnalysisError(f"R4 {backend} {variant} W{workers}: delays_single_posts differs between processes")
+            row = {"variant": variant, "workers": workers, "delaying": delaying,
+                   "planted": cell_block(cps, rule["b_eff_ns"]), "idle": cell_block(cps, idle["median"]),
+                   "lost": lost(cps), "gap_unit": gap_unit(cps),
+                   "own_idle": spread([p["summary"]["b_eff_idle_ns"] for p in cps])}
+            if delaying:
+                row["own_beff"] = spread([p["summary"]["b_eff_ns"] for p in cps
+                                          if isinstance(p["summary"].get("b_eff_ns"), (int, float))])
+                row["own_calibrated"] = row["own_beff"]["n"] if row["own_beff"] else 0
+                row["phase"] = phase_cover(cps, rule["b_eff_ns"])
+            rows[(variant, workers)] = row
+        out[backend] = {"bound_us": bound, "planted_rule": rule, "idle": idle, "cells": rows}
+    return {"os": os_name, "coarsest_timer_us": co, "rows": out, "lost": lost(procs), "processes": len(procs)}
+
+
 def phase_cover(procs: list[dict], b_eff: float) -> dict:
     phases = [u["phase_ns"] for p in procs for u in p["measured"] if u.get("phase_ns") is not None
               and u["phase_ns"] >= 0]
@@ -360,7 +417,11 @@ def analyse(folders: list[Path], score_path: Path) -> dict:
     for folder in folders:
         job = load_job(folder)
         run = job["header"]["run"]
-        res = r1(job, camp) if run == "R1" else r2(job, camp) if run == "R2" else r3(job)
+        runs = {"R1": lambda: r1(job, camp), "R2": lambda: r2(job, camp), "R3": lambda: r3(job),
+                "R4": lambda: r4(job)}
+        if run not in runs:
+            raise AnalysisError(f"{folder}: run {run!r} has no analysis")
+        res = runs[run]()
         j = job["job"]
         res |= {"timer_start": timer_readings(job["procs"]), "timer_changed": timer_changed(job["procs"]),
                 "timer_off_default": [p["row"]["id"] for p in job["procs"] if job["os"] == "windows"
