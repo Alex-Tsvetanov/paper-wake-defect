@@ -31,6 +31,21 @@ Added 2026-11-07 (round 4 of the writer's requests):
   prior_design     each system's H5 plan.txt (h5.py's read_plan), which must be the runners' design
                    (h5.py's design_problem); the file names are dropped.
 
+Added 2026-11-07 (round 5 of the writer's requests):
+
+  trial_medians    for every cell of single posts and batch rounds of score.json, per good process:
+                   its trials, the median over its trials of each trial's median delay (21
+                   measured units, as score_process cuts them, stats.median), and the trials
+                   flagged with the cell's
+                   B_eff and with the requested bound B as the threshold base. The B_eff counts must
+                   equal the cell's T_med flags and trials in score.json, and the process count its
+                   processes_good. Per cell also the median of all its trials' medians, pooled. The
+                   B count is descriptive only: it is no test of the design.
+  netty_posts      for the buggy version's natural cell of H6, per good process (h6.py's read_plan,
+                   read_process and trials_of, unchanged): its posts and its posts above half the
+                   bound. The sums must equal h6.json's posts and posts_over_half_b, and each
+                   process's count its entries of h6.json's over_half_b.
+
 Any difference is refused and nothing is written.
 """
 
@@ -40,6 +55,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(1, os.path.dirname(HERE))  # analysis/, for 2026-09's summarize.py
+sys.path.insert(2, os.path.join(HERE, "..", "..", "historical", "netty"))  # run_h6.py, which h6.py imports
 
 import argparse  # noqa: E402
 import json  # noqa: E402
@@ -185,6 +201,74 @@ def prior_design(h5_dirs):
     return out
 
 
+PROTOCOLS = ("S", "Bt")
+
+
+def process_trial_medians(run, b_eff, bound_ns):
+    """One good process: each trial's median delay, and the trials flagged against B_eff and against B."""
+    units = run.measured()
+    per = grid.UNITS_PER_TRIAL
+    medians = [stats.median([u["delay_ns"] for u in units[t * per:(t + 1) * per]]) for t in range(len(units) // per)]
+    return {"trials": len(medians), "medians": medians, "median_trial_median_ns": stats.median(sorted(medians)),
+            "flags_b_eff": sum(1 for x in medians if grid.T_MED_DIVISOR * x > b_eff),
+            "flags_requested": sum(1 for x in medians if grid.T_MED_DIVISOR * x > bound_ns)}
+
+
+def trial_medians(systems, score_json):
+    """Per cell of single posts and batch rounds: each good process's trial medians and flag counts."""
+    out = {}
+    for plan_path, data_dir in systems:
+        header, groups, _ = score.resolve_plan(plan_path, data_dir)
+        system = header["system"]
+        for key, cell in sorted(score_json["cells"].items()):
+            if not key.startswith(system + ":") or cell["protocol"] not in PROTOCOLS:
+                continue
+            resolved = groups.get((cell["protocol"], cell["cell"]))
+            need(resolved, "%s: no planned processes" % key)
+            procs = [process_trial_medians(r.run, cell["b_eff_ns"], cell["bound_us"] * 1000)
+                     for r in resolved if r.ok]
+            need(len(procs) == cell["processes_good"], "%s: %d good processes, %d read" % (key, len(procs),
+                                                                                         cell["processes_good"]))
+            flags, trials = sum(p["flags_b_eff"] for p in procs), sum(p["trials"] for p in procs)
+            need(flags == cell["t_med"]["flags"] and trials == cell["t_med"]["trials"],
+                 "%s: %d of %d trials flagged here, %d of %d scored" % (key, flags, trials, cell["t_med"]["flags"],
+                                                                     cell["t_med"]["trials"]))
+            pooled = sorted(x for p in procs for x in p.pop("medians"))
+            out[key] = {"protocol": cell["protocol"], "family": cell["family"], "complete": cell["complete"],
+                        "b_eff_ns": cell["b_eff_ns"], "bound_ns": cell["bound_us"] * 1000,
+                        "median_trial_median_ns": stats.median(pooled) if pooled else None, "processes": procs}
+    want = {k for k, c in score_json["cells"].items() if c["protocol"] in PROTOCOLS}
+    need(set(out) == want, "cells scored but not read: %s" % sorted(want - set(out))[:5])
+    return out
+
+
+NETTY_CELL = ("cr7", "natural")
+
+
+def netty_posts(h6_dir, h6_json):
+    """The buggy version's natural cell: per good process, its posts and its posts above half the bound."""
+    import h6 as h6_mod  # its run_h6 lives under historical/netty
+    entries = [e for e in h6_mod.read_plan(h6_dir) if (e["arm"], e["protocol"]) == NETTY_CELL]
+    cell = h6_json["cells"]["%s-%s" % NETTY_CELL]
+    scored = {}
+    for x in cell["over_half_b"]:
+        scored[x["process"]] = scored.get(x["process"], 0) + 1
+    rows = []
+    for e in entries:
+        p = h6_mod.read_process(h6_dir, e)
+        if not p["good"]:
+            continue
+        delays = [d for t in h6_mod.trials_of(p) for d in t]
+        over = sum(1 for d in delays if d > h6_mod.T_COUNT_NS)
+        need(over == scored.get(e["process"], 0), "H6 process %s: %d posts over B/2 here, %d scored"
+             % (e["process"], over, scored.get(e["process"], 0)))
+        rows.append({"process": e["process"], "posts": len(delays), "over_half_b": over})
+    need(len(rows) == cell["processes_good"], "H6: %d good processes, %d scored" % (len(rows), cell["processes_good"]))
+    need(sum(r["posts"] for r in rows) == cell["posts"], "H6: posts differ from h6.json")
+    need(sum(r["over_half_b"] for r in rows) == cell["posts_over_half_b"], "H6: posts over B/2 differ from h6.json")
+    return sorted(rows, key=lambda r: r["process"])
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--linux", nargs=2, metavar=("PLAN", "DIR"), required=True)
@@ -194,25 +278,32 @@ def main(argv=None):
     ap.add_argument("--h5-windows", required=True)
     ap.add_argument("--h5", required=True)
     ap.add_argument("--records", action="append", default=[], required=True)
+    ap.add_argument("--h6-run", required=True, help="the H6 archive's out/h6 folder, as h6.py reads it")
+    ap.add_argument("--h6", required=True)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     with open(a.score, encoding="utf-8") as f:
         score_json = json.load(f)
     with open(a.h5, encoding="utf-8") as f:
         h5_json = json.load(f)
+    with open(a.h6, encoding="utf-8") as f:
+        h6_json = json.load(f)
     try:
-        need(not score_json.get("draft") and not h5_json.get("draft"), "a draft input")
+        need(not score_json.get("draft") and not h5_json.get("draft") and not h6_json.get("draft"), "a draft input")
         processes, rounds = campaign([tuple(a.linux), tuple(a.windows)], score_json)
         bound = prior_bound([("linux", a.h5_linux), ("windows", a.h5_windows)], a.records, h5_json)
         throughput = h4_throughput([tuple(a.linux), tuple(a.windows)], score_json)
         designs = prior_design([("linux", a.h5_linux), ("windows", a.h5_windows)])
+        medians = trial_medians([tuple(a.linux), tuple(a.windows)], score_json)
+        netty = netty_posts(a.h6_run, h6_json)
     except (Refusal, h5_mod.Refusal) as e:
         print("refused: %s" % e, file=sys.stderr)
         return 2
     out = {"generated_by": "analysis/v2/raw_facts.py", "draft": False,
            "processes_per_cell": grid.PROCESSES_PER_CELL, "processes": processes,
            "undrained_rounds": rounds, "prior_bound": bound,
-           "h4_throughput": throughput, "prior_design": designs}
+           "h4_throughput": throughput, "prior_design": designs,
+           "trial_medians": medians, "netty_posts": netty}
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats.jsonable(out), f, indent=1, sort_keys=True)
         f.write("\n")

@@ -1044,6 +1044,90 @@ def prior_design(m, raw, h5):
              % (c, c["cells"], len(sweeps), len(matrix)))
 
 
+# ---------------------------------------------------------------------------------------------
+# Added 2026-11-07 for the writer's round 5 requests (revision-log-v2.md): the clustered interval of
+# the buggy version's natural posts above half the bound, the flag rates with the requested bound
+# as the threshold base, and the trial medians over B_eff. Every name below is new; nothing above
+# changed. All three are descriptive and outside the families.
+# ---------------------------------------------------------------------------------------------
+
+
+def netty_clustered(m, raw, h6):
+    """The clustered 95% interval (stats.rate_interval, the frozen seed and resamples) of the share of
+    the buggy version's natural posts above half the bound, the process as the cluster."""
+    m.section("the historical case: clustered interval of the natural posts above half the bound (raw_facts.py)")
+    rows = raw["netty_posts"]
+    c = h6["cells"]["cr7-natural"]
+    need(len(rows) == run_h6.PROCESSES_PER_CELL, "H6: %d processes in netty_posts" % len(rows))
+    need(sum(r["posts"] for r in rows) == c["posts"] and sum(r["over_half_b"] for r in rows) == c["posts_over_half_b"],
+         "H6: netty_posts and h6.json differ")
+    lo, hi = stats.rate_interval([r["over_half_b"] for r in rows], [r["posts"] for r in rows])
+    m.add("NettyNaturalClusterLow", rate(lo), "clustered 95% interval over the processes, per post")
+    m.add("NettyNaturalClusterHigh", rate(hi))
+    sizes = {r["posts"] for r in rows}
+    need(len(sizes) == 1, "H6: natural processes differ in posts: %s" % sorted(sizes))
+    m.add("NettyNaturalPostsPerProcess", sizes.pop(), "measured posts of each natural process")
+
+
+def requested_bound(m, s, raw):
+    """The test's flag counts with the requested bound B instead of B_eff as the threshold base."""
+    m.section("flag rates with the requested bound as the threshold base (raw_facts.py, descriptive)")
+    tm = raw["trial_medians"]
+    need(set(tm) == {k for k, c in s["cells"].items() if c["protocol"] in ("S", "Bt")}, "trial_medians: cells differ")
+    changed = {"S": [], "Bt": []}
+    for k, c in tm.items():
+        need(sum(p["flags_b_eff"] for p in c["processes"]) == s["cells"][k]["t_med"]["flags"], "%s: flags differ" % k)
+        if c["complete"] and sum(p["flags_requested"] for p in c["processes"]) != s["cells"][k]["t_med"]["flags"]:
+            changed[c["protocol"]].append(k)
+    every = changed["S"] + changed["Bt"]
+    m.add("RequestedCellsChanged", len(every), "complete cells whose flag count differs from the B_eff one")
+    m.add("RequestedCellsChangedSingle", len(changed["S"]))
+    m.add("RequestedCellsChangedBatch", len(changed["Bt"]))
+    small = [k for k in every if s["cells"][k]["system"] == "windows" and s["cells"][k]["bound_us"] == min(grid.BOUNDS_US)]
+    m.add("RequestedCellsChangedWindowsSmall", len(small), "of them, Windows cells at the smaller bound")
+    m.add("RequestedCellsChangedFewer", sum(1 for k in every if sum(p["flags_requested"] for p in tm[k]["processes"])
+                                             < s["cells"][k]["t_med"]["flags"]), "of them, with fewer flags")
+    for fam, prefix in (("F1", "Power"), ("F2", "False")):
+        keys = [k for k in every if tm[k]["family"] == fam]
+        m.add("Requested%sCellsChanged" % prefix, len(keys))
+    f2 = [k for k, c in tm.items() if c["family"] == "F2"]
+    need(all(tm[k]["complete"] for k in f2), "a false-positive cell is incomplete")
+    rates = {k: Fraction(sum(p["flags_requested"] for p in tm[k]["processes"]),
+                         sum(p["trials"] for p in tm[k]["processes"])) for k in f2}
+    m.add("RequestedFalseHighestRate", pw.rate_text(float(max(rates.values()))), "the highest of a false-positive cell")
+    m.add("RequestedFalseFlags", pw.thousands(sum(sum(p["flags_requested"] for p in tm[k]["processes"]) for k in f2)))
+    m.add("RequestedFalseTrials", pw.thousands(sum(sum(p["trials"] for p in tm[k]["processes"]) for k in f2)))
+
+
+def trial_median_ratios(m, s, raw):
+    """Each power and false-positive cell's trial medians over its B_eff: the cell's pooled median and its
+    processes' values (the median over a process's trials), against the threshold 1 / TMedDivisor."""
+    m.section("trial medians over the effective bound, power and false-positive cells (raw_facts.py)")
+    tm = raw["trial_medians"]
+    limit = Fraction(1, grid.T_MED_DIVISOR)
+    m.add("TrialMedianThreshold", pw.fixed(float(limit), 1), "the test's threshold as a share of B_eff")
+    for fam, prefix in (("F1", "Power"), ("F2", "False")):
+        keys = [k for k, c in tm.items() if c["family"] == fam and c["complete"]]
+        need(len(keys) == sum(1 for c in s["cells"].values() if c["family"] == fam and c["complete"]),
+             "%s: complete cells differ" % fam)
+        cells = [tm[k]["median_trial_median_ns"] / tm[k]["b_eff_ns"] for k in keys]
+        procs = [p["median_trial_median_ns"] / tm[k]["b_eff_ns"] for k in keys for p in tm[k]["processes"]]
+        # above the threshold in the test's own form: TMedDivisor x value > B_eff, in ns
+        above = [grid.T_MED_DIVISOR * p["median_trial_median_ns"] > tm[k]["b_eff_ns"]
+                 for k in keys for p in tm[k]["processes"]]
+        if fam == "F1":
+            m.add("TrialMedianPowerLowestCell", pw.fixed(min(cells), 4), "complete power cells")
+            m.add("TrialMedianPowerLowestProcess", pw.fixed(min(procs), 4), "complete power cells")
+            m.add("TrialMedianPowerProcessesBelow", sum(1 for x in above if not x),
+                  "processes of complete power cells at or below the threshold")
+        else:
+            m.add("TrialMedianFalseHighestCell", pw.fixed(max(cells), 4))
+            m.add("TrialMedianFalseHighestProcess", pw.fixed(max(procs), 4))
+            m.add("TrialMedianFalseProcessesAbove", sum(1 for x in above if x),
+                  "processes of false-positive cells above the threshold")
+        m.add("TrialMedian%sProcesses" % prefix, pw.thousands(len(procs)))
+
+
 SOURCES = {"wake_tests": "tests/wake_tests.cpp", "defects": "loop/include/wakeloop/defect.hpp",
            "wakeprobe": "bench/wakeprobe.cpp", "cmake": "tests/CMakeLists.txt"}
 
@@ -1088,6 +1172,9 @@ def build(inputs, sources, sweep_rows):
     prior_medians(m, raw, inputs["h5"])
     sawtooth_outliers(m, sweep_rows)
     prior_design(m, raw, inputs["h5"])
+    netty_clustered(m, raw, inputs["h6"])
+    requested_bound(m, s, raw)
+    trial_median_ratios(m, s, raw)
     return m.text()
 
 

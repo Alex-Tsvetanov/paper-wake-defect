@@ -35,6 +35,15 @@ paper_words'; numbers are formatted as in paper_macros.py. Nothing is measured o
                      arm's 10 s windows, the fixed loop and the absent wake of its comparison, then
                      the plain wake and the absent wake of its own comparison (raw_facts.py's
                      h4_throughput), rounded to whole tasks; the rows of fixcost, in its order
+  detection-single-requested, detection-batch-requested
+                     added 2026-11-07 (round 5): the rows and columns of detection-single and
+                     detection-batch, each entry the share of trials the test flags when its
+                     threshold base is the requested bound B instead of B_eff (raw_facts.py's
+                     trial_medians); descriptive, no test; "inc." for an incomplete cell
+  trial-medians      added 2026-11-07 (round 5): per power and false-positive cell, the median of all
+                     its trials' median delays over the cell's B_eff, then each good process's median
+                     of its trials' median delays over B_eff, smallest first (raw_facts.py's
+                     trial_medians); an incomplete cell has fewer process values and says so
 """
 
 import os
@@ -297,6 +306,53 @@ def throughput(score, raw):
                  "median tasks/s, absent wake (beside the plain wake)"], rows)
 
 
+def detection_requested(score, raw, protocol):
+    """The rows and columns of detection(), each entry the share of trials flagged with B as the base."""
+    by = {}
+    for key, c in score["cells"].items():
+        p = pw.cell_parts(key)
+        if p["protocol"] == protocol:
+            t = raw["trial_medians"][key]
+            if sum(x["flags_b_eff"] for x in t["processes"]) != c["t_med"]["flags"]:
+                raise Refusal("%s: raw facts and score.json differ" % key)
+            by[(p["variant"], p["workers"], p["system"], p["backend"], p["bound_us"])] = (c, t)
+    rows = []
+    for variant in pw.VARIANT_ORDER:
+        for workers in sorted({k[1] for k in by if k[0] == variant}):
+            cells = []
+            for system, backend, bound in column_keys():
+                ct = by.get((variant, workers, system, backend, bound))
+                if ct is None:
+                    cells.append("")
+                elif not ct[0]["complete"]:
+                    cells.append("inc.")
+                else:
+                    procs = ct[1]["processes"]
+                    cells.append(pw.rate_text(sum(x["flags_requested"] for x in procs) / sum(x["trials"] for x in procs)))
+            label = "%s, %d worker%s" % (pw.VARIANT_WORDS[variant], workers, "" if workers == 1 else "s")
+            rows.append([label] + cells)
+    return body(["variant and workers"] + column_words(), rows)
+
+
+def trial_medians(score, raw):
+    """Per power and false-positive cell: the pooled median of its trial medians over B_eff, then each good
+    process's median of its trial medians over B_eff, smallest first, four places."""
+    rows = []
+    n = grid.PROCESSES_PER_CELL
+    for fam, word in (("H1", "power"), ("H2", "false positive")):
+        for key in sorted(score[fam]["tests"]):
+            t, c = raw["trial_medians"][key], score["cells"][key]
+            if len(t["processes"]) != c["processes_good"] or len(t["processes"]) > n:
+                raise Refusal("%s: raw facts and score.json differ" % key)
+            b = t["b_eff_ns"]
+            values = sorted(p["median_trial_median_ns"] / b for p in t["processes"])
+            rows.append([word, pw.cell_words(key), "yes" if c["complete"] else "no",
+                         pw.fixed(t["median_trial_median_ns"] / b, 4)] + [pw.fixed(v, 4) for v in values]
+                        + [""] * (n - len(values)))
+    return body(["family", "cell", "complete", "cell median of trial medians / B_eff"]
+                + ["process value %d / B_eff (smallest first)" % (i + 1) for i in range(n)], rows)
+
+
 def build(inputs, cmake_text, sweep_rows):
     for name, data in inputs.items():
         if data.get("draft"):
@@ -310,7 +366,10 @@ def build(inputs, cmake_text, sweep_rows):
             "detection-batch-exact": detection_intervals(s, "Bt", "exact_95"),
             "detection-single-clustered": detection_intervals(s, "S", "clustered_95"),
             "detection-batch-clustered": detection_intervals(s, "Bt", "clustered_95"),
-            "process-counts": process_counts(s, inputs["raw"]), "throughput": throughput(s, inputs["raw"])}
+            "process-counts": process_counts(s, inputs["raw"]), "throughput": throughput(s, inputs["raw"]),
+            "detection-single-requested": detection_requested(s, inputs["raw"], "S"),
+            "detection-batch-requested": detection_requested(s, inputs["raw"], "Bt"),
+            "trial-medians": trial_medians(s, inputs["raw"])}
 
 
 def main(argv=None):

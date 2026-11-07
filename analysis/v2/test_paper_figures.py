@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -29,6 +30,19 @@ FORBIDDEN_WORDS = ["absent_wake", "condvar", "W1", "B1ms"]
 INTERNAL = re.compile(r"\b(?:Bt|W\d+|B\d+ms|F\d+|H\d+|[LWS])\b")
 RATE = re.compile(r"(?<![\d.])[01]\.\d\d\d(?![\d.])")
 INCOMPLETE = re.compile(r"inc\.(?!:)")
+
+
+def ligature_maps(pdf):
+    """ToUnicode entries of a PDF (streams inflated) that map one glyph to fi, ff or fl."""
+    found = []
+    for raw in re.findall(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S):
+        try:
+            text = zlib.decompress(raw)
+        except zlib.error:
+            text = raw
+        if b"begincmap" in text:
+            found += re.findall(rb"<00660069>|<00660066>|<0066006c>", text, re.I)
+    return found
 
 
 def cell(system, protocol, backend, variant, workers, ms, rate, complete=True):
@@ -380,6 +394,17 @@ class RealResults(unittest.TestCase):
             for name in pf.OUTPUT_NAMES:
                 self.assertGreater(os.path.getsize(os.path.join(out, name)), 1000, name)
             self.assertEqual(len(stdout.strip().splitlines()), 3)
+
+    @unittest.skipUnless(os.path.exists(REAL_SCORE) and os.path.exists(REAL_SWEEP),
+                         "results/v2/score.json or the real sweep CSV is not here")
+    def test_no_ligature_is_drawn(self):
+        """fi, ff and fl are drawn as two glyphs: no ToUnicode entry of the PDFs maps one glyph to two letters."""
+        with tempfile.TemporaryDirectory(prefix="paper-figures-liga-") as out:
+            self.assertEqual(run_main("--score", REAL_SCORE, "--sweep", REAL_SWEEP, "--out-dir", out)[0], 0)
+            for name in pf.OUTPUT_NAMES:
+                with open(os.path.join(out, name), "rb") as fh:
+                    data = fh.read()
+                self.assertEqual(ligature_maps(data), [], name)
 
     @unittest.skipUnless(os.path.exists(REAL_SCORE), "results/v2/score.json is not here")
     def test_real_score_has_the_expected_shape(self):

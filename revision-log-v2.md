@@ -791,3 +791,60 @@ are byte for byte as before. No scorer changed: `score.py`, `h5.py`, `readers.py
   fec2a75fbb25bf0b9136e12fab6ab21d404e4f2463b338d264f4787e10cecc9a. Two regenerations give the same
   bytes. A render of every macro and the new body passes `lab/bin/check_manuscript_terms.py
   --paper p1` with no hit. All tests under `analysis/v2` pass.
+
+### 2026-11-07: macros, table bodies and figures for the writer's round 5 requests
+
+The writer asked for five more things: a clustered interval of the buggy Netty version's natural
+posts above half the bound, the flag rates of the two detection tables with the requested bound B
+as the threshold base, the trial medians over B_eff of the power and false-positive cells, whether
+a literature search record exists (answered in the Papers repository, not here), and figures whose
+"fi", "ff" and "fl" and row labels print in every PDF reader. Added, and nothing that existed
+changed in value: the first 701 lines of `results/v2/macros.tex` (668 macros), the fifteen earlier
+table bodies and every earlier block of `results/v2/raw-facts.json` are byte for byte as before. No
+scorer changed: `score.py`, `h5.py`, `h6.py`, `readers.py`, `grid.py`, `plan.py` and the code under
+`bench/`, `loop/` and `tests/` are as they were, and `score.json`, `h5.json` and `h6.json` were not
+regenerated. As in the two entries above, only the paper generators under `analysis/v2` changed, so
+the analysis that scored the campaign is unchanged.
+- `analysis/v2/raw_facts.py` adds two blocks and takes `--h6-run` and `--h6`. `trial_medians`: for
+  every cell of single posts and batch rounds, per good process, its trials, the median over its
+  trials of each trial's median delay (21 units, as `score_process` cuts them, `stats.median`), and
+  its trials flagged with the cell's B_eff and with B as the base; per cell the pooled median of its
+  trials' medians. The B_eff counts must equal every cell's T_med flags and trials in `score.json`.
+  `netty_posts`: per good process of the buggy version's natural cell (`h6.py`'s read_plan,
+  read_process and trials_of), its posts and its posts above half the bound, checked per process
+  against `h6.json`'s over_half_b and in sum against its posts and posts_over_half_b. Inputs: the
+  four archives of the entries above and `p1-h6-l.tar.gz`
+  b5cf14fedb1e8cfef2fba9d79d3813e95cceca5b515ac9c96c99745fbde4130e (its `out/h6`), each verified
+  again against its .sha256.
+- `paper_macros.py` adds 22 macros: the clustered 95% interval over the 10 processes of the share
+  of the buggy version's natural posts above half the bound (`stats.rate_interval`, the frozen seed
+  and resamples, the process as the cluster); the cells whose flag count changes with B as the base,
+  by protocol, family and system, and the false-positive cells' flags under that base; the lowest
+  cell and process value of the trial medians over B_eff in the complete power cells, the highest in
+  the false-positive cells, and the processes on the wrong side of B_eff / 5. All descriptive and
+  outside the families.
+- `paper_tables.py` adds three bodies: `detection-single-requested` and `detection-batch-requested`
+  (the rows and columns of the detection tables, each entry the share flagged with B as the base),
+  and `trial-medians` (per power and false-positive cell, the pooled median of its trial medians
+  over B_eff and each process's value, smallest first).
+- `paper_figures.py`: every text is drawn with the font's ligatures off ("-liga"); matplotlib 3.11
+  shapes "fi", "ff" and "fl" into one glyph each, which some PDF readers drop ("xed loop",
+  "e ective bound"). The detection figure's row labels, the fix-cost figure's row labels and top
+  title, and the sawtooth figure's y label now stand further from the page edge. No data or other
+  drawing changed. A test checks that no ToUnicode entry of the figures maps one glyph to two
+  letters.
+- Results of the B base, read from the outputs only: the counts change only in complete cells of
+  single posts on Windows at the smaller bound, where B_eff is near the default timer period and B
+  is much smaller, and never fall. The correct loops' process values of the trial medians all lie
+  below B_eff / 5 and the complete power cells' all above.
+- Outputs (sha256): `results/v2/macros.tex` (690 macros)
+  367b5dd674d5aef170f5cfd7bbc2964303a71ae8b6a8d20c0a2ae3e3ca29c73e; `results/v2/raw-facts.json`
+  25265ce7dbb74fd1ad8946f27b78f4b65e4eee0775226990afc485307c2d5112; `detection-single-requested.tex`
+  5293e456086896ff4588c2597c968ac588e57a6384a9679728da2329ffc64ef4, `detection-batch-requested.tex`
+  c45852d4aa163356549e680bf0eb16a96d8c80c12180a1657583afd086ee9d17, `trial-medians.tex`
+  d0391ced0feeac455856f3409c10a4c8f2449ccc7f01c64a54412549ce9aae52; `figures/detection.pdf`
+  8df39ca8b89db183611d324a0dc85410de61afd123ad963e341e7785eada1543, `figures/fixcost.pdf`
+  dc7ca9d263ed36d5db78e25b1925edf9f0603e76013ba2b02d52b3d8424bff73, `figures/sawtooth.pdf`
+  38ce6c409a37c351d5ba277ba2ec3ddba4a3f04ef2fe2daa8262d6f29081deb5. Two regenerations give the same
+  bytes. A render of every macro, the new bodies and the figures passes
+  `lab/bin/check_manuscript_terms.py --paper p1` with no hit. All tests under `analysis/v2` pass.

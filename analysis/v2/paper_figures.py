@@ -23,7 +23,8 @@ posts of H3's ten phase sweeps. Both are only read. Written to DIR, each file's 
                  A range grows if a point or interval would fall outside it.
 
 The files are byte-identical for equal inputs (Agg backend, embedded TrueType fonts, no dates or
-producer in the metadata). Figure text uses the paper's words, never an internal key, and neither
+producer in the metadata). Every text is drawn with the font's ligatures off, so "fi", "ff" and "fl"
+are two glyphs each. Figure text uses the paper's words, never an internal key, and neither
 a dash nor the Unicode minus sign.
 
 Refused with exit code 2, a message on stderr and nothing written: an input that cannot be read or
@@ -55,6 +56,7 @@ import paper_words as pw  # noqa: E402
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.text  # noqa: E402
 from matplotlib.colors import Normalize  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch, Rectangle  # noqa: E402
@@ -104,8 +106,9 @@ STYLE = {
     "legend.fontsize": 7.5,
     "axes.linewidth": 0.6,
 }
-FIX_W, FIX_LEFT, FIX_A1, FIX_GAP, FIX_LABELS_R, FIX_EDGE = 6.5, 1.96, 1.5, 0.1, 1.79, 0.08
-FIX_ROW, FIX_BLOCK, FIX_TOP, FIX_FOOT = 0.2, 3.5, 0.3, 1.05
+FIX_W, FIX_LEFT, FIX_A1, FIX_GAP, FIX_LABELS_R, FIX_EDGE = 6.5, 2.06, 1.5, 0.1, 1.79, 0.1
+FIX_ROW, FIX_BLOCK, FIX_TOP, FIX_FOOT = 0.2, 3.5, 0.4, 1.05
+EDGE_PAD_IN = 0.12  # 2026-11-07: the sawtooth figure's outer pad, so its y label is not at the page edge
 FIX_MARKER, FIX_BAR_WIDTH = 3.6, 1.6
 FIX_UNITS = (len(PAIRS) - 1) * FIX_BLOCK + 3
 NO_METADATA = {"CreationDate": None, "ModDate": None, "Producer": None, "Creator": None}
@@ -251,9 +254,15 @@ def read_score(path):
 
 # ---------------------------------------------------------------- drawing
 
+NO_LIGATURES = ("-liga",)  # 2026-11-07: fi, ff and fl as one glyph each read as "xed loop" in some PDF readers
+
+
 def to_pdf(fig):
     buf = io.BytesIO()
     with plt.rc_context(STYLE):
+        fig.canvas.draw()  # tick and colorbar labels exist only after a draw
+        for text in fig.findobj(matplotlib.text.Text):
+            text.set_fontfeatures(NO_LIGATURES)
         fig.savefig(buf, format="pdf", metadata=NO_METADATA)
     plt.close(fig)
     return buf.getvalue()
@@ -271,6 +280,7 @@ def sawtooth_pdf(sweeps):
     with plt.rc_context(STYLE):
         fig, axes = plt.subplots(len(PAIRS), len(BOUNDS_US), figsize=(6.5, 7.0), sharex=True, sharey=True,
                                  layout="constrained")
+        fig.get_layout_engine().set(w_pad=EDGE_PAD_IN, h_pad=EDGE_PAD_IN)  # no text within a few points of the edge
         for r, (system, backend) in enumerate(PAIRS):
             for c, bound_us in enumerate(BOUNDS_US):
                 ax = axes[r][c]
@@ -344,7 +354,7 @@ def detection_pdf(cells):
         raise Refusal("score.json has no cell of protocol S or Bt")
     row_sets = [detection_rows(cells, p) for p in protocols]
     row_h, width = 0.145, 6.5
-    left, right, strip, label_h, title_h, gap, foot = 1.75, 0.95, 0.12, 1.75, 0.2, 0.3, 0.6
+    left, right, strip, label_h, title_h, gap, foot = 1.9, 0.95, 0.12, 1.75, 0.2, 0.3, 0.6
     height = label_h + sum(title_h + row_h * len(r) for r in row_sets) + gap * (len(row_sets) - 1) + foot
     cmap, norm = plt.get_cmap("viridis"), Normalize(0.0, 1.0)
     with plt.rc_context(STYLE):

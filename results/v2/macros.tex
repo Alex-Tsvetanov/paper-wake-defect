@@ -699,3 +699,28 @@
 \newcommand{\PriorWindowsTargetStep}{0.1}
 \newcommand{\PriorBoundSweepGapMs}{2}  % the fixed gap of every bound-sweep run
 \newcommand{\PriorMatrixGapFactor}{1.7}  % the matrix's fixed gap over B
+% ---- the historical case: clustered interval of the natural posts above half the bound (raw_facts.py)
+\newcommand{\NettyNaturalClusterLow}{0.052}  % clustered 95% interval over the processes, per post
+\newcommand{\NettyNaturalClusterHigh}{0.157}
+\newcommand{\NettyNaturalPostsPerProcess}{315}  % measured posts of each natural process
+% ---- flag rates with the requested bound as the threshold base (raw_facts.py, descriptive)
+\newcommand{\RequestedCellsChanged}{22}  % complete cells whose flag count differs from the B_eff one
+\newcommand{\RequestedCellsChangedSingle}{22}
+\newcommand{\RequestedCellsChangedBatch}{0}
+\newcommand{\RequestedCellsChangedWindowsSmall}{22}  % of them, Windows cells at the smaller bound
+\newcommand{\RequestedCellsChangedFewer}{0}  % of them, with fewer flags
+\newcommand{\RequestedPowerCellsChanged}{0}
+\newcommand{\RequestedFalseCellsChanged}{10}
+\newcommand{\RequestedFalseHighestRate}{0.677}  % the highest of a false-positive cell
+\newcommand{\RequestedFalseFlags}{828}
+\newcommand{\RequestedFalseTrials}{24{,}000}
+% ---- trial medians over the effective bound, power and false-positive cells (raw_facts.py)
+\newcommand{\TrialMedianThreshold}{0.2}  % the test's threshold as a share of B_eff
+\newcommand{\TrialMedianPowerLowestCell}{0.4713}  % complete power cells
+\newcommand{\TrialMedianPowerLowestProcess}{0.4331}  % complete power cells
+\newcommand{\TrialMedianPowerProcessesBelow}{0}  % processes of complete power cells at or below the threshold
+\newcommand{\TrialMedianPowerProcesses}{1{,}010}
+\newcommand{\TrialMedianFalseHighestCell}{0.0171}
+\newcommand{\TrialMedianFalseHighestProcess}{0.0175}
+\newcommand{\TrialMedianFalseProcessesAbove}{0}  % processes of false-positive cells above the threshold
+\newcommand{\TrialMedianFalseProcesses}{800}

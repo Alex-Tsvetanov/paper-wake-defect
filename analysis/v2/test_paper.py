@@ -291,6 +291,39 @@ class Macros(unittest.TestCase):
         posts = re.findall(r"\\newcommand\{\\SawtoothPosts(?:Linux|Windows)[A-Za-z]+\}\{(\d+)\}", text)
         self.assertEqual(len(posts), 10)
 
+    @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "pilot-h4.json",
+                                         "setup.json", "raw-facts.json", "h3-sweep.csv"), "committed results not present")
+    def test_round_five_refusals(self):
+        inputs = committed_inputs()
+        bad = copy(inputs)
+        bad["raw"]["netty_posts"][0]["over_half_b"] += 1
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.netty_clustered(paper_macros.Macros(), bad["raw"], bad["h6"])
+        bad = copy(inputs)
+        key = sorted(bad["raw"]["trial_medians"])[0]
+        bad["raw"]["trial_medians"][key]["processes"][0]["flags_b_eff"] += 1
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.requested_bound(paper_macros.Macros(), bad["score"], bad["raw"])
+        bad = copy(inputs)
+        del bad["raw"]["trial_medians"][key]
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.requested_bound(paper_macros.Macros(), bad["score"], bad["raw"])
+
+    def test_trial_median_ratios_on_two_cells(self):
+        def cell(family, pooled, values):
+            return {"family": family, "complete": True, "b_eff_ns": 100,
+                    "median_trial_median_ns": pooled,
+                    "processes": [{"median_trial_median_ns": v} for v in values]}
+        score = {"cells": {"a": {"family": "F1", "complete": True}, "b": {"family": "F2", "complete": True}}}
+        raw = {"trial_medians": {"a": cell("F1", 50, [45, 20]), "b": cell("F2", 1, [2, 30])}}
+        m = paper_macros.Macros()
+        paper_macros.trial_median_ratios(m, score, raw)
+        text = m.text()
+        self.assertIn("\\newcommand{\\TrialMedianPowerLowestProcess}{0.2000}", text)
+        self.assertIn("\\newcommand{\\TrialMedianPowerProcessesBelow}{1}", text)
+        self.assertIn("\\newcommand{\\TrialMedianFalseHighestProcess}{0.3000}", text)
+        self.assertIn("\\newcommand{\\TrialMedianFalseProcessesAbove}{1}", text)
+
     def test_sawtooth_counts_on_a_small_sweep(self):
         rows = []
         for system, backend in pw.COLUMNS:
@@ -350,7 +383,7 @@ class Tables(unittest.TestCase):
         inputs = {"score": load("score.json"), "h5": load("h5.json"), "h6": load("h6.json"),
                   "extra": load("score-extra-w.json"), "raw": load("raw-facts.json")}
         tables = paper_tables.build(inputs, self.cmake(), committed_sweep())
-        self.assertEqual(len(tables), 15)
+        self.assertEqual(len(tables), 18)
         for name, text in tables.items():
             with open(os.path.join(RESULTS, "tables", name + ".tex"), encoding="utf-8", newline="") as f:
                 self.assertEqual(text, f.read(), "results/v2/tables/%s.tex is not what the generator makes" % name)
