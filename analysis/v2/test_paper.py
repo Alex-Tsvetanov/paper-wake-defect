@@ -324,6 +324,60 @@ class Macros(unittest.TestCase):
         self.assertIn("\\newcommand{\\TrialMedianFalseHighestProcess}{0.3000}", text)
         self.assertIn("\\newcommand{\\TrialMedianFalseProcessesAbove}{1}", text)
 
+    def test_round_six_macros_on_small_cells(self):
+        score = {"cells": {
+            "a": {"family": "F1", "complete": True, "protocol": "S", "variant": "absent_wake", "blind_spot": None,
+                  "replication": None, "t_med": {"flags": 3}},
+            "b": {"family": "F2", "complete": True, "protocol": "S", "variant": "none", "blind_spot": None,
+                  "replication": "Rd", "t_med": {"flags": 0}},
+            "c": {"family": None, "complete": True, "protocol": "S", "variant": "undrained_edge", "blind_spot": "S",
+                  "replication": None, "t_med": {"flags": 0}},
+            "d": {"family": None, "complete": False, "protocol": "S", "variant": "lazy_wake_wide", "blind_spot": "S",
+                  "replication": None, "t_med": {"flags": 0}}}}
+
+        def tm(protocol, family, complete, flags_requested, trials):
+            return {"protocol": protocol, "family": family, "complete": complete,
+                    "processes": [{"flags_requested": flags_requested, "trials": trials}]}
+        raw = {"trial_medians": {"a": tm("S", "F1", True, 3, 4), "b": tm("S", "F2", True, 1, 4),
+                                 "c": tm("S", None, True, 2, 4), "d": tm("S", None, False, 1, 4)},
+               "divisor_flags": {
+                   "a": {"family": "F1", "complete": True, "protocol": "S",
+                         "processes": [{"trials": 4, "flags": {"2": 1, "4": 3, "5": 3, "10": 4}}]},
+                   "b": {"family": "F2", "complete": True, "protocol": "S",
+                         "processes": [{"trials": 4, "flags": {"2": 0, "4": 0, "5": 0, "10": 2}}]},
+                   "c": {"family": None, "complete": True, "protocol": "S",
+                         "processes": [{"trials": 4, "flags": {"2": 0, "4": 0, "5": 0, "10": 0}}]},
+                   "d": {"family": None, "complete": False, "protocol": "S",
+                         "processes": [{"trials": 4, "flags": {"2": 4, "4": 4, "5": 0, "10": 4}}]}},
+               "calibrated_periods": {
+                   "a": {"b_eff_source_cell": True, "system": "linux", "bound_ns": 1000000, "b_eff_ns": 100,
+                         "processes": 1, "periods_ns": [100]},
+                   "e": {"b_eff_source_cell": False, "system": "linux", "bound_ns": 1000000, "b_eff_ns": 100,
+                         "processes": 3, "periods_ns": [98, 103]}}}
+        m = paper_macros.Macros()
+        paper_macros.requested_split(m, score, raw)
+        paper_macros.divisor_recount(m, score, raw)
+        text = m.text()
+        for line in ("\\RequestedBlindCellsChanged}{1}", "\\RequestedChangedUndrained}{1}",
+                     "\\RequestedChangedFixed}{1}", "\\RequestedFalseChangedSeen}{1}",
+                     "\\RequestedIncompleteCellsChanged}{1}", "\\RequestedBlindHighestRate}{0.500}",
+                     "\\RecountSmallPowerLowestRate}{0.250}", "\\RecountLargeFalseFlags}{2}",
+                     "\\RecountLargeFalseHighestRate}{0.500}", "\\RecountSmallBlindFlags}{0}"):
+            self.assertIn(line, text)
+        with self.assertRaises(paper_macros.Refusal):  # one system and bound only: the others have no period
+            paper_macros.calibrated_periods(paper_macros.Macros(), raw)
+        for system in ("linux", "windows"):
+            for bound in (1000000, 10000000):
+                raw["calibrated_periods"]["%s%d" % (system, bound)] = {
+                    "b_eff_source_cell": False, "system": system, "bound_ns": bound, "b_eff_ns": 100,
+                    "processes": 1, "periods_ns": [100]}
+        m = paper_macros.Macros()
+        paper_macros.calibrated_periods(m, raw)
+        text = m.text()
+        self.assertIn("\\CalibratedLowestLinuxOneMs}{0.9800}", text)
+        self.assertIn("\\CalibratedHighestAll}{1.0300}", text)
+        self.assertIn("\\CalibratedMissing}{1}", text)
+
     def test_sawtooth_counts_on_a_small_sweep(self):
         rows = []
         for system, backend in pw.COLUMNS:

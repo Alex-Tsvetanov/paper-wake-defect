@@ -46,6 +46,18 @@ Added 2026-11-07 (round 5 of the writer's requests):
                    bound. The sums must equal h6.json's posts and posts_over_half_b, and each
                    process's count its entries of h6.json's over_half_b.
 
+Added 2026-11-07 (round 6 of the writer's requests):
+
+  divisor_flags    for every cell of single posts and batch rounds, per good process: its trials and,
+                   for each divisor d of RECOUNT_DIVISORS, its trials whose median delay exceeds
+                   B_eff / d (as d x median > B_eff). The count at the test's own divisor must equal
+                   the cell's T_med flags and trials in score.json. Descriptive only, outside the
+                   families: the design names one divisor.
+  calibrated_periods for every single-post cell of a variant that calibrates (grid.delays_single_posts),
+                   its good processes' calibrated periods (summary field b_eff_ns, from wakeprobe's
+                   calibration posts) with the cell's B_eff; for a B_eff source cell whose B_eff was
+                   measured, their median must equal it. Every other cell must report no period.
+
 Any difference is refused and nothing is written.
 """
 
@@ -242,6 +254,64 @@ def trial_medians(systems, score_json):
     return out
 
 
+RECOUNT_DIVISORS = (2, 4, grid.T_MED_DIVISOR, 10)  # the test's own divisor is the check
+
+
+def recount_and_periods(systems, score_json):
+    """The divisor_flags and calibrated_periods blocks, read in one pass over the campaign outputs."""
+    flags, periods = {}, {}
+    for plan_path, data_dir in systems:
+        header, groups, _ = score.resolve_plan(plan_path, data_dir)
+        system = header["system"]
+        for key, cell in sorted(score_json["cells"].items()):
+            if not key.startswith(system + ":") or cell["protocol"] not in PROTOCOLS:
+                continue
+            resolved = groups.get((cell["protocol"], cell["cell"]))
+            need(resolved, "%s: no planned processes" % key)
+            good = [r for r in resolved if r.ok]
+            need(len(good) == cell["processes_good"], "%s: %d good processes, %d read" % (key, len(good),
+                                                                                        cell["processes_good"]))
+            flags[key] = divisor_cell(key, cell, good)
+            got = [r.run.summary.get("b_eff_ns") for r in good]
+            delaying = cell["protocol"] == "S" and grid.delays_single_posts(cell["variant"], cell["workers"])
+            need(delaying or all(g is None for g in got), "%s: a period where no calibration runs" % key)
+            if delaying:
+                periods[key] = period_cell(key, cell, got)
+    want = {k for k, c in score_json["cells"].items() if c["protocol"] in PROTOCOLS}
+    need(set(flags) == want, "cells scored but not recounted: %s" % sorted(want - set(flags))[:5])
+    return flags, periods
+
+
+def divisor_cell(key, cell, good):
+    """Per good process, its trials and its trials whose median delay exceeds B_eff / d, for each d."""
+    per = grid.UNITS_PER_TRIAL
+    procs = []
+    for r in good:
+        units = r.run.measured()
+        medians = [stats.median([u["delay_ns"] for u in units[t * per:(t + 1) * per]])
+                   for t in range(len(units) // per)]
+        procs.append({"trials": len(medians),
+                      "flags": {str(d): sum(1 for x in medians if d * x > cell["b_eff_ns"]) for d in RECOUNT_DIVISORS}})
+    own = str(grid.T_MED_DIVISOR)
+    need(sum(p["flags"][own] for p in procs) == cell["t_med"]["flags"]
+         and sum(p["trials"] for p in procs) == cell["t_med"]["trials"],
+         "%s: the recount at the test's own divisor differs from score.json" % key)
+    return {"protocol": cell["protocol"], "family": cell["family"], "complete": cell["complete"],
+            "processes": procs}
+
+
+def period_cell(key, cell, got):
+    """The calibrated period (summary field b_eff_ns) of each good process of a delaying single-post cell."""
+    source = grid.beff_source_cell(cell["system"], cell["backend"], cell["bound_us"]).name == cell["cell"]
+    need(source == (cell["b_eff_from"] == cell["cell"]), "%s: its B_eff source differs from the rule's" % key)
+    values = sorted(g for g in got if isinstance(g, (int, float)) and g > 0)
+    if source and cell["b_eff_source"].startswith("measured"):
+        need(stats.median(values) == cell["b_eff_ns"], "%s: the source cell's median is not its B_eff" % key)
+    return {"variant": cell["variant"], "workers": cell["workers"], "system": cell["system"],
+            "bound_ns": cell["bound_us"] * 1000, "b_eff_ns": cell["b_eff_ns"], "b_eff_source_cell": source,
+            "complete": cell["complete"], "processes": len(got), "periods_ns": values}
+
+
 NETTY_CELL = ("cr7", "natural")
 
 
@@ -296,6 +366,7 @@ def main(argv=None):
         designs = prior_design([("linux", a.h5_linux), ("windows", a.h5_windows)])
         medians = trial_medians([tuple(a.linux), tuple(a.windows)], score_json)
         netty = netty_posts(a.h6_run, h6_json)
+        recount, periods = recount_and_periods([tuple(a.linux), tuple(a.windows)], score_json)
     except (Refusal, h5_mod.Refusal) as e:
         print("refused: %s" % e, file=sys.stderr)
         return 2
@@ -303,7 +374,8 @@ def main(argv=None):
            "processes_per_cell": grid.PROCESSES_PER_CELL, "processes": processes,
            "undrained_rounds": rounds, "prior_bound": bound,
            "h4_throughput": throughput, "prior_design": designs,
-           "trial_medians": medians, "netty_posts": netty}
+           "trial_medians": medians, "netty_posts": netty,
+           "divisor_flags": recount, "calibrated_periods": periods}
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats.jsonable(out), f, indent=1, sort_keys=True)
         f.write("\n")

@@ -724,3 +724,54 @@
 \newcommand{\TrialMedianFalseHighestProcess}{0.0175}
 \newcommand{\TrialMedianFalseProcessesAbove}{0}  % processes of false-positive cells above the threshold
 \newcommand{\TrialMedianFalseProcesses}{800}
+% ---- flag rates with the requested bound as the base: the changed cells by family and variant
+\newcommand{\RequestedBlindCellsChanged}{12}  % changed complete cells outside the families: predicted blind spots
+\newcommand{\RequestedChangedLazyRace}{5}
+\newcommand{\RequestedChangedLazyWide}{3}
+\newcommand{\RequestedChangedUndrained}{4}
+\newcommand{\RequestedChangedFixed}{4}
+\newcommand{\RequestedChangedPlain}{6}
+\newcommand{\RequestedFalseChangedSeen}{2}  % changed false-positive cells seen in the earlier study
+\newcommand{\RequestedIncompleteCellsChanged}{1}  % incomplete cells whose count changes, left out
+\newcommand{\RequestedBlindHighestRate}{0.667}  % complete predicted blind-spot cells
+\newcommand{\RequestedBlindFlags}{1{,}082}
+\newcommand{\RequestedBlindTrials}{39{,}300}
+% ---- the test recounted with B_eff over other divisors (raw_facts.py, descriptive)
+\newcommand{\RecountPowerTrials}{30{,}300}
+\newcommand{\RecountFalseTrials}{24{,}000}
+\newcommand{\RecountBlindTrials}{39{,}300}
+\newcommand{\RecountDivisorSmall}{2}
+\newcommand{\RecountSmallPowerFlags}{19{,}081}
+\newcommand{\RecountSmallPowerLowestRate}{0.387}
+\newcommand{\RecountSmallFalseFlags}{0}
+\newcommand{\RecountSmallFalseHighestRate}{0.000}
+\newcommand{\RecountSmallBlindFlags}{0}
+\newcommand{\RecountSmallBlindHighestRate}{0.000}
+\newcommand{\RecountDivisorMiddle}{4}
+\newcommand{\RecountMiddlePowerFlags}{30{,}190}
+\newcommand{\RecountMiddlePowerLowestRate}{0.977}
+\newcommand{\RecountMiddleFalseFlags}{0}
+\newcommand{\RecountMiddleFalseHighestRate}{0.000}
+\newcommand{\RecountMiddleBlindFlags}{0}
+\newcommand{\RecountMiddleBlindHighestRate}{0.000}
+\newcommand{\RecountDivisorLarge}{10}
+\newcommand{\RecountLargePowerFlags}{30{,}300}
+\newcommand{\RecountLargePowerLowestRate}{1.000}
+\newcommand{\RecountLargeFalseFlags}{0}
+\newcommand{\RecountLargeFalseHighestRate}{0.000}
+\newcommand{\RecountLargeBlindFlags}{0}
+\newcommand{\RecountLargeBlindHighestRate}{0.000}
+% ---- periods calibrated outside the B_eff source cells (raw_facts.py, descriptive)
+\newcommand{\CalibratedCells}{82}  % single-post cells, other than the source cells, that calibrate a period
+\newcommand{\CalibratedProcesses}{819}
+\newcommand{\CalibratedMissing}{0}  % good processes of a calibrating cell without a period
+\newcommand{\CalibratedLowestLinuxOneMs}{0.9989}  % a process's period over its cell's B_eff
+\newcommand{\CalibratedHighestLinuxOneMs}{1.0023}
+\newcommand{\CalibratedLowestLinuxTenMs}{0.9840}  % a process's period over its cell's B_eff
+\newcommand{\CalibratedHighestLinuxTenMs}{1.0044}
+\newcommand{\CalibratedLowestWindowsOneMs}{0.9937}  % a process's period over its cell's B_eff
+\newcommand{\CalibratedHighestWindowsOneMs}{1.0064}
+\newcommand{\CalibratedLowestWindowsTenMs}{0.9910}  % a process's period over its cell's B_eff
+\newcommand{\CalibratedHighestWindowsTenMs}{1.0097}
+\newcommand{\CalibratedLowestAll}{0.9840}
+\newcommand{\CalibratedHighestAll}{1.0097}

@@ -848,3 +848,41 @@ the analysis that scored the campaign is unchanged.
   38ce6c409a37c351d5ba277ba2ec3ddba4a3f04ef2fe2daa8262d6f29081deb5. Two regenerations give the same
   bytes. A render of every macro, the new bodies and the figures passes
   `lab/bin/check_manuscript_terms.py --paper p1` with no hit. All tests under `analysis/v2` pass.
+
+### 2026-11-07: macros for the writer's round 6 requests
+
+The writer asked for five more things: the split of the cells whose flag count changes with B as
+the base, by family and variant; why the release rerun and the sanitizer runs give equal test
+counts; a check of the detection and phase-sweep figures; whether the design records why the
+divisor is 5, with a recount at other divisors; and whether a period is measured on any variant
+other than absent wake. The second, third and fourth's first half are answered in the Papers
+repository from the archived logs, the figures and the frozen files; nothing here changed for them,
+and no figure was regenerated. Added, and nothing that existed changed in value: the first 690
+macros of `results/v2/macros.tex` are byte for byte its whole earlier text, every table body and
+figure is as before, and every earlier block of `results/v2/raw-facts.json` is equal to before. No
+scorer changed: `score.py`, `h5.py`, `h6.py`, `readers.py`, `grid.py`, `plan.py` and the code under
+`bench/`, `loop/` and `tests/` are as they were, and `score.json`, `h5.json` and `h6.json` were not
+regenerated. Only the paper generators under `analysis/v2` changed.
+- `analysis/v2/raw_facts.py` adds two blocks, read in one pass over the campaign outputs
+  (`score.resolve_plan`, unchanged). `divisor_flags`: for every cell of single posts and batch
+  rounds, per good process, its trials and its trials whose median delay (21 units, as
+  `score_process` cuts them) exceeds B_eff / d for d = 2, 4, 5 and 10, as d x median > B_eff; the
+  count at d = 5 must equal every cell's T_med flags and trials in `score.json`. `calibrated_periods`:
+  for every single-post cell of a variant that calibrates (`grid.delays_single_posts`), its good
+  processes' calibrated periods (summary field b_eff_ns); for a source cell whose B_eff was
+  measured, their median must equal its B_eff, and every other cell must report no period. Inputs:
+  the five archives of the round 5 entry, each verified again against its .sha256.
+- `paper_macros.py` adds 48 macros. The changed cells with B as the base, by family and variant:
+  those outside the families are all predicted blind spots (checked), with the counts per variant,
+  the changed false-positive cells seen in the earlier study, the incomplete cell left out, and the
+  blind-spot cells' flags with B as the base. The test recounted at B_eff / 2, / 4 and / 10, per
+  family over the complete cells: flags, the lowest power rate and the highest false-positive and
+  blind-spot rates. The calibrated periods of the 82 single-post cells other than the source cells,
+  each process's period over its cell's B_eff, lowest and highest per system and bound. All
+  descriptive and outside the families; the design names one divisor and one B_eff source.
+- `test_paper.py` adds one test of the three new macro groups on small cells.
+- Outputs (sha256): `results/v2/macros.tex` (738 macros)
+  bd3d8d88cfe372cd16c5ceca933ef07c76bcd6163867c08090a34f18f49ae950; `results/v2/raw-facts.json`
+  2968573ba65a53bd04d0a3c034982d6ee8cfb7d4191ee18da4d072fcde3cdc67. Two regenerations give the same
+  bytes. A render of the new macros passes `lab/bin/check_manuscript_terms.py --paper p1` with no
+  hit. All tests under `analysis/v2` pass.

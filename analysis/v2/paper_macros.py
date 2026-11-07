@@ -1128,6 +1128,87 @@ def trial_median_ratios(m, s, raw):
         m.add("TrialMedian%sProcesses" % prefix, pw.thousands(len(procs)))
 
 
+REQUESTED_VARIANTS = (("lazy_wake_race", "LazyRace"), ("lazy_wake_wide", "LazyWide"), ("undrained_edge", "Undrained"),
+                      ("none", "Fixed"), ("plain_wake", "Plain"))
+
+
+def requested_split(m, s, raw):
+    """Round 6: the complete cells whose flag count changes with B as the base, by family and variant."""
+    m.section("flag rates with the requested bound as the base: the changed cells by family and variant")
+    tm = raw["trial_medians"]
+    flags_b = {k: sum(p["flags_requested"] for p in c["processes"]) for k, c in tm.items()}
+    changed = [k for k, c in tm.items() if flags_b[k] != s["cells"][k]["t_med"]["flags"]]
+    every = [k for k in changed if tm[k]["complete"]]
+    blind = [k for k in every if tm[k]["family"] is None]
+    need(all(s["cells"][k]["blind_spot"] == tm[k]["protocol"] for k in blind),
+         "a changed cell outside the families is not a predicted blind spot")
+    need(len(blind) + sum(1 for k in every if tm[k]["family"] in ("F1", "F2")) == len(every), "families do not sum")
+    m.add("RequestedBlindCellsChanged", len(blind), "changed complete cells outside the families: predicted blind spots")
+    for variant, name in REQUESTED_VARIANTS:
+        m.add("RequestedChanged" + name, sum(1 for k in every if s["cells"][k]["variant"] == variant))
+    need(sum(1 for k in every if s["cells"][k]["variant"] not in dict(REQUESTED_VARIANTS)) == 0,
+         "a changed cell of another variant")
+    m.add("RequestedFalseChangedSeen", sum(1 for k in every if tm[k]["family"] == "F2" and s["cells"][k]["replication"]),
+          "changed false-positive cells seen in the earlier study")
+    m.add("RequestedIncompleteCellsChanged", len(changed) - len(every), "incomplete cells whose count changes, left out")
+    keys = [k for k, c in tm.items() if c["family"] is None and c["complete"] and s["cells"][k]["blind_spot"]]
+    trials = {k: sum(p["trials"] for p in tm[k]["processes"]) for k in keys}
+    m.add("RequestedBlindHighestRate", pw.rate_text(float(max(Fraction(flags_b[k], trials[k]) for k in keys))),
+          "complete predicted blind-spot cells")
+    m.add("RequestedBlindFlags", pw.thousands(sum(flags_b[k] for k in keys)))
+    m.add("RequestedBlindTrials", pw.thousands(sum(trials.values())))
+
+
+RECOUNT_NAMES = ((2, "Small"), (4, "Middle"), (10, "Large"))
+
+
+def divisor_recount(m, s, raw):
+    """Round 6: the test's flags at other divisors of B_eff, complete cells by family (descriptive)."""
+    m.section("the test recounted with B_eff over other divisors (raw_facts.py, descriptive)")
+    df = raw["divisor_flags"]
+    need(set(df) == {k for k, c in s["cells"].items() if c["protocol"] in ("S", "Bt")}, "divisor_flags: cells differ")
+    groups = (("Power", lambda c: c["family"] == "F1"), ("False", lambda c: c["family"] == "F2"),
+              ("Blind", lambda c: c["family"] is None))
+    for name, test in groups:
+        keys = [k for k, c in df.items() if c["complete"] and test(c)]
+        m.add("Recount%sTrials" % name, pw.thousands(sum(p["trials"] for k in keys for p in df[k]["processes"])))
+    for d, label in RECOUNT_NAMES:
+        m.add("RecountDivisor" + label, d)
+        for name, test in groups:
+            keys = [k for k, c in df.items() if c["complete"] and test(c)]
+            fl = {k: sum(p["flags"][str(d)] for p in df[k]["processes"]) for k in keys}
+            tr = {k: sum(p["trials"] for p in df[k]["processes"]) for k in keys}
+            m.add("Recount%s%sFlags" % (label, name), pw.thousands(sum(fl.values())))
+            rates = [Fraction(fl[k], tr[k]) for k in keys]
+            if name == "Power":
+                m.add("Recount%sPowerLowestRate" % label, pw.rate_text(float(min(rates))))
+            else:
+                m.add("Recount%s%sHighestRate" % (label, name), pw.rate_text(float(max(rates))))
+
+
+def calibrated_periods(m, raw):
+    """Round 6: the periods calibrated in single-post cells other than the B_eff source cells, over the cell's B_eff."""
+    m.section("periods calibrated outside the B_eff source cells (raw_facts.py, descriptive)")
+    cp = raw["calibrated_periods"]
+    others = {k: c for k, c in cp.items() if not c["b_eff_source_cell"]}
+    m.add("CalibratedCells", len(others), "single-post cells, other than the source cells, that calibrate a period")
+    m.add("CalibratedProcesses", pw.thousands(sum(len(c["periods_ns"]) for c in others.values())))
+    m.add("CalibratedMissing", sum(c["processes"] - len(c["periods_ns"]) for c in cp.values()),
+          "good processes of a calibrating cell without a period")
+    every = []
+    for system in grid.SYSTEMS:
+        for bound_us in grid.BOUNDS_US:
+            r = [p / c["b_eff_ns"] for c in others.values() if c["system"] == system and c["bound_ns"] == bound_us * 1000
+                 for p in c["periods_ns"]]
+            need(r, "no calibrated period for %s at %d us" % (system, bound_us))
+            every += r
+            name = system_key(system) + pw.bound_key(bound_us)
+            m.add("CalibratedLowest" + name, pw.fixed(min(r), 4), "a process's period over its cell's B_eff")
+            m.add("CalibratedHighest" + name, pw.fixed(max(r), 4))
+    m.add("CalibratedLowestAll", pw.fixed(min(every), 4))
+    m.add("CalibratedHighestAll", pw.fixed(max(every), 4))
+
+
 SOURCES = {"wake_tests": "tests/wake_tests.cpp", "defects": "loop/include/wakeloop/defect.hpp",
            "wakeprobe": "bench/wakeprobe.cpp", "cmake": "tests/CMakeLists.txt"}
 
@@ -1175,6 +1256,9 @@ def build(inputs, sources, sweep_rows):
     netty_clustered(m, raw, inputs["h6"])
     requested_bound(m, s, raw)
     trial_median_ratios(m, s, raw)
+    requested_split(m, s, raw)
+    divisor_recount(m, s, raw)
+    calibrated_periods(m, raw)
     return m.text()
 
 
