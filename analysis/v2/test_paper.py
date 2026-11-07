@@ -441,6 +441,32 @@ class Macros(unittest.TestCase):
         with self.assertRaises(paper_macros.Refusal):
             paper_macros.process_level(paper_macros.Macros(), bad["score"], bad["raw"])
 
+    @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "pilot-h4.json",
+                                         "setup.json", "raw-facts.json", "h3-sweep.csv"), "committed results not present")
+    def test_round_nine_on_the_committed_results(self):
+        inputs = committed_inputs()
+        text = paper_macros.build(inputs, committed_sources(), committed_sweep())
+        num = dict(re.findall(r"\\newcommand\{\\([A-Za-z]+)\}\{([0-9{},]+)\}", text))
+        n = lambda name: int(num[name].replace("{,}", ""))  # noqa: E731
+        names = [x for _, x in paper_macros.CALIB_VARIANTS]
+        self.assertEqual(sum(n("CalibratedCells" + x) for x in names), n("CalibratedCells"))
+        self.assertEqual(sum(n("CalibratedProcesses" + x) for x in names), n("CalibratedProcesses"))
+        for fam in ("Power", "False"):
+            self.assertEqual(n("IdleBound%sTrials" % fam), n("Recount%sTrials" % fam))
+        # Request 35 by a second route: P(Binomial(21, 1/5) <= 10) = 1 - P(>= 11).
+        tail = paper_macros.binomial_tail_ge(grid.UNITS_PER_TRIAL, (grid.UNITS_PER_TRIAL + 1) // 2,
+                                             Fraction(1, grid.T_MED_DIVISOR))
+        self.assertIn("\\newcommand{\\UniformPhaseFlagProb}{%s}" % pw.rate_text(float(1 - tail), 4), text)
+        bad = copy(inputs)
+        key = sorted(bad["raw"]["idle_bound_flags"])[0]
+        bad["raw"]["idle_bound_flags"][key]["processes"][0]["t_med_b_eff"] += 1
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.idle_bound(paper_macros.Macros(), bad["score"], bad["raw"])
+        bad = copy(inputs)
+        bad["score"]["H4"]["fixed_over_absent"][0]["clustered_95_mean_ratio"][0] -= 1e-6
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.median_intervals(bad["score"], bad["raw"])
+
     def test_sawtooth_counts_on_a_small_sweep(self):
         rows = []
         for system, backend in pw.COLUMNS:
@@ -500,7 +526,7 @@ class Tables(unittest.TestCase):
         inputs = {"score": load("score.json"), "h5": load("h5.json"), "h6": load("h6.json"),
                   "extra": load("score-extra-w.json"), "raw": load("raw-facts.json")}
         tables = paper_tables.build(inputs, self.cmake(), committed_sweep())
-        self.assertEqual(len(tables), 22)
+        self.assertEqual(len(tables), 25)
         for name, text in tables.items():
             with open(os.path.join(RESULTS, "tables", name + ".tex"), encoding="utf-8", newline="") as f:
                 self.assertEqual(text, f.read(), "results/v2/tables/%s.tex is not what the generator makes" % name)
@@ -516,6 +542,16 @@ class Tables(unittest.TestCase):
         raw["h4_throughput"]["linux-epoll-N1us-none"]["windows"] = 13
         with self.assertRaises(paper_tables.Refusal):
             paper_tables.build(dict(inputs, raw=raw), self.cmake(), committed_sweep())
+        # Round 9: the median-ratio intervals, the divisor recount, the idle-value rescoring.
+        body_rows = lambda name: [x for x in tables[name].splitlines() if not x.startswith("%")]  # noqa: E731
+        self.assertEqual(len(body_rows("fixcost-median")), 20)
+        self.assertEqual(len(body_rows("divisor-recount")), 4)
+        self.assertEqual(len(body_rows("idle-bound")), 6)
+        raw = copy(inputs["raw"])
+        k = next(k for k, c in raw["divisor_flags"].items() if c["family"] == "F1" and c["complete"])
+        raw["divisor_flags"][k]["processes"][0]["flags"][str(grid.T_MED_DIVISOR)] -= 1
+        with self.assertRaises(paper_tables.Refusal):
+            paper_tables.divisor_recount(inputs["score"], raw)
         # Round 7: the seen cells, the process-level bodies.
         seen = [line for line in tables["seen-cells"].splitlines() if not line.startswith("%")]
         self.assertEqual(len(seen), len(inputs["score"]["replications"]["R"]) + len(inputs["score"]["replications"]["Rd"]))

@@ -1397,6 +1397,121 @@ def throughput_processes(m, s, raw):
           "of their processes, those with a ratio below the low margin")
 
 
+# ---------------------------------------------------------------------------------------------
+# Round 9 of the writer's requests (34 to 38): stored data only, descriptive, outside the families
+# ---------------------------------------------------------------------------------------------
+
+
+def median_of_pairs(groups):
+    """The median of the pooled pair ratios of resampled processes (request 34's statistic)."""
+    return stats.median(sorted(x for g in groups for x in g))
+
+
+def median_intervals(s, raw):
+    """Request 34: per H4 row of score.json, the clustered interval of the median pair ratio (the frozen
+    bootstrap: stats.cluster_bootstrap, its seed and resamples, the process as the cluster). The same
+    call with the mean of the pairs must give the row's clustered interval of the mean ratio, and the
+    point median the row's median_ratio. Returns {(key, arm): (lo, hi)}."""
+    out = {}
+    for part, arm in (("fixed_over_absent", grid.H4_ARM_A_FIX), ("plain_over_absent", grid.H4_ARM_A_PLAIN)):
+        for r in s["H4"][part]:
+            got = raw["h4_process_ratios"]["%s-%s" % (r["key"], arm)]
+            groups = [g for g in got["processes"] if g]
+            need([x for g in groups for x in g] == r["ratios"], "%s: pair ratios differ" % r["key"])
+            mean_ci = stats.cluster_bootstrap(groups, lambda gs: sum(sum(g) for g in gs) / sum(len(g) for g in gs))
+            need(list(mean_ci) == list(r["clustered_95_mean_ratio"]), "%s: the mean interval differs" % r["key"])
+            need(median_of_pairs(groups) == r["median_ratio"], "%s: the median differs" % r["key"])
+            out[(r["key"], arm)] = stats.cluster_bootstrap(groups, median_of_pairs)
+    return out
+
+
+def median_interval_macros(m, s, raw):
+    """Request 34: summary macros of the clustered interval of the median ratio (the table body gives each row)."""
+    m.section("clustered interval of the median pair ratio (round 9, request 34, descriptive)")
+    ci = median_intervals(s, raw)
+    conf = [(r, ci[(r["key"], grid.H4_ARM_A_FIX)]) for r in s["H4"]["fixed_over_absent"]
+            if r["work_us"] in grid.H4_CONFIRMATORY_WORK_US]
+    m.add("MedianCiRows", len(conf), "rows with work per task, fixed loop over absent wake")
+    m.add("MedianCiInside", sum(1 for _, (lo, hi) in conf if ratio_inside(lo) and ratio_inside(hi)),
+          "of them, with the whole interval of the median inside the equivalence margins")
+    m.add("MedianCiLowestLower", pw.fixed(min(lo for _, (lo, _h) in conf), 4))
+    m.add("MedianCiHighestUpper", pw.fixed(max(hi for _, (_l, hi) in conf), 4))
+
+
+def uniform_phase(m):
+    """Request 35, analytic: if a post's phase is uniform over B_eff and the variant wakes only at the
+    next timed return, its delay is uniform on (0, B_eff], so a delay is at most B_eff / d with
+    probability 1 / d. A trial of n delays (n odd) has a median above B_eff / d when at most (n - 1) / 2
+    of them are at most B_eff / d: sum over j = 0 .. (n - 1) / 2 of C(n, j) (1/d)^j (1 - 1/d)^(n - j).
+    Computed exactly from grid's n and d; no data."""
+    m.section("uniform-phase probability of a flagged trial (round 9, request 35, analytic, no data)")
+    n, d = grid.UNITS_PER_TRIAL, grid.T_MED_DIVISOR
+    need(n % 2 == 1, "an even number of delays per trial: the median is not one delay")
+    q = Fraction(1, d)
+    half = (n - 1) // 2
+    p = sum(Fraction(math.comb(n, j)) * q ** j * (1 - q) ** (n - j) for j in range(half + 1))
+    m.add("UniformPhaseMaxBelow", half, "most delays at or below B_eff / d in a flagged trial")
+    m.add("UniformPhaseFlagProb", pw.rate_text(float(p), 4),
+          "P(trial median above B_eff / d), delays uniform on (0, B_eff]")
+    m.add("UniformPhaseMissProb", pw.fixed(float(1 - p), 5), "one minus it")
+
+
+CALIB_VARIANTS = (("absent_wake", "Absent"), ("unobserved_primitive", "Unobserved"), ("wrong_worker", "WrongWorker"),
+                  ("no_retrigger", "NoRetrigger"))
+
+
+def calibrated_split(m, raw):
+    """Request 36: what CalibratedCells and CalibratedProcesses count, by variant and worker count."""
+    m.section("the calibrated periods outside the source cells, by variant (round 9, request 36)")
+    others = {k: c for k, c in raw["calibrated_periods"].items() if not c["b_eff_source_cell"]}
+    seen = set()
+    for variant, name in CALIB_VARIANTS:
+        cells = {k: c for k, c in others.items() if c["variant"] == variant}
+        need(cells, "no calibrated cell of %s" % variant)
+        seen |= set(cells)
+        m.add("CalibratedCells" + name, len(cells))
+        m.add("CalibratedProcesses" + name, pw.thousands(sum(len(c["periods_ns"]) for c in cells.values())))
+        workers = sorted({c["workers"] for c in cells.values()})
+        m.add("CalibratedWorkers" + name, ", ".join(str(w) for w in workers), "worker counts of these cells")
+    need(seen == set(others), "a calibrated cell of another variant")
+    short_cells = [k for k, c in others.items() if len(c["periods_ns"]) != grid.PROCESSES_PER_CELL]
+    m.add("CalibratedShortCells", len(short_cells), "cells with fewer good processes than planned")
+    m.add("CalibratedShortProcesses", sum(len(others[k]["periods_ns"]) for k in short_cells))
+    m.add("CalibratedShortCell", ", ".join(pw.cell_words(k) for k in sorted(short_cells)))
+
+
+IDLE_GROUPS = (("Power", "F1"), ("False", "F2"), ("Blind", None))
+
+
+def idle_bound(m, s, raw):
+    """Request 38: the stored trials of every complete cell rescored with the fixed loop's idle value of
+    the added bound run as B_eff (raw_facts.py's idle_bound_flags), by family; descriptive, no test."""
+    m.section("the campaign's trials rescored with the fixed loop's idle value (round 9, request 38, descriptive)")
+    ib = raw["idle_bound_flags"]
+    need(set(ib) == {k for k, c in s["cells"].items() if c["protocol"] in ("S", "Bt")}, "idle_bound_flags: cells differ")
+    for k, c in ib.items():
+        for stat in ("t_med", "t_count"):
+            need(sum(p[stat + "_b_eff"] for p in c["processes"]) == s["cells"][k][stat]["flags"],
+                 "%s: %s with B_eff differs" % (k, stat))
+    for name, fam in IDLE_GROUPS:
+        keys = [k for k, c in ib.items() if c["complete"] and c["family"] == fam]
+        tot = {f: sum(p[f] for k in keys for p in ib[k]["processes"])
+               for f in ("trials", "t_med", "t_count", "t_med_b_eff", "t_count_b_eff")}
+        m.add("IdleBound%sCells" % name, len(keys), "complete cells")
+        m.add("IdleBound%sTrials" % name, pw.thousands(tot["trials"]))
+        m.add("IdleBound%sTmedFlags" % name, pw.thousands(tot["t_med"]), "the test, idle value as B_eff")
+        m.add("IdleBound%sTcountFlags" % name, pw.thousands(tot["t_count"]), "the tail statistic, idle value as B_eff")
+        m.add("IdleBound%sChangedCells" % name,
+              sum(1 for k in keys if any(sum(p[f] for p in ib[k]["processes"]) != sum(p[f + "_b_eff"] for p in ib[k]["processes"])
+                                         for f in ("t_med", "t_count"))),
+              "cells whose T_med or T_count count differs from the frozen one")
+    idle = sorted({(c["system"], c["backend"], c["bound_ns"], c["b_idle_ns"]) for c in ib.values()})
+    need(len(idle) == len({x[:3] for x in idle}), "two idle values for one backend and bound")
+    for system, backend, bound_ns, b_idle in idle:
+        m.add("IdleBound" + system_key(system) + pw.backend_key(backend) + pw.bound_key(bound_ns // 1000),
+              pw.ms(b_idle, 3), "the fixed loop's idle value used, ms")
+
+
 SOURCES = {"wake_tests": "tests/wake_tests.cpp", "defects": "loop/include/wakeloop/defect.hpp",
            "wakeprobe": "bench/wakeprobe.cpp", "cmake": "tests/CMakeLists.txt"}
 
@@ -1451,6 +1566,10 @@ def build(inputs, sources, sweep_rows):
     seen_cells(m, s)
     delay_seen(m, s)
     process_level(m, s, raw)
+    median_interval_macros(m, s, raw)
+    uniform_phase(m)
+    calibrated_split(m, raw)
+    idle_bound(m, s, raw)
     return m.text()
 
 

@@ -56,6 +56,20 @@ paper_words'; numbers are formatted as in paper_macros.py. Nothing is measured o
                      added 2026-11-07 (round 7): per row of fixcost and comparison, each good
                      process's ratio, the median of its pair ratios (raw_facts.py's
                      h4_process_ratios), smallest first; descriptive, no test
+  fixcost-median     added 2026-11-07 (round 9, request 34): the rows of fixcost, each comparison's
+                     median pair ratio with the clustered 95% interval of the median ratio (the
+                     frozen bootstrap, paper_macros.median_intervals, which checks that the same
+                     call with the mean gives score.json's interval); descriptive, no test
+  divisor-recount    added 2026-11-07 (round 9, request 37): per divisor d of B_eff (2, 4, the
+                     frozen 5, 10), the test's flags over the complete power, false-positive and
+                     predicted blind-spot cells (raw_facts.py's divisor_flags): cells, flags, the
+                     lowest or highest cell rate, the power cells with every trial flagged and the
+                     false-positive cells with none; the frozen row must equal score.json;
+                     descriptive, no test is run again
+  idle-bound         added 2026-11-07 (round 9, request 38): per family and system, the complete
+                     cells' trials and their T_med and T_count flags with the frozen B_eff and with
+                     the fixed loop's idle value of the added bound run (raw_facts.py's
+                     idle_bound_flags), and the cells whose counts differ; descriptive, no test
 """
 
 import os
@@ -71,6 +85,7 @@ import json  # noqa: E402
 import re  # noqa: E402
 
 import grid  # noqa: E402
+import paper_macros as pm  # noqa: E402
 import paper_words as pw  # noqa: E402
 import run_h6  # noqa: E402
 import stats  # noqa: E402
@@ -467,6 +482,83 @@ def throughput_processes(score, raw):
                 + ["ratio of process %d, the median of its pairs (smallest first)" % (i + 1) for i in range(n)], rows)
 
 
+def fixcost_median(score, raw):
+    """Round 9, request 34: the rows of fixcost with the clustered interval of each median ratio."""
+    h4 = score["H4"]
+    ci = pm.median_intervals(score, raw)
+    plain = {r["key"]: r for r in h4["plain_over_absent"]}
+    order = {k: i for i, k in enumerate(pw.COLUMNS)}
+    rows = []
+    for r in sorted(h4["fixed_over_absent"],
+                    key=lambda r: (order[pw.h4_parts(r["key"])[:2]], pw.h4_parts(r["key"])[2])):
+        system, backend, work = pw.h4_parts(r["key"])
+        p = plain[r["key"]]
+        rows.append([pw.SYSTEM_WORDS[system], pw.BACKEND_WORDS[backend], work, r["pairs"],
+                     pw.fixed(r["median_ratio"], 4), pw.interval(*ci[(r["key"], grid.H4_ARM_A_FIX)], 4),
+                     pw.fixed(p["median_ratio"], 4), pw.interval(*ci[(r["key"], grid.H4_ARM_A_PLAIN)], 4)])
+    return body(["system", "backend", "N (us)", "pairs", "median ratio, fixed loop over absent wake",
+                 "clustered 95% interval of that median ratio", "median ratio, plain wake over absent wake",
+                 "clustered 95% interval of that median ratio"], rows)
+
+
+RECOUNT_GROUPS = (("power", "F1"), ("false positive", "F2"), ("predicted blind spot", None))
+
+
+def divisor_recount(score, raw):
+    """Round 9, request 37: the test's flags at B_eff / d for d = 2, 4, 5 (frozen) and 10, by family."""
+    df = raw["divisor_flags"]
+    rows = []
+    for d in sorted(int(x) for x in df[next(iter(df))]["processes"][0]["flags"]):
+        row = [d, "frozen" if d == grid.T_MED_DIVISOR else "recount"]
+        for _, fam in RECOUNT_GROUPS:
+            keys = sorted(k for k, c in df.items() if c["complete"] and c["family"] == fam)
+            fl = {k: sum(p["flags"][str(d)] for p in df[k]["processes"]) for k in keys}
+            tr = {k: sum(p["trials"] for p in df[k]["processes"]) for k in keys}
+            if d == grid.T_MED_DIVISOR:
+                for k in keys:
+                    if (fl[k], tr[k]) != (score["cells"][k]["t_med"]["flags"], score["cells"][k]["t_med"]["trials"]):
+                        raise Refusal("%s: the frozen divisor's count differs from score.json" % k)
+            rates = [fl[k] / tr[k] for k in keys]
+            row += [len(keys), pw.thousands(sum(fl.values())), pw.thousands(sum(tr.values()))]
+            if fam == "F1":
+                row += [pw.rate_text(min(rates)), sum(1 for k in keys if fl[k] == tr[k])]
+            else:
+                row += [pw.rate_text(max(rates)), sum(1 for k in keys if fl[k] == 0)]
+        rows.append(row)
+    cols = ["divisor d (threshold B_eff / d)", "frozen or recount"]
+    for words, fam in RECOUNT_GROUPS:
+        cols += ["%s: complete cells" % words, "%s: flagged trials" % words, "%s: trials" % words]
+        cols += (["power: lowest cell rate", "power: cells with every trial flagged"] if fam == "F1" else
+                 ["%s: highest cell rate" % words, "%s: cells with no trial flagged" % words])
+    return body(cols, rows)
+
+
+def idle_bound(score, raw):
+    """Round 9, request 38: the complete cells' flags with the frozen B_eff and with the idle value."""
+    ib = raw["idle_bound_flags"]
+    rows = []
+    for words, fam in RECOUNT_GROUPS:
+        for system in grid.SYSTEMS:
+            keys = sorted(k for k, c in ib.items() if c["complete"] and c["family"] == fam and c["system"] == system)
+            if not keys:
+                raise Refusal("no complete %s cell on %s" % (words, system))
+            tot = {f: sum(p[f] for k in keys for p in ib[k]["processes"])
+                   for f in ("trials", "t_med", "t_count", "t_med_b_eff", "t_count_b_eff")}
+            for k in keys:
+                for f in ("t_med", "t_count"):
+                    if sum(p[f + "_b_eff"] for p in ib[k]["processes"]) != score["cells"][k][f]["flags"]:
+                        raise Refusal("%s: %s with B_eff differs from score.json" % (k, f))
+            changed = sum(1 for k in keys if any(sum(p[f] for p in ib[k]["processes"])
+                                                 != sum(p[f + "_b_eff"] for p in ib[k]["processes"])
+                                                 for f in ("t_med", "t_count")))
+            rows.append([words, pw.SYSTEM_WORDS[system], len(keys), pw.thousands(tot["trials"]),
+                         pw.thousands(tot["t_med_b_eff"]), pw.thousands(tot["t_med"]),
+                         pw.thousands(tot["t_count_b_eff"]), pw.thousands(tot["t_count"]), changed])
+    return body(["family", "system", "complete cells", "trials", "the test, frozen B_eff", "the test, idle value",
+                 "the tail statistic, frozen B_eff", "the tail statistic, idle value",
+                 "cells whose count differs"], rows)
+
+
 def build(inputs, cmake_text, sweep_rows):
     for name, data in inputs.items():
         if data.get("draft"):
@@ -486,7 +578,10 @@ def build(inputs, cmake_text, sweep_rows):
             "trial-medians": trial_medians(s, inputs["raw"]),
             "seen-cells": seen_cells(s), "process-flags": process_flags(s, inputs["raw"]),
             "blind-trial-medians": blind_trial_medians(s, inputs["raw"]),
-            "throughput-processes": throughput_processes(s, inputs["raw"])}
+            "throughput-processes": throughput_processes(s, inputs["raw"]),
+            "fixcost-median": fixcost_median(s, inputs["raw"]),
+            "divisor-recount": divisor_recount(s, inputs["raw"]),
+            "idle-bound": idle_bound(s, inputs["raw"])}
 
 
 def main(argv=None):
@@ -505,7 +600,7 @@ def main(argv=None):
         sweep_rows = list(csv.DictReader(f))
     try:
         tables = build(inputs, cmake_text, sweep_rows)
-    except (Refusal, KeyError, ValueError, StopIteration) as e:
+    except (Refusal, pm.Refusal, KeyError, ValueError, StopIteration) as e:
         print("refused: %s: %s" % (type(e).__name__, e), file=sys.stderr)
         return 2
     os.makedirs(args.out_dir, exist_ok=True)

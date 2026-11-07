@@ -945,3 +945,58 @@ as stored, before any rounding for print); nothing here changed for it.
   the archives, give the same bytes. A render of the new macros and the four new bodies passes
   `lab/bin/check_manuscript_terms.py --paper p1` with no hit. All 436 tests under `analysis/v2`
   pass.
+
+### 2026-11-07: macros and table bodies for the writer's round 9 requests (34 to 38)
+
+The writer asked for five facts from the stored data, no run: the clustered interval of the median
+pair ratio of each throughput row (34), the probability that a trial's median delay exceeds the
+threshold when each post's phase is uniform over B_eff (35), what the count of calibrated cells
+outside the source cells holds (36), the power family at the frozen divisor beside the recounts at
+2, 4 and 10 in one table (37), and every cell's stored trials scored with the fixed loop's idle
+value of the added bound run as B_eff (38). Added, and nothing that existed changed in value: the
+first 815 macros of `results/v2/macros.tex` are byte for byte its whole earlier text, every earlier
+table body and figure is as before, and every earlier block of `results/v2/raw-facts.json` is equal
+to before. No scorer changed: `score.py`, `h5.py`, `h6.py`, `readers.py`, `grid.py`, `plan.py`,
+`stats.py` and the code under `bench/`, `loop/` and `tests/` are as they were, and `score.json`,
+`h5.json` and `h6.json` were not regenerated. Only the paper generators under `analysis/v2` changed.
+All of it is descriptive and outside the families; no test, p value or Holm step is computed at any
+other divisor or threshold.
+- `analysis/v2/raw_facts.py` adds one block and takes `--idle-beff`: `idle_bound_flags`, for every
+  cell of single posts and batch rounds, per good process, `score.score_process` (unchanged) with the
+  cell's B_eff, whose T_med and T_count sums must equal `score.json`, and again with the fixed loop's
+  idle value for the cell's system, backend and bound. The idle values are field idle.median of the
+  rows of quick-L-r2 and quick-W-r2 in `results/quick/summary.json` at 1eb269b of the
+  `quick-benchmarks` branch (sha256
+  6c96601f4c8675fb12dde34110aa8e5df4c8fde4eff68a1496ad6bf77152cfcb); a missing row is refused.
+  Inputs: the five archives of the round 5 entry, each verified again against its .sha256, and the
+  earlier code reproduced the committed `raw-facts.json` byte for byte from them before the block was
+  added.
+- `paper_macros.py` adds 47 macros. Request 34: per row the clustered interval of the median of the
+  pooled pair ratios (`stats.cluster_bootstrap`, the frozen seed and resamples, the process as the
+  cluster); the same call with the mean of the pairs must give each row's `clustered_95_mean_ratio`
+  and the point median its `median_ratio`, or nothing is written; summary macros over the rows with
+  work. Request 35, analytic, no data: with the phase uniform over B_eff and a wake only at the next
+  timed return, a delay is uniform on (0, B_eff], so P(trial median > B_eff / d) is the sum over
+  j = 0 to (n - 1) / 2 of C(n, j) (1/d)^j (1 - 1/d)^(n - j), with n = 21 and d = 5 from grid.py,
+  computed exactly. Request 36: the calibrated cells outside the source cells by variant (absent wake
+  at 2 and 4 workers, unobserved primitive, wrong worker, no re-trigger) with their processes and
+  worker counts, and the one cell with fewer good processes than planned. Request 38: per family the
+  complete cells, trials, T_med and T_count flags with the idle value, the cells whose counts differ
+  from the frozen ones, and each idle value used.
+- `paper_tables.py` adds three bodies: `fixcost-median.tex` (the rows of `fixcost.tex`, each
+  comparison's median ratio and the clustered interval of that median), `divisor-recount.tex` (per
+  divisor 2, 4, 5 and 10, the complete power, false-positive and predicted blind-spot cells' flags,
+  the lowest or highest cell rate, the power cells with every trial flagged and the other cells with
+  none; the row of the frozen divisor must equal `score.json`) and `idle-bound.tex` (per family and
+  system, the flags with the frozen B_eff and with the idle value, and the cells whose count differs).
+- Results, read from the outputs only: with the idle value as B_eff no complete cell's T_med or
+  T_count count changes in any family. The recount table repeats the round 6 values in one place.
+- `test_paper.py` adds one test (the request 36 split sums, request 35 by a second route, refusals of
+  requests 34 and 38) and checks the three new bodies, with a refusal of the divisor table.
+- Outputs (sha256): `results/v2/macros.tex` (862 macros)
+  98f0105364d8fb63db6ca5d6329c526a1cc7d3a11d42bd7acaa9788a9bf98515; `results/v2/raw-facts.json`
+  b541701c7630f73c90fdca6dcde8ff67327f88e216601e7fe89bf60af37258dd; `fixcost-median.tex`
+  f819bcddea09b68212bc8d0d03f819f6f34a12c90f1c6f97f08a9e097a501868, `divisor-recount.tex`
+  dc1b4590af0a5e6df83894377a5ff69e63ba2f8dd8ade5455fb3d25c2758c59b, `idle-bound.tex`
+  9391f0d8e871a796faabe1f6ae1c20b7477c69443d6583940752c2f7dd902497. Two regenerations, each from
+  the archives, give the same bytes. All 437 tests under `analysis/v2` pass.

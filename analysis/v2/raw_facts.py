@@ -2,7 +2,7 @@
 
   python raw_facts.py --linux PLAN DIR --windows PLAN DIR --score score.json
                       --h5-linux DIR --h5-windows DIR --h5 h5.json --records DIR [--records DIR ...]
-                      --out RAW-FACTS.json
+                      --h6-run DIR --h6 h6.json --idle-beff SUMMARY.json --out RAW-FACTS.json
 
 PLAN and DIR are a system's campaign plan and output folder, as score.py reads them. --h5-linux and
 --h5-windows are the H5 output folders, as h5.py reads them, and --records the sanitizer-record
@@ -64,6 +64,18 @@ Added 2026-11-07 (round 7 of the writer's requests, the process-level appendix o
                    order: its pair ratios (readers.pair_ratios, unchanged). Concatenated they must equal
                    the row's ratios, and each process must hold grid.H4_PAIRS_PER_PROCESS pairs.
                    Descriptive only: the frozen sign tests count pairs.
+
+Added 2026-11-07 (round 9 of the writer's requests, request 38):
+
+  idle_bound_flags for every cell of single posts and batch rounds, per good process: score_process
+                   (unchanged) run twice, once with the cell's B_eff from score.json and once with the
+                   fixed loop's idle value of the added bound run for the cell's system, backend and
+                   bound (--idle-beff: results/quick/summary.json of the quick-benchmarks branch, rows
+                   of quick-L-r2 and quick-W-r2, field idle.median). The first run's sums must equal the
+                   cell's T_med and T_count flags and trials in score.json; the second gives the same
+                   trials' T_med and T_count flags with the idle value as the threshold base. A
+                   missing idle row is refused. Descriptive only, outside the families: the design
+                   names one B_eff source, and the stored trials are rescored, not rerun.
 
 Any difference is refused and nothing is written.
 """
@@ -326,6 +338,59 @@ def period_cell(key, cell, got):
             "complete": cell["complete"], "processes": len(got), "periods_ns": values}
 
 
+IDLE_RUNS = {"linux": "quick-L-r2", "windows": "quick-W-r2"}  # the added bound run's blocks in summary.json
+
+
+def idle_values(summary):
+    """{(system, backend, bound_us): the fixed loop's idle value in ns} from the added bound run's summary."""
+    out = {}
+    for system, run in IDLE_RUNS.items():
+        block = summary.get(run)
+        need(block is not None and block.get("os") == system, "%s: no added bound run for %s" % (run, system))
+        for row, v in block["rows"].items():
+            backend, bound_us = row.split(" ")
+            idle = v["idle"]["median"]
+            need(isinstance(idle, (int, float)) and idle > 0, "%s %s: no idle value" % (run, row))
+            out[(system, backend, int(bound_us))] = idle
+    return out
+
+
+def idle_bound_flags(systems, score_json, idle):
+    """Per cell of single posts and batch rounds: T_med and T_count flags with B_eff and with the idle value."""
+    out = {}
+    for plan_path, data_dir in systems:
+        header, groups, _ = score.resolve_plan(plan_path, data_dir)
+        system = header["system"]
+        for key, cell in sorted(score_json["cells"].items()):
+            if not key.startswith(system + ":") or cell["protocol"] not in PROTOCOLS:
+                continue
+            resolved = groups.get((cell["protocol"], cell["cell"]))
+            need(resolved, "%s: no planned processes" % key)
+            good = [r for r in resolved if r.ok]
+            need(len(good) == cell["processes_good"], "%s: %d good processes, %d read" % (key, len(good),
+                                                                                        cell["processes_good"]))
+            b_idle = idle.get((system, cell["backend"], cell["bound_us"]))
+            need(b_idle is not None, "%s: no idle value for %s at %d us" % (key, cell["backend"], cell["bound_us"]))
+            coarsest = [r.run.summary.get("coarsest_timer_us") for r in good]
+            coarsest_ns = max((c for c in coarsest if isinstance(c, (int, float))), default=0) * 1000
+            bound_ns = cell["bound_us"] * 1000
+            frozen = [score.score_process(r.run, cell["b_eff_ns"], bound_ns, coarsest_ns) for r in good]
+            for stat in ("t_med", "t_count"):
+                need(sum(p[stat] for p in frozen) == cell[stat]["flags"]
+                     and sum(p["trials"] for p in frozen) == cell[stat]["trials"],
+                     "%s: %s with B_eff differs from score.json" % (key, stat))
+            rescored = [score.score_process(r.run, b_idle, bound_ns, coarsest_ns) for r in good]
+            out[key] = {"protocol": cell["protocol"], "family": cell["family"], "complete": cell["complete"],
+                        "system": system, "backend": cell["backend"], "bound_ns": bound_ns,
+                        "b_eff_ns": cell["b_eff_ns"], "b_idle_ns": b_idle,
+                        "processes": [{"trials": p["trials"], "t_med": p["t_med"], "t_count": p["t_count"],
+                                       "t_med_b_eff": f["t_med"], "t_count_b_eff": f["t_count"]}
+                                      for p, f in zip(rescored, frozen)]}
+    want = {k for k, c in score_json["cells"].items() if c["protocol"] in PROTOCOLS}
+    need(set(out) == want, "cells scored but not rescored: %s" % sorted(want - set(out))[:5])
+    return out
+
+
 NETTY_CELL = ("cr7", "natural")
 
 
@@ -364,10 +429,14 @@ def main(argv=None):
     ap.add_argument("--records", action="append", default=[], required=True)
     ap.add_argument("--h6-run", required=True, help="the H6 archive's out/h6 folder, as h6.py reads it")
     ap.add_argument("--h6", required=True)
+    ap.add_argument("--idle-beff", required=True,
+                    help="results/quick/summary.json of the quick-benchmarks branch (the added bound run)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     with open(a.score, encoding="utf-8") as f:
         score_json = json.load(f)
+    with open(a.idle_beff, encoding="utf-8") as f:
+        idle_summary = json.load(f)
     with open(a.h5, encoding="utf-8") as f:
         h5_json = json.load(f)
     with open(a.h6, encoding="utf-8") as f:
@@ -381,6 +450,7 @@ def main(argv=None):
         medians = trial_medians([tuple(a.linux), tuple(a.windows)], score_json)
         netty = netty_posts(a.h6_run, h6_json)
         recount, periods = recount_and_periods([tuple(a.linux), tuple(a.windows)], score_json)
+        idle_flags = idle_bound_flags([tuple(a.linux), tuple(a.windows)], score_json, idle_values(idle_summary))
     except (Refusal, h5_mod.Refusal) as e:
         print("refused: %s" % e, file=sys.stderr)
         return 2
@@ -390,7 +460,7 @@ def main(argv=None):
            "h4_throughput": throughput, "prior_design": designs,
            "trial_medians": medians, "netty_posts": netty,
            "divisor_flags": recount, "calibrated_periods": periods,
-           "h4_process_ratios": process_ratios}
+           "h4_process_ratios": process_ratios, "idle_bound_flags": idle_flags}
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats.jsonable(out), f, indent=1, sort_keys=True)
         f.write("\n")

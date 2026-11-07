@@ -856,3 +856,54 @@
 \newcommand{\ByProcessFixZeroBelowRows}{3}  % rows with no work whose prediction is a ratio below the low margin
 \newcommand{\ByProcessFixZeroBelowProcesses}{31}
 \newcommand{\ByProcessFixZeroBelowHeld}{24}  % of their processes, those with a ratio below the low margin
+% ---- clustered interval of the median pair ratio (round 9, request 34, descriptive)
+\newcommand{\MedianCiRows}{15}  % rows with work per task, fixed loop over absent wake
+\newcommand{\MedianCiInside}{15}  % of them, with the whole interval of the median inside the equivalence margins
+\newcommand{\MedianCiLowestLower}{0.9982}
+\newcommand{\MedianCiHighestUpper}{1.0008}
+% ---- uniform-phase probability of a flagged trial (round 9, request 35, analytic, no data)
+\newcommand{\UniformPhaseMaxBelow}{10}  % most delays at or below B_eff / d in a flagged trial
+\newcommand{\UniformPhaseFlagProb}{0.9990}  % P(trial median above B_eff / d), delays uniform on (0, B_eff]
+\newcommand{\UniformPhaseMissProb}{0.00097}  % one minus it
+% ---- the calibrated periods outside the source cells, by variant (round 9, request 36)
+\newcommand{\CalibratedCellsAbsent}{20}
+\newcommand{\CalibratedProcessesAbsent}{200}
+\newcommand{\CalibratedWorkersAbsent}{2, 4}  % worker counts of these cells
+\newcommand{\CalibratedCellsUnobserved}{30}
+\newcommand{\CalibratedProcessesUnobserved}{300}
+\newcommand{\CalibratedWorkersUnobserved}{1, 2, 4}  % worker counts of these cells
+\newcommand{\CalibratedCellsWrongWorker}{20}
+\newcommand{\CalibratedProcessesWrongWorker}{199}
+\newcommand{\CalibratedWorkersWrongWorker}{2, 4}  % worker counts of these cells
+\newcommand{\CalibratedCellsNoRetrigger}{12}
+\newcommand{\CalibratedProcessesNoRetrigger}{120}
+\newcommand{\CalibratedWorkersNoRetrigger}{1, 2, 4}  % worker counts of these cells
+\newcommand{\CalibratedShortCells}{1}  % cells with fewer good processes than planned
+\newcommand{\CalibratedShortProcesses}{9}
+\newcommand{\CalibratedShortCell}{Windows, condition variable, wrong worker, single posts, 4 workers, $B = 1$~ms}
+% ---- the campaign's trials rescored with the fixed loop's idle value (round 9, request 38, descriptive)
+\newcommand{\IdleBoundPowerCells}{101}  % complete cells
+\newcommand{\IdleBoundPowerTrials}{30{,}300}
+\newcommand{\IdleBoundPowerTmedFlags}{30{,}290}  % the test, idle value as B_eff
+\newcommand{\IdleBoundPowerTcountFlags}{30{,}300}  % the tail statistic, idle value as B_eff
+\newcommand{\IdleBoundPowerChangedCells}{0}  % cells whose T_med or T_count count differs from the frozen one
+\newcommand{\IdleBoundFalseCells}{80}  % complete cells
+\newcommand{\IdleBoundFalseTrials}{24{,}000}
+\newcommand{\IdleBoundFalseTmedFlags}{0}  % the test, idle value as B_eff
+\newcommand{\IdleBoundFalseTcountFlags}{8}  % the tail statistic, idle value as B_eff
+\newcommand{\IdleBoundFalseChangedCells}{0}  % cells whose T_med or T_count count differs from the frozen one
+\newcommand{\IdleBoundBlindCells}{131}  % complete cells
+\newcommand{\IdleBoundBlindTrials}{39{,}300}
+\newcommand{\IdleBoundBlindTmedFlags}{0}  % the test, idle value as B_eff
+\newcommand{\IdleBoundBlindTcountFlags}{347}  % the tail statistic, idle value as B_eff
+\newcommand{\IdleBoundBlindChangedCells}{0}  % cells whose T_med or T_count count differs from the frozen one
+\newcommand{\IdleBoundLinuxCondvarOneMs}{1.005}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundLinuxCondvarTenMs}{10.022}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundLinuxEpollOneMs}{1.006}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundLinuxEpollTenMs}{10.028}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundLinuxIoUringOneMs}{1.005}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundLinuxIoUringTenMs}{10.014}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundWindowsCondvarOneMs}{15.687}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundWindowsCondvarTenMs}{15.685}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundWindowsIocpOneMs}{15.686}  % the fixed loop's idle value used, ms
+\newcommand{\IdleBoundWindowsIocpTenMs}{15.682}  % the fixed loop's idle value used, ms
