@@ -104,13 +104,47 @@ class PlanTests(unittest.TestCase):
                 self.assertEqual(len(seeds), 1)
                 self.assertFalse(seeds & qc.FROZEN_SEEDS)
 
+    def test_r4_cells(self):
+        header, rows = rows_of("quick-W-r4")
+        self.assertEqual(header["os"], "windows")
+        r0 = [r for r in rows if r["round"] == 0]
+        self.assertEqual(len(r0), 12)
+        got = sorted((r["backend"], r["variant"], r["workers"]) for r in r0)
+        want = sorted((b, v, w) for b in ("iocp", "condvar") for v, w in (
+            ("unobserved_primitive", 1), ("unobserved_primitive", 4), ("wrong_worker", 2), ("wrong_worker", 4),
+            ("absent_wake", 4), ("none", 4)))
+        self.assertEqual(got, want)
+        for r in rows:
+            a = r["args"]
+            self.assertEqual(a[a.index("--wait-us") + 1], "1000")
+            self.assertEqual(a[a.index("--gap-unit") + 1], "timer")
+            self.assertEqual(a[a.index("--workers") + 1], str(r["workers"]))
+            self.assertEqual(a[a.index("--calibrate-idle") + 1], "11")
+            self.assertEqual(a[a.index("--calibrate") + 1], "0" if r["variant"] == "none" else "11")
+            self.assertEqual(a[a.index("--protocol") + 1], "single")
+            self.assertIn(f"-W{r['workers']}-", r["cell"])
+        self.assertEqual(header["rounds"], 10)
+
+    def test_delaying_rule_matches_wakeprobe(self):
+        # wakeprobe.cpp delays_single_posts
+        self.assertTrue(qc.delays_single_posts("absent_wake", 1))
+        self.assertTrue(qc.delays_single_posts("unobserved_primitive", 1))
+        self.assertTrue(qc.delays_single_posts("unobserved_primitive", 4))
+        self.assertFalse(qc.delays_single_posts("wrong_worker", 1))
+        self.assertTrue(qc.delays_single_posts("wrong_worker", 2))
+        self.assertFalse(qc.delays_single_posts("none", 4))
+        self.assertFalse(qc.delays_single_posts("plain_wake", 1))
+
     def test_placement(self):
         for name in qc.SPECS:
             _, rows = rows_of(name)
             for r in rows:
                 a = r["args"]
-                self.assertEqual(a[a.index("--worker-cpus") + 1], "14")
+                w = int(a[a.index("--workers") + 1])
+                self.assertEqual(a[a.index("--worker-cpus") + 1], {1: "14", 2: "12,14", 4: "8,10,12,14"}[w])
                 self.assertEqual(a[a.index("--poster-cpu") + 1], "2")
+                if name != "quick-W-r4":
+                    self.assertEqual(w, 1)
         self.assertFalse({0, 1, 2, 14} & set(qc.LOAD_CPUS))
 
     @unittest.skipUnless(os.environ.get("QUICK_WAKEPROBE"), "set QUICK_WAKEPROBE to a built wakeprobe")

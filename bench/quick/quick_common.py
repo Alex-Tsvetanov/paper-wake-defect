@@ -1,6 +1,7 @@
-"""P1 quick benchmarks (quick-plan.md, decision d010 option B): the shared definitions.
+"""P1 quick benchmarks (quick-plan.md, decision d010 option B; quick-plan-r4.md, decision d013 option H): the
+shared definitions.
 
-The five plans, their cells and arms, the time arithmetic and the seeds live here, so that the plan
+The six plans, their cells and arms, the time arithmetic and the seeds live here, so that the plan
 generator, the runner, the request writer and the tests read one copy. Nothing here times anything.
 """
 
@@ -22,6 +23,12 @@ WARMUP = 5  # as the frozen S and Bt processes
 CALIB_POSTS = 11  # as the frozen calibration
 WORKER_CPU = 14  # lab/laptop/README.md placement, W = 1
 POSTER_CPU = 2
+# The campaign's placement per worker count (plans/plan-windows.jsonl at 796b71f); W = 1 keeps WORKER_CPU.
+WORKER_CPUS = {1: str(WORKER_CPU), 2: "12,14", 4: "8,10,12,14"}
+R4_BOUND_US = 1000  # quick-plan-r4.md: B = 1 ms only (d013 option H)
+# R4's cells per backend (d013 option H): (variant, workers).
+R4_CELLS = (("unobserved_primitive", 1), ("unobserved_primitive", 4), ("wrong_worker", 2), ("wrong_worker", 4),
+            ("absent_wake", 4), ("none", 4))
 LOAD_CPUS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]  # every CPU outside core 0, the poster and the worker
 GAP_RANGE = "0.1:3.0"
 BOUNDS_US = (1000, 10000)
@@ -68,7 +75,16 @@ SPECS = {
     "quick-L-r2": PlanSpec("quick-L-r2", "linux", "R2", ("quiet",), 10),
     "quick-W-r2": PlanSpec("quick-W-r2", "windows", "R2", ("quiet",), 10),
     "quick-W-r3": PlanSpec("quick-W-r3", "windows", "R3", ("quiet",), 6),
+    "quick-W-r4": PlanSpec("quick-W-r4", "windows", "R4", ("quiet",), 10),
 }
+
+
+def delays_single_posts(variant: str, workers: int) -> bool:
+    """wakeprobe's delays_single_posts for the variants these plans use: nothing wakes the worker for a
+    single post, so it runs at the worker's next timed return."""
+    if variant in ("absent_wake", "unobserved_primitive", "no_retrigger"):
+        return True
+    return variant == "wrong_worker" and workers >= 2
 
 
 def label_seed(text: str) -> int:
@@ -112,9 +128,10 @@ def unit_estimate_s(os_name: str, protocol: str, delaying: bool, bound_us: int, 
 
 
 def wakeprobe_args(backend: str, variant: str, protocol: str, bound_us: int, posts: int, warmup: int,
-                   gap: list[str], calibrate: int, calibrate_idle: int, design: str, label: str) -> list[str]:
-    args = ["--backend", backend, "--variant", variant, "--protocol", protocol, "--workers", "1",
-            "--worker-cpus", str(WORKER_CPU), "--poster-cpu", str(POSTER_CPU), "--wait-us", str(bound_us),
+                   gap: list[str], calibrate: int, calibrate_idle: int, design: str, label: str,
+                   workers: int = 1) -> list[str]:
+    args = ["--backend", backend, "--variant", variant, "--protocol", protocol, "--workers", str(workers),
+            "--worker-cpus", WORKER_CPUS[workers], "--poster-cpu", str(POSTER_CPU), "--wait-us", str(bound_us),
             "--posts", str(posts), "--warmup", str(warmup), "--calibrate", str(calibrate)]
     if calibrate_idle:
         args += ["--calibrate-idle", str(calibrate_idle)]
@@ -123,22 +140,28 @@ def wakeprobe_args(backend: str, variant: str, protocol: str, bound_us: int, pos
 
 def _unit(spec: PlanSpec, condition: str, backend: str, variant: str, protocol: str, bound_us: int, trials: int,
           seed: int, *, arm: str | None = None, gap_unit: str = "bound", calibrate: int = 0, calibrate_idle: int = 0,
-          calib_only: bool = False) -> dict:
+          calib_only: bool = False, workers: int = 1) -> dict:
     arm = arm or variant
     proto = "S" if protocol == "single" else "Bt"
     kind = "calib" if calib_only else proto
+    if spec.run == "R4":  # R4 has two worker counts per variant; R1 to R3 keep their ids
+        arm = f"{arm}-W{workers}"
     cell = f"{spec.run}-{backend}-{arm}-{kind}-B{bound_us // 1000}ms-{condition}"
     if calib_only:
         posts, warmup, gap = 1, 0, ["--gap-us", "0"]
     else:
         posts, warmup = trials * POSTS_PER_TRIAL, WARMUP
         gap = ["--gap-frac-range", GAP_RANGE, "--gap-unit", gap_unit, "--gap-seed", str(seed)]
-    delaying = variant == "absent_wake"
+    delaying = delays_single_posts(variant, workers)
     est = unit_estimate_s(spec.os, protocol, delaying, bound_us, trials, gap_unit, calibrate, calibrate_idle,
                           posts=posts if calib_only else None)
-    return {"cell": cell, "arm": arm, "condition": condition, "backend": backend, "variant": variant,
+    unit = {"cell": cell, "arm": arm, "condition": condition, "backend": backend, "variant": variant,
             "protocol": protocol, "wait_us": bound_us, "posts": posts, "est_s": round(est, 4),
-            "args_head": (backend, variant, protocol, bound_us, posts, warmup, gap, calibrate, calibrate_idle)}
+            "args_head": (backend, variant, protocol, bound_us, posts, warmup, gap, calibrate, calibrate_idle,
+                          workers)}
+    if spec.run == "R4":
+        unit["workers"] = workers
+    return unit
 
 
 def round_units(spec: PlanSpec, trials: int, seed: int) -> list[dict]:
@@ -147,6 +170,14 @@ def round_units(spec: PlanSpec, trials: int, seed: int) -> list[dict]:
     backends = BACKENDS[spec.os]
     for condition in spec.conditions:
         for backend in backends:
+            if spec.run == "R4":
+                # d013 option H: B = 1 ms, timer-unit gaps as R3; delaying cells calibrate (decision 15's posts),
+                # every cell also takes the idle calibration (the second B_eff line, as R3).
+                for variant, workers in R4_CELLS:
+                    units.append(_unit(spec, condition, backend, variant, "single", R4_BOUND_US, trials, seed,
+                                       gap_unit="timer", workers=workers, calibrate_idle=CALIB_POSTS,
+                                       calibrate=CALIB_POSTS if delays_single_posts(variant, workers) else 0))
+                continue
             for bound in BOUNDS_US:
                 if spec.run == "R1":
                     for variant in ("none", "plain_wake"):
@@ -208,9 +239,9 @@ def expand(spec: PlanSpec) -> tuple[dict, list[dict]]:
             rng.shuffle(block_units)
             for u in block_units:
                 uid = f"{u['cell']}-r{rnd}"
-                backend, variant, protocol, bound, posts, warmup, gap, cal, idle = u["args_head"]
+                backend, variant, protocol, bound, posts, warmup, gap, cal, idle, workers = u["args_head"]
                 args = wakeprobe_args(backend, variant, protocol, bound, posts, warmup, gap, cal, idle,
-                                      f"p1quick-{spec.run}", uid)
+                                      f"p1quick-{spec.run}", uid, workers)
                 row = {k: v for k, v in u.items() if k != "args_head"}
                 row.update({"id": uid, "round": rnd, "block": block, "gap_seed": seed if "--gap-seed" in gap else None,
                             "args": args})

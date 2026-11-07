@@ -1,6 +1,6 @@
-"""Writes the laptop requests of the P1 quick plans (quick-plan.md), one file per job.
+"""Writes the laptop requests of the P1 quick plans (quick-plan.md, quick-plan-r4.md), one file per job.
 
-    python bench/quick/quick_requests.py --commit SHA --out-dir DIR [--queue-dir DIR]
+    python bench/quick/quick_requests.py --commit SHA --out-dir DIR [--queue-dir DIR] [--plan NAME]
 
 Each request is one labrun job entry plus the request-only keys of lab/pipeline/README.md (stage_after,
 consumer, expected_basis). With --queue-dir it also writes the matching queue drafts, without the
@@ -22,10 +22,15 @@ import quick_common as qc  # noqa: E402
 REPO = {"name": "wake-defect", "path": "p1-wake-defect/wake-defect"}
 WHAT = {"R1": "false positives of the correct loops quiet, under load and on the default power plan",
         "R2": "the effective bound calibrated on the correct loop, against the absent-wake value",
-        "R3": "Windows single posts with gaps in units of the timer period"}
+        "R3": "Windows single posts with gaps in units of the timer period",
+        "R4": "Windows single posts with timer-unit gaps for unobserved primitive and wrong worker and at 2 or 4 workers"}
 PLAIN = {"R1": "the fixed loop and the plain wake, quiet, under processor load and on the default power plan",
          "R2": "the wake period measured on the fixed loop with nothing posted, beside the planted variant's",
-         "R3": "single posts on Windows with gaps spread over the whole timer period"}
+         "R3": "single posts on Windows with gaps spread over the whole timer period",
+         "R4": "single posts on Windows at 1 ms with gaps over the whole timer period, more defects and 2 or 4 workers"}
+# Where each run's design and authority live.
+SOURCE = {"R1": ("quick-plan.md", "d010 option B"), "R2": ("quick-plan.md", "d010 option B"),
+          "R3": ("quick-plan.md", "d010 option B"), "R4": ("quick-plan-r4.md", "d013 option H")}
 
 
 def build_cmd(os_name: str) -> str:
@@ -53,13 +58,18 @@ def job(name: str, commit: str) -> dict:
     trials = qc.trials_for(spec)
     total = spec.rounds * qc.round_estimate_s(spec, trials)
     jid = "p1q-" + name.removeprefix("quick-").lower()
-    note = (f"quick-plan.md, decision d010 option B, run {spec.run}. A timed campaign of at most 600 s with its plan's "
+    plan_md, decision = SOURCE[spec.run]
+    note = (f"{plan_md}, decision {decision}, run {spec.run}. A timed campaign of at most 600 s with its plan's "
             "sha256 pinned (--quick); the runner cuts rounds to stay inside 600 s. The build phase is untimed; exit 2 "
             "is a refusal before anything is timed and is never rerun with labrun. Exit 3 means a wakeprobe process "
             "failed or a condition block did not start; the archive is kept and analysed, not rerun (a lost wake on a "
-            "correct loop is a finding). Branch quick-benchmarks of "
-            "wake-defect is local and unpushed at the time of this request: it must be on the remote (Alex's "
-            "standing yes, rule 14) before the orchestrator queues it.")
+            "correct loop is a finding).")
+    if spec.run == "R4":
+        note += (" Branch quick-benchmarks of wake-defect holds this commit on the remote (pushed under Alex's "
+                 "standing yes, rule 14).")
+    else:
+        note += (" Branch quick-benchmarks of wake-defect is local and unpushed at the time of this request: it "
+                 "must be on the remote (Alex's standing yes, rule 14) before the orchestrator queues it.")
     if spec.run == "R1":
         note += (" The run starts its own processor load (pinned spinning processes, stopped at each block's end) "
                  "after the lab's quiet check, and for its power blocks puts back the host's own power settings "
@@ -78,25 +88,28 @@ def job(name: str, commit: str) -> dict:
 
 def request(name: str, commit: str) -> dict:
     spec = qc.SPECS[name]
+    plan_md, decision = SOURCE[spec.run]
     j = job(name, commit)
     j.update({
         "stage_after": "analyse",
-        "consumer": f"P1 results-analyst on the Release quick archive (run {spec.run}, decision d010, quick-plan.md "
-                    "on branch quick-benchmarks)",
+        "consumer": f"P1 results-analyst on the Release quick archive (run {spec.run}, decision "
+                    f"{decision.split()[0]}, {plan_md} on branch quick-benchmarks)",
         "expected_basis": ("derived: seconds per trial from the measured 100-trial S cells (hypotheses-v2.md "
                            "section 9) and the Bt probe of 5e0fc7e (STATE.md), plus per-process and per-block "
-                           "allowances with no measured basis; R3's timer-unit gaps are arithmetic only; "
+                           "allowances with no measured basis; "
+                           f"{'R4' if spec.run == 'R4' else 'R3'}'s timer-unit gaps are arithmetic only; "
                            f"{spec.rounds} rounds x {qc.round_estimate_s(spec, qc.trials_for(spec)):.1f} s"),
     })
-    return {"about": f"P1 quick benchmark {j['id']} (decision d010 option B, run {spec.run}: {WHAT[spec.run]}). "
+    return {"about": f"P1 quick benchmark {j['id']} (decision {decision}, run {spec.run}: {WHAT[spec.run]}). "
                      "Laptop request written by the P1 quick session, 2026-11-07; one OS at a time, queue order "
                      "by the orchestrator.", "jobs": [j]}
 
 
 def queue(name: str, commit: str) -> dict:
     spec = qc.SPECS[name]
+    number, option = SOURCE[spec.run][1].split(" ", 1)
     j = job(name, commit)
-    return {"about": f"P1 quick benchmark (decision d010, option B), 2026-11-07: one campaign of at most 10 minutes, "
+    return {"about": f"P1 quick benchmark (decision {number}, {option}), 2026-11-07: one campaign of at most 10 minutes, "
                      f"{j['id']} (run {spec.run}).", "jobs": [j]}
 
 
@@ -105,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--commit", required=True)
     ap.add_argument("--out-dir", required=True, type=Path)
     ap.add_argument("--queue-dir", type=Path)
+    ap.add_argument("--plan", choices=list(qc.SPECS), help="write this plan's files only")
     a = ap.parse_args(argv)
     if len(a.commit) != 40:
         print("--commit must be a full 40-hex commit", file=sys.stderr)
@@ -112,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     a.out_dir.mkdir(parents=True, exist_ok=True)
     order = {"linux": "a", "windows": "w"}
     for i, name in enumerate(qc.SPECS, start=1):
+        if a.plan and name != a.plan:
+            continue
         spec = qc.SPECS[name]
         jid = job(name, a.commit)["id"]
         (a.out_dir / f"p1-{jid}.json").write_text(json.dumps(request(name, a.commit), indent=1) + "\n",

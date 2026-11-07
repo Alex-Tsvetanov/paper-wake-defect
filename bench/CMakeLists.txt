@@ -97,6 +97,26 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
                          wakeprobe_check.${_backend}.single.plain_wake.idle.b1ms
                          PROPERTIES PASS_REGULAR_EXPRESSION "idle intervals wanted 3\n.*PASS: " TIMEOUT 120
                          LABELS "wakeprobe;quick" RUN_SERIAL TRUE)
+    # quick-plan-r4.md, run R4: more than one worker at the short bound with the timer gap unit and the idle
+    # calibration: unobserved primitive and wrong worker with calibration posts, the fixed loop without. Counts only.
+    add_test(NAME wakeprobe_check.${_backend}.single.unobserved_primitive.w4.idle.b1ms
+             COMMAND wakeprobe --backend ${_backend} --variant unobserved_primitive --workers 4 --wait-us 1000
+                     --gap-frac-range 0.1:3.0 --gap-unit timer --calibrate 3 --calibrate-idle 3 --check)
+    add_test(NAME wakeprobe_check.${_backend}.single.wrong_worker.w2.idle.b1ms
+             COMMAND wakeprobe --backend ${_backend} --variant wrong_worker --workers 2 --wait-us 1000
+                     --gap-frac-range 0.1:3.0 --gap-unit timer --calibrate 3 --calibrate-idle 3 --check)
+    add_test(NAME wakeprobe_check.${_backend}.single.wrong_worker.w4.idle.b1ms
+             COMMAND wakeprobe --backend ${_backend} --variant wrong_worker --workers 4 --wait-us 1000
+                     --gap-frac-range 0.1:3.0 --gap-unit timer --calibrate 3 --calibrate-idle 3 --check)
+    add_test(NAME wakeprobe_check.${_backend}.single.none.w4.idle.b1ms
+             COMMAND wakeprobe --backend ${_backend} --variant none --workers 4 --wait-us 1000
+                     --gap-frac-range 0.1:3.0 --gap-unit timer --calibrate-idle 3 --check)
+    set_tests_properties(wakeprobe_check.${_backend}.single.unobserved_primitive.w4.idle.b1ms
+                         wakeprobe_check.${_backend}.single.wrong_worker.w2.idle.b1ms
+                         wakeprobe_check.${_backend}.single.wrong_worker.w4.idle.b1ms
+                         wakeprobe_check.${_backend}.single.none.w4.idle.b1ms
+                         PROPERTIES PASS_REGULAR_EXPRESSION "idle intervals wanted 3\n.*PASS: " TIMEOUT 120
+                         LABELS "wakeprobe;quick" RUN_SERIAL TRUE)
     # Pinned threads. CPUs 0 to 3 must be in the process's allowed set, and CPU 63 must not exist
     # (true of the desktop, the laptop and the development container). A pinned run must pass; a
     # pin that the system refuses must stop the run with its message, before any unit is measured.
@@ -411,7 +431,7 @@ add_test(NAME validate_args.limit_is_the_loops
          COMMAND ${CMAKE_COMMAND} "-DLOOP_SRC=${PROJECT_SOURCE_DIR}/loop/src/common.cpp"
                  "-DPROBE_SRC=${CMAKE_CURRENT_SOURCE_DIR}/wakeprobe.cpp" -P "${LIMIT_CHECK}")
 set_tests_properties(validate_args.limit_is_the_loops PROPERTIES TIMEOUT 60 LABELS "validate")
-# quick-plan.md: the argument sets of runs R1 to R3 on every backend, and the refusals of --calibrate-idle.
+# quick-plan.md and quick-plan-r4.md: the argument sets of runs R1 to R4 on every backend, and the refusals of --calibrate-idle.
 foreach(_backend IN LISTS WAKELOOP_BACKENDS)
     validate_case(wakeprobe.${_backend}.quick_R2 wakeprobe
                   ARGS --backend ${_backend} --variant none --workers 1 --protocol single --wait-us 1000
@@ -421,6 +441,15 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
                   ARGS --backend ${_backend} --variant absent_wake --workers 1 --protocol single --wait-us 1000
                        --gap-frac-range 0.1:3.0 --gap-unit timer --gap-seed 7 --posts 252 --warmup 5 --calibrate 11
                        --calibrate-idle 11 --worker-cpus 14 --poster-cpu 2)
+    # quick-plan-r4.md, run R4: wrong worker and the fixed loop at W = 4 with the campaign's placement.
+    validate_case(wakeprobe.${_backend}.quick_R4_w4 wakeprobe
+                  ARGS --backend ${_backend} --variant wrong_worker --workers 4 --protocol single --wait-us 1000
+                       --gap-frac-range 0.1:3.0 --gap-unit timer --gap-seed 7 --posts 105 --warmup 5 --calibrate 11
+                       --calibrate-idle 11 --worker-cpus 8,10,12,14 --poster-cpu 2)
+    validate_case(wakeprobe.${_backend}.quick_R4_none_w4 wakeprobe
+                  ARGS --backend ${_backend} --variant none --workers 4 --protocol single --wait-us 1000
+                       --gap-frac-range 0.1:3.0 --gap-unit timer --gap-seed 7 --posts 105 --warmup 5 --calibrate 0
+                       --calibrate-idle 11 --worker-cpus 8,10,12,14 --poster-cpu 2)
 endforeach()
 validate_case(wakeprobe.calibrate_idle_negative wakeprobe RC 2 USAGE 1
               SUB "wakeprobe: --calibrate-idle must be >= 0"
