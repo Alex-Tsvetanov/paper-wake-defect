@@ -244,7 +244,8 @@ def r1(job: dict, camp: dict) -> dict:
             b = beff[(cond, backend, bound)]["b_eff_ns"]
             aa[(backend, bound)] = diffs(c["procs"], cells[(cond, backend, bound, "none", proto)]["procs"], b, b)
     return {"os": os_name, "coarsest_timer_us": co, "beff": beff, "cells": cells, "shifts": shifts, "aa": aa,
-            "lost": lost(procs), "calib_lost": lost(calib), "processes": len(procs)}
+            "lost": lost(procs), "calib_lost": lost(calib), "processes": len(procs),
+            "min_calibrated": R1_MIN_CALIBRATED, "load_cpus": len(job["header"]["load_cpus"])}
 
 
 def diffs(a: list[dict], b: list[dict], beff_a: float, beff_b: float) -> dict:

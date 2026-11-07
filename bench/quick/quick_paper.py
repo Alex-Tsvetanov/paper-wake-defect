@@ -115,6 +115,10 @@ def r1_macros(m: Macros, j: dict) -> None:
         fallbacks += b["source"] != "measured"
     m.add(base + "BeffRows", len(j["beff"]))
     m.add(base + "BeffFallbacks", fallbacks)
+    m.add(base + "BeffMinCalibrated", j["min_calibrated"])
+    m.add(base + "LoadSpinners", j["load_cpus"])
+    if j["coarsest_timer_us"] is not None:
+        m.add(base + "CoarsestTimerMs", pw.ms(j["coarsest_timer_us"] * 1000))
     for cond in COND_ORDER:
         cells = [c for (cd, _, _, arm, _), c in j["cells"].items() if cd == cond and arm in LOOPS]
         k = base + COND_KEY[cond]

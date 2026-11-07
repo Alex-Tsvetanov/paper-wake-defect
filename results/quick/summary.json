@@ -5767,6 +5767,8 @@
    "timeouts": 0
   },
   "processes": 276,
+  "min_calibrated": 2,
+  "load_cpus": 12,
   "timer_start": {},
   "timer_changed": [],
   "timer_off_default": [],
@@ -9790,6 +9792,8 @@
    "timeouts": 0
   },
   "processes": 186,
+  "min_calibrated": 2,
+  "load_cpus": 12,
   "timer_start": {
    "quiet": {
     "156250": 66
