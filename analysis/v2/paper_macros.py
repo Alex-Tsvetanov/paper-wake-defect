@@ -1534,8 +1534,9 @@ def prior_delay_holding(m, h5):
     passing = [c for c in h5["delay_model"]["cells"] if c["h1_pass"]]
     top = max(passing, key=lambda c: c["median_abs_residual_over_beff"])
     key = (top["system"], top["variant"], top["wait_us"])
-    need(pw.fixed(top["median_abs_residual_over_beff"], 4) == pw.fixed(max(c["median_abs_residual_over_beff"] for c in passing), 4),
-         "H5: the largest passing cell is not unique in value")
+    printed = pw.fixed(top["median_abs_residual_over_beff"], 4)
+    need(sum(1 for c in passing if pw.fixed(c["median_abs_residual_over_beff"], 4) == printed) == 1,
+         "H5: two passing cells share the largest printed value")
     m.add("PriorDelayWorstPassingSystem", pw.SYSTEM_WORDS[top["system"]], "the cell of PriorDelayWorstPassing")
     m.add("PriorDelayWorstPassingSetting", H5_SETTING_WORDS[top["variant"]])
     m.add("PriorDelayWorstPassingBoundMs", top["wait_us"] // 1000)
