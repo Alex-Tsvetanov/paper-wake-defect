@@ -1,0 +1,191 @@
+P1 quick runs R1 to R3: medians over processes [min, max]; descriptive only.
+
+quick-L-r1 (R1, linux): 276 processes, 3 rounds, 446 s, lost 0, timeouts 0, timer off default 0 []
+  B_eff ('load', 'condvar', 1000): 1.009 ms, measured, span 0.0004
+  B_eff ('load', 'condvar', 10000): 10.028 ms, measured, span 0.0038
+  B_eff ('load', 'epoll', 1000): 1.009 ms, measured, span 0.0005
+  B_eff ('load', 'epoll', 10000): 10.014 ms, measured, span 0.0013
+  B_eff ('load', 'io_uring', 1000): 1.010 ms, measured, span 0.0030
+  B_eff ('load', 'io_uring', 10000): 10.010 ms, measured, span 0.0029
+  B_eff ('power', 'condvar', 1000): 1.010 ms, measured, span 0.0014
+  B_eff ('power', 'condvar', 10000): 10.338 ms, measured, span 0.0008
+  B_eff ('power', 'epoll', 1000): 1.009 ms, measured, span 0.0009
+  B_eff ('power', 'epoll', 10000): 10.350 ms, measured, span 0.0005
+  B_eff ('power', 'io_uring', 1000): 1.009 ms, measured, span 0.0002
+  B_eff ('power', 'io_uring', 10000): 10.348 ms, measured, span 0.0043
+  B_eff ('quiet', 'condvar', 1000): 1.007 ms, measured, span 0.0004
+  B_eff ('quiet', 'condvar', 10000): 10.322 ms, measured, span 0.0018
+  B_eff ('quiet', 'epoll', 1000): 1.007 ms, measured, span 0.0003
+  B_eff ('quiet', 'epoll', 10000): 10.325 ms, measured, span 0.0024
+  B_eff ('quiet', 'io_uring', 1000): 1.007 ms, measured, span 0.0007
+  B_eff ('quiet', 'io_uring', 10000): 10.318 ms, measured, span 0.0004
+  ('load', 'condvar', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 15.8 us
+  ('load', 'condvar', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.2 us
+  ('load', 'condvar', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 16.0 us
+  ('load', 'condvar', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.3 us
+  ('load', 'condvar', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 16.0 us
+  ('load', 'condvar', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 8.2 us
+  ('load', 'condvar', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 16.3 us
+  ('load', 'condvar', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 8.1 us
+  ('load', 'epoll', 1000, 'none', 'batch'): T_med 0/30, T_count 1/30 (campaign B_eff 0, 1), median delay 16.0 us
+  ('load', 'epoll', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 6.6 us
+  ('load', 'epoll', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 17.2 us
+  ('load', 'epoll', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 6.9 us
+  ('load', 'epoll', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 15.9 us
+  ('load', 'epoll', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.6 us
+  ('load', 'epoll', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 17.3 us
+  ('load', 'epoll', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.5 us
+  ('load', 'io_uring', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 16.3 us
+  ('load', 'io_uring', 1000, 'none', 'single'): T_med 0/30, T_count 2/30 (campaign B_eff 0, 2), median delay 6.6 us
+  ('load', 'io_uring', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 16.8 us
+  ('load', 'io_uring', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 6.6 us
+  ('load', 'io_uring', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 15.9 us
+  ('load', 'io_uring', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.7 us
+  ('load', 'io_uring', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 17.3 us
+  ('load', 'io_uring', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.4 us
+  ('power', 'condvar', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 17.1 us
+  ('power', 'condvar', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.6 us
+  ('power', 'condvar', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 17.1 us
+  ('power', 'condvar', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.6 us
+  ('power', 'condvar', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 32.4 us
+  ('power', 'condvar', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 77.7 us
+  ('power', 'condvar', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 32.7 us
+  ('power', 'condvar', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 78.0 us
+  ('power', 'epoll', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 16.8 us
+  ('power', 'epoll', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.1 us
+  ('power', 'epoll', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 18.4 us
+  ('power', 'epoll', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 7.1 us
+  ('power', 'epoll', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 33.0 us
+  ('power', 'epoll', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 76.3 us
+  ('power', 'epoll', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 38.3 us
+  ('power', 'epoll', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 76.7 us
+  ('power', 'io_uring', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 16.9 us
+  ('power', 'io_uring', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 6.9 us
+  ('power', 'io_uring', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 17.9 us
+  ('power', 'io_uring', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 6.9 us
+  ('power', 'io_uring', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 33.8 us
+  ('power', 'io_uring', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 75.1 us
+  ('power', 'io_uring', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 37.3 us
+  ('power', 'io_uring', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 75.4 us
+  ('quiet', 'condvar', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 12.9 us
+  ('quiet', 'condvar', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 6.0 us
+  ('quiet', 'condvar', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 13.0 us
+  ('quiet', 'condvar', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 6.0 us
+  ('quiet', 'condvar', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 14.8 us
+  ('quiet', 'condvar', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 47.7 us
+  ('quiet', 'condvar', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 14.8 us
+  ('quiet', 'condvar', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 47.9 us
+  ('quiet', 'epoll', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 12.8 us
+  ('quiet', 'epoll', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 5.5 us
+  ('quiet', 'epoll', 1000, 'none-aa', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 5.5 us
+  ('quiet', 'epoll', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 13.9 us
+  ('quiet', 'epoll', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 5.6 us
+  ('quiet', 'epoll', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 14.8 us
+  ('quiet', 'epoll', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 47.4 us
+  ('quiet', 'epoll', 10000, 'none-aa', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 47.4 us
+  ('quiet', 'epoll', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 18.5 us
+  ('quiet', 'epoll', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 47.5 us
+  ('quiet', 'io_uring', 1000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 12.9 us
+  ('quiet', 'io_uring', 1000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 5.3 us
+  ('quiet', 'io_uring', 1000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 13.6 us
+  ('quiet', 'io_uring', 1000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 5.4 us
+  ('quiet', 'io_uring', 10000, 'none', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 14.2 us
+  ('quiet', 'io_uring', 10000, 'none', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 46.3 us
+  ('quiet', 'io_uring', 10000, 'plain_wake', 'batch'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 17.9 us
+  ('quiet', 'io_uring', 10000, 'plain_wake', 'single'): T_med 0/30, T_count 0/30 (campaign B_eff 0, 0), median delay 46.7 us
+
+quick-W-r1 (R1, windows): 186 processes, 3 rounds, 408 s, lost 0, timeouts 0, timer off default 3 ['R1-condvar-absent_wake-calib-B1ms-power-r0', 'R1-iocp-none-S-B1ms-power-r0', 'R1-iocp-none-S-B10ms-power-r0']
+  B_eff ('load', 'condvar', 1000): 16.070 ms, measured, span 0.0016
+  B_eff ('load', 'condvar', 10000): 16.066 ms, measured, span 0.0099
+  B_eff ('load', 'iocp', 1000): 16.064 ms, measured, span 0.0011
+  B_eff ('load', 'iocp', 10000): 16.066 ms, measured, span 0.0008
+  B_eff ('power', 'condvar', 1000): 15.625 ms, fallback: coarsest timer, span 0.3465
+  B_eff ('power', 'condvar', 10000): 16.156 ms, measured, span 0.0043
+  B_eff ('power', 'iocp', 1000): 16.323 ms, measured, span 0.0083
+  B_eff ('power', 'iocp', 10000): 16.084 ms, measured, span 0.0094
+  B_eff ('quiet', 'condvar', 1000): 16.094 ms, measured, span 0.0004
+  B_eff ('quiet', 'condvar', 10000): 16.112 ms, measured, span 0.0020
+  B_eff ('quiet', 'iocp', 1000): 16.087 ms, measured, span 0.0069
+  B_eff ('quiet', 'iocp', 10000): 16.136 ms, measured, span 0.0073
+  ('load', 'condvar', 1000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.3 us
+  ('load', 'condvar', 1000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.7 us
+  ('load', 'condvar', 1000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.3 us
+  ('load', 'condvar', 1000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.7 us
+  ('load', 'condvar', 10000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.2 us
+  ('load', 'condvar', 10000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 9.5 us
+  ('load', 'condvar', 10000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.0 us
+  ('load', 'condvar', 10000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 10.0 us
+  ('load', 'iocp', 1000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.0 us
+  ('load', 'iocp', 1000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.6 us
+  ('load', 'iocp', 1000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.1 us
+  ('load', 'iocp', 1000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.5 us
+  ('load', 'iocp', 10000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.6 us
+  ('load', 'iocp', 10000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 9.4 us
+  ('load', 'iocp', 10000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 17.8 us
+  ('load', 'iocp', 10000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 9.9 us
+  ('power', 'condvar', 1000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 14.0 us
+  ('power', 'condvar', 1000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.4 us
+  ('power', 'condvar', 1000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 14.2 us
+  ('power', 'condvar', 1000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.7 us
+  ('power', 'condvar', 10000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 20.7 us
+  ('power', 'condvar', 10000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 59.9 us
+  ('power', 'condvar', 10000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 20.2 us
+  ('power', 'condvar', 10000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 59.2 us
+  ('power', 'iocp', 1000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 14.0 us
+  ('power', 'iocp', 1000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 9.6 us
+  ('power', 'iocp', 1000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 14.2 us
+  ('power', 'iocp', 1000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.4 us
+  ('power', 'iocp', 10000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 22.7 us
+  ('power', 'iocp', 10000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 57.5 us
+  ('power', 'iocp', 10000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 24.9 us
+  ('power', 'iocp', 10000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 57.8 us
+  ('quiet', 'condvar', 1000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 14.8 us
+  ('quiet', 'condvar', 1000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 9.1 us
+  ('quiet', 'condvar', 1000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 15.8 us
+  ('quiet', 'condvar', 1000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.5 us
+  ('quiet', 'condvar', 10000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 19.4 us
+  ('quiet', 'condvar', 10000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 58.0 us
+  ('quiet', 'condvar', 10000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 19.2 us
+  ('quiet', 'condvar', 10000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 58.7 us
+  ('quiet', 'iocp', 1000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 15.8 us
+  ('quiet', 'iocp', 1000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 8.3 us
+  ('quiet', 'iocp', 1000, 'none-aa', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 12.7 us
+  ('quiet', 'iocp', 1000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 16.0 us
+  ('quiet', 'iocp', 1000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 19.4 us
+  ('quiet', 'iocp', 10000, 'none', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 22.7 us
+  ('quiet', 'iocp', 10000, 'none', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 56.3 us
+  ('quiet', 'iocp', 10000, 'none-aa', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 56.4 us
+  ('quiet', 'iocp', 10000, 'plain_wake', 'batch'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 24.4 us
+  ('quiet', 'iocp', 10000, 'plain_wake', 'single'): T_med 0/39, T_count 0/39 (campaign B_eff 0, 0), median delay 55.8 us
+
+quick-L-r2 (R2, linux): 120 processes, 10 rounds, 457 s, lost 0, timeouts 0, timer off default 0 []
+  ('condvar', 1000): idle 1.0054 ms, planted 1.0072 ms (measured), ratio 0.9983, within 0.9981, campaign 1.0073 ms
+  ('condvar', 10000): idle 10.0220 ms, planted 10.3136 ms (measured), ratio 0.9717, within 0.9709, campaign 10.3131 ms
+  ('epoll', 1000): idle 1.0057 ms, planted 1.0075 ms (measured), ratio 0.9982, within 0.9985, campaign 1.0078 ms
+  ('epoll', 10000): idle 10.0278 ms, planted 10.3284 ms (measured), ratio 0.9709, within 0.9708, campaign 10.3242 ms
+  ('io_uring', 1000): idle 1.0046 ms, planted 1.0068 ms (measured), ratio 0.9978, within 0.9983, campaign 1.0068 ms
+  ('io_uring', 10000): idle 10.0138 ms, planted 10.3306 ms (measured), ratio 0.9693, within 0.9706, campaign 10.3158 ms
+
+quick-W-r2 (R2, windows): 80 processes, 10 rounds, 478 s, lost 0, timeouts 0, timer off default 0 []
+  ('condvar', 1000): idle 15.6868 ms, planted 16.0937 ms (measured), ratio 0.9747, within 0.9751, campaign 16.0442 ms
+  ('condvar', 10000): idle 15.6851 ms, planted 16.0720 ms (measured), ratio 0.9759, within 0.9765, campaign 16.1797 ms
+  ('iocp', 1000): idle 15.6859 ms, planted 16.0814 ms (measured), ratio 0.9754, within 0.9757, campaign 16.0767 ms
+  ('iocp', 10000): idle 15.6816 ms, planted 16.1106 ms (measured), ratio 0.9734, within 0.9753, campaign 16.1512 ms
+
+quick-W-r3 (R3, windows): 72 processes, 6 rounds, 480 s, lost 0, timeouts 0, timer off default 0 []
+  ('condvar', 1000): B_eff 16.0962 ms (measured, 6 of 6), idle 15.6893 ms, phase tenths [0.066, 0.094, 0.091, 0.108, 0.113, 0.098, 0.104, 0.101, 0.111, 0.114], over one period 0.670
+    absent_wake: T_med 66/66, T_count 66; idle line 66, 66
+    none: T_med 0/66, T_count 0; idle line 0, 0
+    plain_wake: T_med 0/66, T_count 0; idle line 0, 0
+  ('condvar', 10000): B_eff 16.1297 ms (measured, 6 of 6), idle 15.6863 ms, phase tenths [0.082, 0.1, 0.097, 0.101, 0.113, 0.101, 0.103, 0.097, 0.111, 0.094], over one period 0.676
+    absent_wake: T_med 66/66, T_count 66; idle line 66, 66
+    none: T_med 0/66, T_count 0; idle line 0, 0
+    plain_wake: T_med 0/66, T_count 0; idle line 0, 0
+  ('iocp', 1000): B_eff 16.0927 ms (measured, 6 of 6), idle 15.6754 ms, phase tenths [0.064, 0.095, 0.088, 0.115, 0.105, 0.101, 0.105, 0.105, 0.102, 0.118], over one period 0.670
+    absent_wake: T_med 66/66, T_count 66; idle line 66, 66
+    none: T_med 0/66, T_count 0; idle line 0, 0
+    plain_wake: T_med 0/66, T_count 0; idle line 0, 0
+  ('iocp', 10000): B_eff 16.1120 ms (measured, 6 of 6), idle 15.6819 ms, phase tenths [0.078, 0.105, 0.1, 0.098, 0.111, 0.102, 0.102, 0.1, 0.102, 0.102], over one period 0.675
+    absent_wake: T_med 66/66, T_count 66; idle line 66, 66
+    none: T_med 0/66, T_count 0; idle line 0, 0
+    plain_wake: T_med 0/66, T_count 0; idle line 0, 0
