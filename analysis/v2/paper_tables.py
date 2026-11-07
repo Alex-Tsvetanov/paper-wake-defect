@@ -31,6 +31,10 @@ paper_words'; numbers are formatted as in paper_macros.py. Nothing is measured o
                      the same with the clustered 95% interval
   process-counts     per power and false-positive cell: its good processes, those whose trials all
                      flag and those with no trial flagged (raw_facts.py's per-process counts)
+  throughput         added 2026-11-07: per system, backend and N, the median tasks per second of each
+                     arm's 10 s windows, the fixed loop and the absent wake of its comparison, then
+                     the plain wake and the absent wake of its own comparison (raw_facts.py's
+                     h4_throughput), rounded to whole tasks; the rows of fixcost, in its order
 """
 
 import os
@@ -273,6 +277,26 @@ def process_counts(score, raw):
                  "processes with no trial flagged"], rows)
 
 
+def throughput(score, raw):
+    """The rows of fixcost, each with the median tasks per second of the arms of both comparisons."""
+    h4 = score["H4"]
+    order = {k: i for i, k in enumerate(pw.COLUMNS)}
+    rows = []
+    for r in sorted(h4["fixed_over_absent"],
+                    key=lambda r: (order[pw.h4_parts(r["key"])[:2]], pw.h4_parts(r["key"])[2])):
+        system, backend, work = pw.h4_parts(r["key"])
+        fix, plain = raw["h4_throughput"][r["key"] + "-none"], raw["h4_throughput"][r["key"] + "-plain_wake"]
+        if fix["windows"] != r["pairs"] or plain["windows"] != fix["windows"] or fix["arm_b"] != "absent_wake" or plain["arm_b"] != "absent_wake":
+            raise Refusal("%s: throughput rows and score.json differ" % r["key"])
+        rows.append([pw.SYSTEM_WORDS[system], pw.BACKEND_WORDS[backend], work, fix["windows"],
+                     pw.thousands(round(fix["median_a_tasks_per_s"])), pw.thousands(round(fix["median_b_tasks_per_s"])),
+                     pw.thousands(round(plain["median_a_tasks_per_s"])),
+                     pw.thousands(round(plain["median_b_tasks_per_s"]))])
+    return body(["system", "backend", "N (us)", "windows per arm", "median tasks/s, fixed loop",
+                 "median tasks/s, absent wake (beside the fixed loop)", "median tasks/s, plain wake",
+                 "median tasks/s, absent wake (beside the plain wake)"], rows)
+
+
 def build(inputs, cmake_text, sweep_rows):
     for name, data in inputs.items():
         if data.get("draft"):
@@ -286,7 +310,7 @@ def build(inputs, cmake_text, sweep_rows):
             "detection-batch-exact": detection_intervals(s, "Bt", "exact_95"),
             "detection-single-clustered": detection_intervals(s, "S", "clustered_95"),
             "detection-batch-clustered": detection_intervals(s, "Bt", "clustered_95"),
-            "process-counts": process_counts(s, inputs["raw"])}
+            "process-counts": process_counts(s, inputs["raw"]), "throughput": throughput(s, inputs["raw"])}
 
 
 def main(argv=None):

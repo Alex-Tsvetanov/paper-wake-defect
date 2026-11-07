@@ -30,6 +30,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "..", "historical", "netty"))
+sys.path.insert(1, os.path.dirname(HERE))  # analysis/, for 2026-09's summarize.py (h5.py imports it)
 
 import argparse  # noqa: E402
 import csv  # noqa: E402
@@ -39,6 +40,7 @@ import re  # noqa: E402
 from fractions import Fraction  # noqa: E402
 
 import grid  # noqa: E402
+import h5 as h5_mod  # noqa: E402
 import paper_words as pw  # noqa: E402
 import readers  # noqa: E402
 import run_h6  # noqa: E402
@@ -910,6 +912,138 @@ def prior_medians(m, raw, h5):
         m.add(name, pw.fixed(r["median_us"], 1))
 
 
+# ---------------------------------------------------------------------------------------------
+# Added 2026-11-07, round 4 of the writer's requests (revision-log-v2.md): the posts of the phase
+# sweep's figure outside its main range, and the prior study's designs as run. Every name below is
+# new; nothing above changed.
+# ---------------------------------------------------------------------------------------------
+
+
+def sawtooth_outliers(m, sweep_rows):
+    """Per sweep of figures/sawtooth.pdf (each post over its own process's B_eff, as the figure): the posts
+    beyond the last whole period of the phase targets (x past SawtoothPhaseEdge), the posts above the closed
+    form's top (y past SawtoothDelayEdge, delay longer than one B_eff), the posts whose |residual| / B_eff
+    exceeds the delay-model limit, and the largest |residual| / B_eff."""
+    m.section("the phase sweep's figure: posts outside its main range (h3-sweep.csv)")
+    phase_edge = math.ceil(Fraction(grid.sweep_fracs()[-1]))
+    delay_edge = 1  # the closed form 1 - frac(x) never exceeds 1
+    limit = grid.H3_CRITERION
+    m.add("SawtoothPhaseEdge", phase_edge, "phase / B_eff past the last whole period of the phase targets")
+    m.add("SawtoothDelayEdge", delay_edge, "delay / B_eff above the closed form's top")
+    by = {}
+    for row in sweep_rows:
+        b = int(row["b_eff_ns"])
+        need(b > 0, "a sweep row without a positive B_eff")
+        x, y, res = int(row["phase_ns"]) / b, int(row["delay_ns"]) / b, abs(int(row["residual_ns"])) / b
+        key = (row["system"], row["backend"], int(row["bound_us"]))
+        c = by.setdefault(key, {"posts": 0, "past": 0, "above": 0, "over": 0, "largest": 0.0})
+        c["posts"] += 1
+        c["past"] += x > phase_edge
+        c["above"] += y > delay_edge
+        c["over"] += res > limit
+        c["largest"] = max(c["largest"], res)
+    need(len(by) == len(pw.COLUMNS) * len(grid.BOUNDS_US), "not the ten sweeps of the figure")
+    total = {"posts": 0, "past": 0, "above": 0, "over": 0}
+    for key in sorted(by, key=lambda k: (pw.COLUMNS.index(k[:2]), k[2])):
+        c = by[key]
+        name = system_key(key[0]) + pw.backend_key(key[1]) + pw.bound_key(key[2])
+        m.add("SawtoothPosts" + name, c["posts"])
+        m.add("SawtoothPastPhase" + name, c["past"])
+        m.add("SawtoothAboveOne" + name, c["above"])
+        m.add("SawtoothOverLimit" + name, c["over"])
+        m.add("SawtoothLargestResidual" + name, pw.fixed(c["largest"], 4))
+        for k in total:
+            total[k] += c[k]
+    m.add("SawtoothPostsAll", pw.thousands(total["posts"]))
+    m.add("SawtoothPastPhaseAll", total["past"])
+    m.add("SawtoothAboveOneAll", total["above"])
+    m.add("SawtoothOverLimitAll", total["over"])
+    m.add("SawtoothLargestResidualAll", pw.fixed(max(c["largest"] for c in by.values()), 4))
+
+
+PRIOR_DESIGNS = (("gap-sweep", "GapSweep"), ("bound-sweep", "BoundSweep"), ("matrix", "Matrix"))
+
+
+def frac_text(f):
+    return "%g" % float(f)
+
+
+def prior_design(m, raw, h5):
+    """The prior study's designs as run (raw_facts.py's prior_design, the H5 plan.txt files), checked
+    against the cells of h5.json's delay-model configurations."""
+    m.section("the prior study's designs as run on this laptop (raw_facts.py, the H5 plan.txt files)")
+    plans = raw["prior_design"]
+    need(set(plans) == set(grid.SYSTEMS), "prior designs: not both systems")
+    m.add("PriorProcessesPerRun", 1, "each plan line is one wakeprobe process with its own output file")
+    sizes = {}
+    for system in grid.SYSTEMS:
+        for design, word in PRIOR_DESIGNS:
+            rows = [p for p in plans[system] if p["design"] == design]
+            need(rows, "%s: no %s run" % (system, design))
+            m.add("Prior" + word + "Runs" + system_key(system), len(rows))
+            for p in rows:
+                got = (int(p["posts"]), int(p["warmup"]))
+                need(sizes.setdefault(design, got) == got, "%s: two sizes" % design)
+    for design, word in PRIOR_DESIGNS:
+        m.add("Prior" + word + "Posts", sizes[design][0], "measured posts of one run")
+        m.add("Prior" + word + "Warmup", sizes[design][1], "warm-up posts before them")
+    need(h5_mod.FIXED_RUN["calibrate"] == grid.CALIBRATE, "H5's calibration count is not CalibrationPosts")
+
+    def bounds(system, design):
+        return sorted({int(p["bound_us"]) for p in plans[system] if p["design"] == design})
+
+    for system in grid.SYSTEMS:
+        need(bounds(system, "gap-sweep") == list(grid.BOUNDS_US), "%s: gap-sweep bounds" % system)
+        need(bounds(system, "matrix") == [grid.BOUNDS_US[0], 100000], "%s: matrix bounds" % system)
+        need(bounds(system, "bound-sweep") == [0, grid.BOUNDS_US[0], grid.BOUNDS_US[1], 100000],
+             "%s: bound-sweep bounds" % system)
+    # The gap sweep: on Linux fixed gaps as fractions of B, on Windows phase targets as fractions of B_eff.
+    steps = {}
+    for system, field in (("linux", "gap_us"), ("windows", "phase_frac")):
+        for p in plans[system]:
+            if p["design"] != "gap-sweep":
+                continue
+            need(p[field] is not None, "%s: a gap-sweep run without its %s" % (system, field))
+            f = Fraction(int(p["gap_us"]), int(p["bound_us"])) if field == "gap_us" else Fraction(p["phase_frac"])
+            setting = p.get("slack_ns", p.get("timer_ms"))
+            steps.setdefault((system, p.get("backend", "iocp"), p["bound_us"], setting), []).append(f)
+    counts = {len(v) for v in steps.values()}
+    need(len(counts) == 1, "gap sweeps of different lengths")
+    m.add("PriorSweepSteps", counts.pop(), "runs of one gap sweep, one per gap or phase target")
+    for system, word in (("linux", "LinuxGap"), ("windows", "WindowsTarget")):
+        values = {tuple(sorted(v)) for k, v in steps.items() if k[0] == system}
+        need(len(values) == 1, "%s: gap sweeps with different steps" % system)
+        v = values.pop()
+        step = {b - a for a, b in zip(v, v[1:])}
+        need(len(step) == 1, "%s: uneven steps" % system)
+        m.add("Prior" + word + "First", frac_text(v[0]))
+        m.add("Prior" + word + "Last", frac_text(v[-1]))
+        m.add("Prior" + word + "Step", frac_text(step.pop()))
+    gaps = {int(p["gap_us"]) for s in plans.values() for p in s if p["design"] == "bound-sweep"}
+    need(len(gaps) == 1 and gaps == {2000}, "bound sweep: not one gap of 2 ms")
+    m.add("PriorBoundSweepGapMs", gaps.pop() // 1000, "the fixed gap of every bound-sweep run")
+    factors = {Fraction(int(p["gap_us"]), int(p["bound_us"])) for s in plans.values() for p in s if p["design"] == "matrix"}
+    need(len(factors) == 1, "matrix: not one gap factor")
+    m.add("PriorMatrixGapFactor", frac_text(factors.pop()), "the matrix's fixed gap over B")
+    default_slack = {(p["design"], int(p["bound_us"])) for p in plans["linux"] if p["slack_ns"] == "0"}
+    need(default_slack == {("matrix", grid.BOUNDS_US[0])}, "Linux: default slack outside the matrix at the smaller bound")
+    for design, _ in PRIOR_DESIGNS:
+        rows = [p for p in plans["windows"] if p["design"] == design]
+        need(sum(p["timer_ms"] == "0" for p in rows) * 2 == len(rows), "Windows: %s not split by timer" % design)
+    # The cells of each delay-model configuration: one per gap sweep (its runs pooled) plus one per
+    # defect matrix run, at that system, setting and bound.
+    for c in h5["delay_model"]["configurations"]:
+        system, bound = c["system"], c["wait_us"]
+        setting = c["variant"].split("=")[1]
+        setting = {"1ns": "1", "default": "0", "1ms": "1"}[setting]
+        key = "slack_ns" if system == "linux" else "timer_ms"
+        sweeps = {(k[1]) for k in steps if k[0] == system and int(k[2]) == bound and k[3] == setting}
+        matrix = [p for p in plans[system] if p["design"] == "matrix" and p["arm"] == "defect"
+                  and int(p["bound_us"]) == bound and p[key] == setting]
+        need(len(sweeps) + len(matrix) == c["cells"], "%s: %d cells, %d sweeps and %d matrix runs"
+             % (c, c["cells"], len(sweeps), len(matrix)))
+
+
 SOURCES = {"wake_tests": "tests/wake_tests.cpp", "defects": "loop/include/wakeloop/defect.hpp",
            "wakeprobe": "bench/wakeprobe.cpp", "cmake": "tests/CMakeLists.txt"}
 
@@ -952,6 +1086,8 @@ def build(inputs, sources, sweep_rows):
     calibration(m, sources["wakeprobe"])
     batch_round(m, raw, sources["defects"], sources["wakeprobe"])
     prior_medians(m, raw, inputs["h5"])
+    sawtooth_outliers(m, sweep_rows)
+    prior_design(m, raw, inputs["h5"])
     return m.text()
 
 

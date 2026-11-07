@@ -269,6 +269,45 @@ class Macros(unittest.TestCase):
         whole = [dict(r) for r in sweep]
         whole[0]["phase_target"] = "1.00"
         refused(sweep_rows=whole)
+        raw = copy(inputs["raw"])
+        raw["prior_design"]["linux"] = [p for p in raw["prior_design"]["linux"] if p["design"] != "matrix"]
+        refused(raw=raw)
+        raw = copy(inputs["raw"])
+        row = next(p for p in raw["prior_design"]["windows"] if p["design"] == "bound-sweep")
+        row["gap_us"] = "3000"
+        refused(raw=raw)
+        raw = copy(inputs["raw"])
+        row = next(p for p in raw["prior_design"]["linux"] if p["design"] == "matrix" and p["arm"] == "defect")
+        row["arm"] = "fixed"
+        refused(raw=raw)
+
+    @unittest.skipUnless(results_present("score.json", "h5.json", "h6.json", "score-extra-w.json", "pilot-h4.json",
+                                         "setup.json", "raw-facts.json", "h3-sweep.csv"), "committed results not present")
+    def test_round_four_macros(self):
+        text = paper_macros.build(committed_inputs(), committed_sources(), committed_sweep())
+        for line in ("\\newcommand{\\PriorSweepSteps}{30}", "\\newcommand{\\PriorBoundSweepGapMs}{2}",
+                     "\\newcommand{\\PriorMatrixGapFactor}{1.7}", "\\newcommand{\\SawtoothPhaseEdge}{3}"):
+            self.assertIn(line, text)
+        posts = re.findall(r"\\newcommand\{\\SawtoothPosts(?:Linux|Windows)[A-Za-z]+\}\{(\d+)\}", text)
+        self.assertEqual(len(posts), 10)
+
+    def test_sawtooth_counts_on_a_small_sweep(self):
+        rows = []
+        for system, backend in pw.COLUMNS:
+            for bound in (1000, 10000):
+                rows.append({"system": system, "backend": backend, "bound_us": str(bound), "b_eff_ns": "100",
+                             "phase_ns": "350", "delay_ns": "50", "residual_ns": "0"})
+                rows.append({"system": system, "backend": backend, "bound_us": str(bound), "b_eff_ns": "100",
+                             "phase_ns": "50", "delay_ns": "110", "residual_ns": "-60"})
+        m = paper_macros.Macros()
+        paper_macros.sawtooth_outliers(m, rows)
+        text = m.text()
+        self.assertIn("\\newcommand{\\SawtoothPastPhaseLinuxEpollOneMs}{1}", text)
+        self.assertIn("\\newcommand{\\SawtoothAboveOneLinuxEpollOneMs}{1}", text)
+        self.assertIn("\\newcommand{\\SawtoothOverLimitLinuxEpollOneMs}{1}", text)
+        self.assertIn("\\newcommand{\\SawtoothLargestResidualLinuxEpollOneMs}{0.6000}", text)
+        with self.assertRaises(paper_macros.Refusal):
+            paper_macros.sawtooth_outliers(paper_macros.Macros(), rows[:-2])
 
     def test_a_semantics_constant_not_found_is_refused(self):
         with open(CMAKE, encoding="utf-8") as f:
@@ -311,7 +350,7 @@ class Tables(unittest.TestCase):
         inputs = {"score": load("score.json"), "h5": load("h5.json"), "h6": load("h6.json"),
                   "extra": load("score-extra-w.json"), "raw": load("raw-facts.json")}
         tables = paper_tables.build(inputs, self.cmake(), committed_sweep())
-        self.assertEqual(len(tables), 14)
+        self.assertEqual(len(tables), 15)
         for name, text in tables.items():
             with open(os.path.join(RESULTS, "tables", name + ".tex"), encoding="utf-8", newline="") as f:
                 self.assertEqual(text, f.read(), "results/v2/tables/%s.tex is not what the generator makes" % name)
@@ -322,6 +361,11 @@ class Tables(unittest.TestCase):
                 self.assertIsNone(FORBIDDEN.search(r), (name, r))
         self.assertEqual(len([line for line in tables["netty"].splitlines() if not line.startswith("%")]), 4)
         self.assertIn("0.997", tables["detection-single"])  # 299 of 300 is not printed as 1.000
+        self.assertEqual(len([line for line in tables["throughput"].splitlines() if not line.startswith("%")]), 20)
+        raw = copy(inputs["raw"])
+        raw["h4_throughput"]["linux-epoll-N1us-none"]["windows"] = 13
+        with self.assertRaises(paper_tables.Refusal):
+            paper_tables.build(dict(inputs, raw=raw), self.cmake(), committed_sweep())
 
     def test_a_sweep_process_with_two_beff_values_is_refused(self):
         rows = [{"system": "linux", "backend": "epoll", "bound_us": "1000", "step": "0", "b_eff_ns": "5"},

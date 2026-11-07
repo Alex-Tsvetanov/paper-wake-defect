@@ -758,3 +758,36 @@ were, and `score.json` and `h5.json` were not regenerated.
   `process-counts.tex` 06f090ea4895035fe18b4fea72eb0c91b73953aed5768d25f5fe973157b34b38. Two
   regenerations give the same bytes. A render of every macro and the new bodies passes
   `lab/bin/check_manuscript_terms.py --paper p1` with no hit. All tests under `analysis/v2` pass.
+
+### 2026-11-07: macros and a table body for the writer's round 4 fact requests
+
+The writer asked for four more facts: how one functional verdict covers the backends, the posts of
+the phase sweep's figure outside its main range, the prior study's designs as run, and the
+throughput of each arm of H4. Added, and nothing that existed changed: the first 589 macro lines of
+`results/v2/macros.tex`, every table body and every earlier block of `results/v2/raw-facts.json`
+are byte for byte as before. No scorer changed: `score.py`, `h5.py`, `readers.py`, `grid.py`,
+`plan.py` and the code under `bench/`, `loop/` and `tests/` are as they were, and `score.json` and
+`h5.json` were not regenerated.
+- `analysis/v2/raw_facts.py` adds two blocks. `h4_throughput`: per H4 row of `score.json`, the
+  median tasks per second of each arm's abpair windows (`readers.throughput`) over the good processes
+  `score_h4` used; the pair ratios recomputed from those windows must equal the row's ratios, in
+  order, and each window's arm must be its side's. `prior_design`: each system's H5 `plan.txt`
+  (`h5.read_plan`), refused unless `h5.design_problem` finds it to be the runners' design. Inputs:
+  the same four archives as the entry above, each verified again against its .sha256.
+- `paper_macros.py` adds 79 macros: per sweep of `figures/sawtooth.pdf`, the posts past the last
+  whole period of the phase targets, the posts with a delay above one B_eff (the closed form's
+  top), the posts whose |residual| / B_eff exceeds the delay-model limit, and the largest
+  |residual| / B_eff (from `h3-sweep.csv`, each post over its own process's B_eff, as the figure);
+  and the prior study's designs as run (runs per design and system, posts and warm-up per run, the
+  gap sweep's steps, Linux's fixed gaps and Windows's phase targets, the bound sweep's gap, the
+  matrix's gap factor), with the cells of each delay-model configuration of `h5.json` checked
+  against the plans (one per gap sweep plus one per defect matrix run).
+- `paper_tables.py` adds the body `throughput`: per row of `fixcost`, the median tasks per second
+  of the fixed loop, its absent wake, the plain wake and its absent wake, rounded to whole tasks.
+  The table's ratio is the median of the pair ratios, not a ratio of these medians.
+- Outputs (sha256): `results/v2/macros.tex` (668 macros)
+  626bac7e567c569bcf3f4f7e573e0e6561ba3b5e291152162c5ca783d1865bfc; `results/v2/raw-facts.json`
+  15db3f8a3db3e9404626225099c8639d70419d8a8beab128a86f9d7ff6948909; `tables/throughput.tex`
+  fec2a75fbb25bf0b9136e12fab6ab21d404e4f2463b338d264f4787e10cecc9a. Two regenerations give the same
+  bytes. A render of every macro and the new body passes `lab/bin/check_manuscript_terms.py
+  --paper p1` with no hit. All tests under `analysis/v2` pass.

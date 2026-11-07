@@ -7,7 +7,7 @@
 PLAN and DIR are a system's campaign plan and output folder, as score.py reads them. --h5-linux and
 --h5-windows are the H5 output folders, as h5.py reads them, and --records the sanitizer-record
 folders h5.py checks its gate against. Nothing is scored, fitted or filtered here: the code that
-reads and scores is score.py's and h5.py's, imported unchanged. Three facts are taken:
+reads and scores is score.py's and h5.py's, imported unchanged. The facts taken:
 
   processes        for every cell of the power and the false-positive family, each good process's
                    count of trials flagged by the test and its count of trials, as score_cell counts
@@ -21,6 +21,15 @@ reads and scores is score.py's and h5.py's, imported unchanged. Three facts are 
                    2026-09's bound_sweep_tables), the median delay of the correct arm in
                    microseconds at each bound, 0 being the blocking wait. Each group's smallest and
                    largest median and their ratio must equal h5.json's.
+
+Added 2026-11-07 (round 4 of the writer's requests):
+
+  h4_throughput    for every H4 row of score.json (fixed loop over absent wake, plain wake over absent
+                   wake), the median tasks per second of each arm's abpair windows (readers.throughput)
+                   over the good processes score_h4 used; the pair ratios recomputed from those windows
+                   must equal the row's ratios, in order.
+  prior_design     each system's H5 plan.txt (h5.py's read_plan), which must be the runners' design
+                   (h5.py's design_problem); the file names are dropped.
 
 Any difference is refused and nothing is written.
 """
@@ -37,6 +46,7 @@ import json  # noqa: E402
 
 import grid  # noqa: E402
 import h5 as h5_mod  # noqa: E402
+import readers  # noqa: E402
 import score  # noqa: E402
 import stats  # noqa: E402
 import summarize as s2609  # noqa: E402
@@ -125,6 +135,56 @@ def prior_bound(h5_dirs, records, h5_json):
     return rows
 
 
+def h4_throughput(systems, score_json):
+    """Per H4 row of score.json (fixed loop and plain wake, each over absent wake): every abpair window's
+    tasks per second of each arm (readers.throughput), from the good processes score_h4 used. The
+    pair ratios recomputed from these windows must equal the row's ratios, in order."""
+    rows = {}
+    scored = {(r["key"], r["arm_a"]): r for part in ("fixed_over_absent", "plain_over_absent")
+              for r in score_json["H4"][part]}
+    for plan_path, data_dir in systems:
+        header, groups, _ = score.resolve_plan(plan_path, data_dir)
+        for (family, name), resolved in sorted(groups.items()):
+            if family != "H4":
+                continue
+            good = [r for r in resolved if r.ok]
+            need(good, "%s: no good process" % name)
+            rows_here = [r for r in scored.values() if r["system"] == header["system"]
+                         and grid.h4_cell_name(r["backend"], r["work_us"], r["arm_a"]) == name]
+            need(len(rows_here) == 1, "%s: %d scored H4 rows" % (name, len(rows_here)))
+            row = rows_here[0]
+            ratios = [x for r in good for x in readers.pair_ratios(r.run)]
+            need(ratios == row["ratios"], "%s: pair ratios differ from score.json" % name)
+            sides = {"A": [], "B": []}
+            for r in good:
+                for w in r.run.records:
+                    want = row["arm_a"] if w["side"] == "A" else row["arm_b"]
+                    need(w["arm"] == want and w["ran"] == want, "%s: a window of arm %s on side %s" % (name, w["arm"], w["side"]))
+                    sides[w["side"]].append(readers.throughput(w))
+            need(len(sides["A"]) == len(sides["B"]) == row["pairs"], "%s: windows and pairs differ" % name)
+            rows["%s-%s" % (row["key"], row["arm_a"])] = {
+                "key": row["key"], "system": row["system"], "backend": row["backend"], "work_us": row["work_us"],
+                "arm_a": row["arm_a"], "arm_b": row["arm_b"], "windows": row["pairs"],
+                "median_a_tasks_per_s": stats.median(sorted(sides["A"])),
+                "median_b_tasks_per_s": stats.median(sorted(sides["B"]))}
+    need(set(rows) == {"%s-%s" % k for k in scored}, "H4 rows scored but not read")
+    return rows
+
+
+def prior_design(h5_dirs):
+    """The prior study's designs as run: each system's plan.txt (h5.py's read_plan), which must be the
+    runners' design (h5.py's design_problem against DESIGN_CELLS and DESIGN_SIZES)."""
+    out = {}
+    for system, folder in h5_dirs:
+        plan = h5_mod.read_plan(folder)
+        problem = h5_mod.design_problem(system, plan["cells"], h5_mod.DESIGN_CELLS)
+        need(problem is None, "%s: %s" % (system, problem))
+        files = [p["file"] for p in plan["cells"]]
+        need(len(files) == len(set(files)), "%s: two plan lines write one file" % system)
+        out[system] = [{k: v for k, v in p.items() if k != "file"} for p in plan["cells"]]
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--linux", nargs=2, metavar=("PLAN", "DIR"), required=True)
@@ -144,12 +204,15 @@ def main(argv=None):
         need(not score_json.get("draft") and not h5_json.get("draft"), "a draft input")
         processes, rounds = campaign([tuple(a.linux), tuple(a.windows)], score_json)
         bound = prior_bound([("linux", a.h5_linux), ("windows", a.h5_windows)], a.records, h5_json)
+        throughput = h4_throughput([tuple(a.linux), tuple(a.windows)], score_json)
+        designs = prior_design([("linux", a.h5_linux), ("windows", a.h5_windows)])
     except (Refusal, h5_mod.Refusal) as e:
         print("refused: %s" % e, file=sys.stderr)
         return 2
     out = {"generated_by": "analysis/v2/raw_facts.py", "draft": False,
            "processes_per_cell": grid.PROCESSES_PER_CELL, "processes": processes,
-           "undrained_rounds": rounds, "prior_bound": bound}
+           "undrained_rounds": rounds, "prior_bound": bound,
+           "h4_throughput": throughput, "prior_design": designs}
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats.jsonable(out), f, indent=1, sort_keys=True)
         f.write("\n")

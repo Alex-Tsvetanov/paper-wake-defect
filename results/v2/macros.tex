@@ -618,3 +618,84 @@
 \newcommand{\PriorMedianWindowsIocpTimerDefaultOneMs}{48.7}
 \newcommand{\PriorMedianWindowsIocpTimerDefaultTenMs}{50.8}
 \newcommand{\PriorMedianWindowsIocpTimerDefaultHundredMs}{59.9}
+% ---- the phase sweep's figure: posts outside its main range (h3-sweep.csv)
+\newcommand{\SawtoothPhaseEdge}{3}  % phase / B_eff past the last whole period of the phase targets
+\newcommand{\SawtoothDelayEdge}{1}  % delay / B_eff above the closed form's top
+\newcommand{\SawtoothPostsLinuxEpollOneMs}{630}
+\newcommand{\SawtoothPastPhaseLinuxEpollOneMs}{1}
+\newcommand{\SawtoothAboveOneLinuxEpollOneMs}{0}
+\newcommand{\SawtoothOverLimitLinuxEpollOneMs}{1}
+\newcommand{\SawtoothLargestResidualLinuxEpollOneMs}{0.1684}
+\newcommand{\SawtoothPostsLinuxEpollTenMs}{630}
+\newcommand{\SawtoothPastPhaseLinuxEpollTenMs}{0}
+\newcommand{\SawtoothAboveOneLinuxEpollTenMs}{11}
+\newcommand{\SawtoothOverLimitLinuxEpollTenMs}{63}
+\newcommand{\SawtoothLargestResidualLinuxEpollTenMs}{0.9881}
+\newcommand{\SawtoothPostsLinuxIoUringOneMs}{630}
+\newcommand{\SawtoothPastPhaseLinuxIoUringOneMs}{2}
+\newcommand{\SawtoothAboveOneLinuxIoUringOneMs}{1}
+\newcommand{\SawtoothOverLimitLinuxIoUringOneMs}{2}
+\newcommand{\SawtoothLargestResidualLinuxIoUringOneMs}{0.8112}
+\newcommand{\SawtoothPostsLinuxIoUringTenMs}{630}
+\newcommand{\SawtoothPastPhaseLinuxIoUringTenMs}{0}
+\newcommand{\SawtoothAboveOneLinuxIoUringTenMs}{7}
+\newcommand{\SawtoothOverLimitLinuxIoUringTenMs}{56}
+\newcommand{\SawtoothLargestResidualLinuxIoUringTenMs}{0.9830}
+\newcommand{\SawtoothPostsLinuxCondvarOneMs}{630}
+\newcommand{\SawtoothPastPhaseLinuxCondvarOneMs}{4}
+\newcommand{\SawtoothAboveOneLinuxCondvarOneMs}{0}
+\newcommand{\SawtoothOverLimitLinuxCondvarOneMs}{1}
+\newcommand{\SawtoothLargestResidualLinuxCondvarOneMs}{0.6423}
+\newcommand{\SawtoothPostsLinuxCondvarTenMs}{630}
+\newcommand{\SawtoothPastPhaseLinuxCondvarTenMs}{0}
+\newcommand{\SawtoothAboveOneLinuxCondvarTenMs}{0}
+\newcommand{\SawtoothOverLimitLinuxCondvarTenMs}{15}
+\newcommand{\SawtoothLargestResidualLinuxCondvarTenMs}{0.9441}
+\newcommand{\SawtoothPostsWindowsIocpOneMs}{630}
+\newcommand{\SawtoothPastPhaseWindowsIocpOneMs}{6}
+\newcommand{\SawtoothAboveOneWindowsIocpOneMs}{21}
+\newcommand{\SawtoothOverLimitWindowsIocpOneMs}{39}
+\newcommand{\SawtoothLargestResidualWindowsIocpOneMs}{1.0197}
+\newcommand{\SawtoothPostsWindowsIocpTenMs}{630}
+\newcommand{\SawtoothPastPhaseWindowsIocpTenMs}{4}
+\newcommand{\SawtoothAboveOneWindowsIocpTenMs}{24}
+\newcommand{\SawtoothOverLimitWindowsIocpTenMs}{45}
+\newcommand{\SawtoothLargestResidualWindowsIocpTenMs}{0.9988}
+\newcommand{\SawtoothPostsWindowsCondvarOneMs}{630}
+\newcommand{\SawtoothPastPhaseWindowsCondvarOneMs}{5}
+\newcommand{\SawtoothAboveOneWindowsCondvarOneMs}{26}
+\newcommand{\SawtoothOverLimitWindowsCondvarOneMs}{31}
+\newcommand{\SawtoothLargestResidualWindowsCondvarOneMs}{1.0132}
+\newcommand{\SawtoothPostsWindowsCondvarTenMs}{630}
+\newcommand{\SawtoothPastPhaseWindowsCondvarTenMs}{2}
+\newcommand{\SawtoothAboveOneWindowsCondvarTenMs}{11}
+\newcommand{\SawtoothOverLimitWindowsCondvarTenMs}{33}
+\newcommand{\SawtoothLargestResidualWindowsCondvarTenMs}{1.0060}
+\newcommand{\SawtoothPostsAll}{6{,}300}
+\newcommand{\SawtoothPastPhaseAll}{24}
+\newcommand{\SawtoothAboveOneAll}{101}
+\newcommand{\SawtoothOverLimitAll}{286}
+\newcommand{\SawtoothLargestResidualAll}{1.0197}
+% ---- the prior study's designs as run on this laptop (raw_facts.py, the H5 plan.txt files)
+\newcommand{\PriorProcessesPerRun}{1}  % each plan line is one wakeprobe process with its own output file
+\newcommand{\PriorGapSweepRunsLinux}{120}
+\newcommand{\PriorBoundSweepRunsLinux}{8}
+\newcommand{\PriorMatrixRunsLinux}{12}
+\newcommand{\PriorGapSweepRunsWindows}{120}
+\newcommand{\PriorBoundSweepRunsWindows}{8}
+\newcommand{\PriorMatrixRunsWindows}{8}
+\newcommand{\PriorGapSweepPosts}{21}  % measured posts of one run
+\newcommand{\PriorGapSweepWarmup}{3}  % warm-up posts before them
+\newcommand{\PriorBoundSweepPosts}{51}  % measured posts of one run
+\newcommand{\PriorBoundSweepWarmup}{5}  % warm-up posts before them
+\newcommand{\PriorMatrixPosts}{51}  % measured posts of one run
+\newcommand{\PriorMatrixWarmup}{5}  % warm-up posts before them
+\newcommand{\PriorSweepSteps}{30}  % runs of one gap sweep, one per gap or phase target
+\newcommand{\PriorLinuxGapFirst}{0.1}
+\newcommand{\PriorLinuxGapLast}{3}
+\newcommand{\PriorLinuxGapStep}{0.1}
+\newcommand{\PriorWindowsTargetFirst}{0.05}
+\newcommand{\PriorWindowsTargetLast}{2.95}
+\newcommand{\PriorWindowsTargetStep}{0.1}
+\newcommand{\PriorBoundSweepGapMs}{2}  % the fixed gap of every bound-sweep run
+\newcommand{\PriorMatrixGapFactor}{1.7}  % the matrix's fixed gap over B
