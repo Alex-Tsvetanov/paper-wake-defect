@@ -22,6 +22,14 @@
 // With W > 1 the probe and the calibration posts go to worker 0, so that B_eff is one
 // worker's period; the warmup and measured posts go round robin over the workers.
 //
+// --calibrate-idle N (quick-plan.md, run R2; default 0, off) measures the same period on any variant,
+// the fixed loop included, with no post and no planted defect: after the probe, the poster watches
+// worker 0's pass counter (Loop::passes) and takes the times of N + 1 consecutive increments. With no
+// task queued every pass is a timed return, so the N intervals are periods of the worker's timed
+// returns, filtered and summarized as the calibration posts are. It reports b_eff_idle_ns and its
+// fields in the summary and changes nothing else: the timeout, the phase and the prediction still use
+// the calibration posts' B_eff. Without the flag the output is as before, field for field.
+//
 // The gap is fixed (--gap-us), a target phase (--phase-frac, W = 1 only), or drawn afresh
 // before each post from a seeded uniform distribution over a range of multiples of B
 // (--gap-frac-range), so that the phases of successive posts are spread over the wake period.
@@ -149,6 +157,7 @@ namespace
 		int posts = 51;
 		int warmup = 5;
 		int calibrate = 11;
+		int calibrate_idle = 0;  // > 0: B_eff from this many idle intervals of worker 0's pass counter
 		std::string out;
 		std::string label;
 		std::string design = "adhoc";
@@ -234,6 +243,7 @@ namespace
 		std::int64_t timeout_us = 0;
 		std::int64_t gap_unit_us = 0;  // the unit of --gap-frac-range in this run (0 without it)
 		Calibration calib;
+		Calibration idle;  // --calibrate-idle
 		std::optional<int> slack_set_rc;  // Linux timer slack
 		long long slack_main = -1;
 		std::atomic<long long> slack_worker{-1};
@@ -308,6 +318,9 @@ namespace
 		          << "  --posts measured posts (default 51); --warmup posts before them (default 5);\n"
 		          << "  --calibrate posts to worker 0, B/10 after each delivery, that measure B_eff for a variant that\n"
 		          << "              delays single posts (default 11, 0 = none; batch takes none)\n"
+		          << "  --calibrate-idle N  after the probe, B_eff from N intervals between timed returns of worker 0\n"
+		          << "              with nothing posted, read from its pass counter; any variant (default 0 = off;\n"
+		          << "              needs a bound; batch takes none); reported as b_eff_idle_ns, used for nothing else\n"
 		          << "  with --protocol batch, --posts and --warmup count rounds of " << kBatchTasks << " tasks\n"
 		          << "  with --check the defaults are " << kCheckPosts << " posts or " << kCheckRounds
 		          << " rounds, one warm-up per worker (at least 1) and no calibration\n";
@@ -383,6 +396,7 @@ namespace
 			else if (flag == "--posts") { o.posts = parse_int<int>(flag, value); have_posts = true; }
 			else if (flag == "--warmup") { o.warmup = parse_int<int>(flag, value); have_warmup = true; }
 			else if (flag == "--calibrate") { o.calibrate = parse_int<int>(flag, value); have_calibrate = true; }
+			else if (flag == "--calibrate-idle") o.calibrate_idle = parse_int<int>(flag, value);
 			else if (flag == "--out") o.out = value;
 			else if (flag == "--label") o.label = value;
 			else if (flag == "--design") o.design = value;
@@ -477,6 +491,9 @@ namespace
 		if (o.wait_us < 0) usage("--wait-us must be >= 0 (0 blocks)");
 		if (o.random_gap() && o.wait_us <= 0) usage("--gap-frac-range needs a bound (--wait-us > 0)");
 		if (o.gap_unit_timer && !o.random_gap()) usage("--gap-unit timer needs --gap-frac-range");
+		if (o.calibrate_idle < 0) usage("--calibrate-idle must be >= 0");
+		if (o.calibrate_idle > 0 && o.wait_us <= 0) usage("--calibrate-idle needs a bound (--wait-us > 0)");
+		if (o.calibrate_idle > 0 && o.batch()) usage("--protocol batch takes no --calibrate-idle");
 		if (o.batch())
 		{
 			if (o.workers != 1) usage("--protocol batch needs --workers 1");
@@ -871,16 +888,9 @@ namespace
 	// An interval below half the first median, or below half the bound, is dropped: the
 	// post was picked up in the same pass, which a timed wake cannot produce. Long intervals
 	// are kept; a wake period that varies must stay visible.
-	Calibration calibrate(const std::vector<Record>& records, std::int64_t bound_us)
+	Calibration summarize_intervals(std::vector<std::int64_t> intervals, std::int64_t bound_us)
 	{
 		const std::int64_t floor_ns = bound_us > 0 ? bound_us * 500 : 0;
-		std::vector<std::int64_t> intervals;
-		for (std::size_t i = 1; i < records.size(); ++i)
-		{
-			const Record& r = records[i];
-			const Record& prev = records[i - 1];
-			if (r.kind == Kind::Calib && r.exec_ns && prev.exec_ns) intervals.push_back(*r.exec_ns - *prev.exec_ns);
-		}
 		Calibration c;
 		c.intervals = static_cast<int>(intervals.size());
 		if (intervals.empty()) return c;
@@ -896,6 +906,66 @@ namespace
 		c.b_eff_ns = nearest_rank(kept, 50);
 		c.p10_ns = nearest_rank(kept, 10);
 		c.p90_ns = nearest_rank(kept, 90);
+		return c;
+	}
+
+	Calibration calibrate(const std::vector<Record>& records, std::int64_t bound_us)
+	{
+		std::vector<std::int64_t> intervals;
+		for (std::size_t i = 1; i < records.size(); ++i)
+		{
+			const Record& r = records[i];
+			const Record& prev = records[i - 1];
+			if (r.kind == Kind::Calib && r.exec_ns && prev.exec_ns) intervals.push_back(*r.exec_ns - *prev.exec_ns);
+		}
+		return summarize_intervals(std::move(intervals), bound_us);
+	}
+
+	// --calibrate-idle: the poster watches worker 0's pass counter with nothing queued and takes the
+	// time of each increment. With an empty stack every pass is a wait return, so the time between two
+	// increments one apart is one period of timed returns. The first increment only starts the clock.
+	// An increment that skips a count (two returns between two reads) is dropped and counted. The same
+	// filter and percentiles as the calibration posts follow. Throws if a return takes longer than the
+	// timeout, so a stuck worker cannot hold the run.
+	template <class Loop>
+	Calibration calibrate_from_passes(const Loop& loop, int intervals_wanted, std::int64_t bound_us,
+	                                  std::chrono::microseconds timeout)
+	{
+		std::vector<std::int64_t> intervals;
+		int skipped = 0;
+		std::uint64_t last = loop.passes(0);
+		std::optional<Clock::time_point> previous;
+		while (static_cast<int>(intervals.size()) + skipped < intervals_wanted)
+		{
+			const auto deadline = Clock::now() + timeout;
+			std::uint64_t now_passes = loop.passes(0);
+			while (now_passes == last)
+			{
+				if (Clock::now() > deadline)
+				{
+					throw std::runtime_error("--calibrate-idle: worker 0 made no wait return within the timeout");
+				}
+				std::this_thread::yield();
+				now_passes = loop.passes(0);
+			}
+			const auto seen = Clock::now();
+			if (previous)
+			{
+				if (now_passes == last + 1)
+				{
+					intervals.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(seen - *previous).count());
+				}
+				else
+				{
+					++skipped;
+				}
+			}
+			previous = seen;
+			last = now_passes;
+		}
+		Calibration c = summarize_intervals(std::move(intervals), bound_us);
+		c.intervals += skipped;
+		c.dropped += skipped;
 		return c;
 	}
 
@@ -982,6 +1052,12 @@ namespace
 		records.push_back(
 			measure_one(loop, store.nodes, Kind::Probe, index++, 0, epoch, bounded_timeout(0), &info.slack_worker));
 		if (!records.back().exec_ns) return;
+
+		// Before the calibration posts, so that nothing has been queued since the probe ran.
+		if (opt.calibrate_idle > 0)
+		{
+			info.idle = calibrate_from_passes(loop, opt.calibrate_idle, opt.wait_us, bounded_timeout(0));
+		}
 
 		if (delaying)
 		{
@@ -1194,7 +1270,14 @@ namespace
 		  << ",\"timeouts\":" << st.timeouts << ",\"lost\":" << st.lost << ",\"timeout_us\":" << info.timeout_us
 		  << ",\"b_eff_ns\":" << num(b_eff) << ",\"calib_intervals\":" << info.calib.intervals
 		  << ",\"calib_dropped\":" << info.calib.dropped << ",\"calib_p10_ns\":" << num(info.calib.p10_ns)
-		  << ",\"calib_p90_ns\":" << num(info.calib.p90_ns) << ",\"residual_count\":" << st.residuals.size()
+		  << ",\"calib_p90_ns\":" << num(info.calib.p90_ns);
+		if (o.calibrate_idle > 0)
+		{
+			s << ",\"calibrate_idle\":" << o.calibrate_idle << ",\"b_eff_idle_ns\":" << num(info.idle.b_eff_ns)
+			  << ",\"idle_intervals\":" << info.idle.intervals << ",\"idle_dropped\":" << info.idle.dropped
+			  << ",\"idle_p10_ns\":" << num(info.idle.p10_ns) << ",\"idle_p90_ns\":" << num(info.idle.p90_ns);
+		}
+		s << ",\"residual_count\":" << st.residuals.size()
 		  << ",\"median_residual_ns\":" << pct(st.residuals, 50)
 		  << ",\"median_abs_residual_ns\":" << pct(st.abs_residuals, 50);
 		if (b_eff && *b_eff > 0 && !st.residuals.empty())
@@ -1326,10 +1409,15 @@ namespace
 	}
 
 	/// What is wrong with a finished --check run, one line each; empty when it is sound.
-	std::vector<std::string> check_faults(const CheckTally& t, int expected_units, const std::string& error)
+	std::vector<std::string> check_faults(const CheckTally& t, int expected_units, const std::string& error,
+	                                      int idle_wanted, int idle_taken)
 	{
 		std::vector<std::string> bad;
 		if (!error.empty()) bad.push_back(error);
+		if (idle_taken != idle_wanted)
+		{
+			bad.push_back("took " + std::to_string(idle_taken) + " idle intervals, expected " + std::to_string(idle_wanted));
+		}
 		if (t.units != expected_units)
 		{
 			bad.push_back("took " + std::to_string(t.units) + " units, expected " + std::to_string(expected_units));
@@ -1353,6 +1441,7 @@ namespace
 		          << " warm-up, " << t.measured << " measured), delivered " << t.delivered << ", timed out " << t.timed_out
 		          << ", lost " << t.lost << "\n"
 		          << "tasks posted " << t.posted << ", ran exactly once " << t.once << ", ran more than once " << t.repeated << "\n";
+		if (opt.calibrate_idle > 0) std::cout << "idle intervals wanted " << opt.calibrate_idle << "\n";
 		if (!faults.empty())
 		{
 			for (const std::string& f : faults) std::cerr << "FAIL: wakeprobe" << what << ": " << f << "\n";
@@ -1435,7 +1524,8 @@ namespace
 		{
 			const CheckTally counts = tally(records, store);
 			const int expected = 1 + (delaying ? opt.calibrate : 0) + opt.warmup + opt.posts;
-			return report_check(opt, counts, check_faults(counts, expected, info.error));
+			return report_check(opt, counts,
+			                    check_faults(counts, expected, info.error, opt.calibrate_idle, info.idle.intervals));
 		}
 
 		if (!opt.batch()) annotate(records, info.calib.b_eff_ns, Loop::defect, opt.workers);

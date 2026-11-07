@@ -82,6 +82,21 @@ foreach(_backend IN LISTS WAKELOOP_BACKENDS)
         set_tests_properties(wakeprobe_check.${_backend}.${_protocol}.absent_wake.b1ms
                              PROPERTIES TIMEOUT 120 LABELS "wakeprobe" RUN_SERIAL TRUE)
     endforeach()
+    # quick-plan.md, run R2: the idle calibration from worker 0's pass counter, on the fixed loop, beside the
+    # calibration posts of absent wake, and with the timer gap unit at the short bound (run R3). Counts only.
+    add_test(NAME wakeprobe_check.${_backend}.single.none.idle
+             COMMAND wakeprobe --backend ${_backend} --variant none --workers 1 --wait-us 10000 --gap-us 2000
+                     --calibrate-idle 3 --check)
+    add_test(NAME wakeprobe_check.${_backend}.single.absent_wake.idle
+             COMMAND wakeprobe --backend ${_backend} --variant absent_wake --workers 1 --wait-us 10000 --gap-us 2000
+                     --calibrate 3 --calibrate-idle 3 --check)
+    add_test(NAME wakeprobe_check.${_backend}.single.plain_wake.idle.b1ms
+             COMMAND wakeprobe --backend ${_backend} --variant plain_wake --workers 1 --wait-us 1000
+                     --gap-frac-range 0.1:3.0 --gap-unit timer --calibrate-idle 3 --check)
+    set_tests_properties(wakeprobe_check.${_backend}.single.none.idle wakeprobe_check.${_backend}.single.absent_wake.idle
+                         wakeprobe_check.${_backend}.single.plain_wake.idle.b1ms
+                         PROPERTIES PASS_REGULAR_EXPRESSION "idle intervals wanted 3\n.*PASS: " TIMEOUT 120
+                         LABELS "wakeprobe;quick" RUN_SERIAL TRUE)
     # Pinned threads. CPUs 0 to 3 must be in the process's allowed set, and CPU 63 must not exist
     # (true of the desktop, the laptop and the development container). A pinned run must pass; a
     # pin that the system refuses must stop the run with its message, before any unit is measured.
@@ -171,6 +186,12 @@ if(Python3_FOUND)
              COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test_run_campaign.py")
     set_tests_properties(run_campaign_dry_run run_campaign_unittest
                          PROPERTIES TIMEOUT 120 LABELS "campaign" RUN_SERIAL TRUE)
+    # The quick benchmarks (quick-plan.md): plans, runner, power and requests with fakes, and --validate-args on
+    # every row of this system's plans. Nothing is timed. Name: quick_unittest.
+    add_test(NAME quick_unittest
+             COMMAND ${CMAKE_COMMAND} -E env "QUICK_WAKEPROBE=$<TARGET_FILE:wakeprobe>"
+                     "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/quick/test_quick.py")
+    set_tests_properties(quick_unittest PROPERTIES TIMEOUT 300 LABELS "quick")
 else()
     message(STATUS "bench: no Python 3 found; the run_campaign tests are not defined")
 endif()
@@ -390,6 +411,27 @@ add_test(NAME validate_args.limit_is_the_loops
          COMMAND ${CMAKE_COMMAND} "-DLOOP_SRC=${PROJECT_SOURCE_DIR}/loop/src/common.cpp"
                  "-DPROBE_SRC=${CMAKE_CURRENT_SOURCE_DIR}/wakeprobe.cpp" -P "${LIMIT_CHECK}")
 set_tests_properties(validate_args.limit_is_the_loops PROPERTIES TIMEOUT 60 LABELS "validate")
+# quick-plan.md: the argument sets of runs R1 to R3 on every backend, and the refusals of --calibrate-idle.
+foreach(_backend IN LISTS WAKELOOP_BACKENDS)
+    validate_case(wakeprobe.${_backend}.quick_R2 wakeprobe
+                  ARGS --backend ${_backend} --variant none --workers 1 --protocol single --wait-us 1000
+                       --gap-frac-range 0.1:3.0 --gap-unit bound --gap-seed 7 --posts 399 --warmup 5 --calibrate 0
+                       --calibrate-idle 11 --worker-cpus 14 --poster-cpu 2)
+    validate_case(wakeprobe.${_backend}.quick_R3 wakeprobe
+                  ARGS --backend ${_backend} --variant absent_wake --workers 1 --protocol single --wait-us 1000
+                       --gap-frac-range 0.1:3.0 --gap-unit timer --gap-seed 7 --posts 252 --warmup 5 --calibrate 11
+                       --calibrate-idle 11 --worker-cpus 14 --poster-cpu 2)
+endforeach()
+validate_case(wakeprobe.calibrate_idle_negative wakeprobe RC 2 USAGE 1
+              SUB "wakeprobe: --calibrate-idle must be >= 0"
+              ARGS --backend ${_first_backend} --variant none --workers 1 --wait-us 10000 --gap-us 500 --calibrate-idle -1)
+validate_case(wakeprobe.calibrate_idle_blocking wakeprobe RC 2 USAGE 1
+              SUB "wakeprobe: --calibrate-idle needs a bound (--wait-us > 0)"
+              ARGS --backend ${_first_backend} --variant none --workers 1 --wait-us 0 --gap-us 500 --calibrate-idle 11)
+validate_case(wakeprobe.calibrate_idle_batch wakeprobe RC 2 USAGE 1
+              SUB "wakeprobe: --protocol batch takes no --calibrate-idle"
+              ARGS --backend ${_first_backend} --variant none --workers 1 --protocol batch --wait-us 10000 --gap-us 500
+                   --calibrate-idle 11)
 validate_case(wakeprobe.sweep_two_workers wakeprobe RC 2 USAGE 1
               SUB "wakeprobe: --phase-frac holds a phase against one worker's wake schedule"
               ARGS --backend ${_first_backend} --variant wrong_worker --workers 2 --wait-us 10000
