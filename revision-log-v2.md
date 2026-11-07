@@ -833,9 +833,9 @@ the analysis that scored the campaign is unchanged.
   title, and the sawtooth figure's y label now stand further from the page edge. No data or other
   drawing changed. A test checks that no ToUnicode entry of the figures maps one glyph to two
   letters.
-- Results of the B base, read from the outputs only: the counts change only in complete cells of
-  single posts on Windows at the smaller bound, where B_eff is near the default timer period and B
-  is much smaller, and never fall. The correct loops' process values of the trial medians all lie
+- Results of the B base, read from the outputs only: the counts change only in cells of single
+  posts on Windows at the smaller bound (22 complete cells and one incomplete one, which the macros
+  leave out), where B_eff is near the default timer period and B is much smaller, and never fall. The correct loops' process values of the trial medians all lie
   below B_eff / 5 and the complete power cells' all above.
 - Outputs (sha256): `results/v2/macros.tex` (690 macros)
   367b5dd674d5aef170f5cfd7bbc2964303a71ae8b6a8d20c0a2ae3e3ca29c73e; `results/v2/raw-facts.json`
